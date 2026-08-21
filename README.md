@@ -1,1 +1,1 @@
-# panel-informes-gestion-dev
+# Sistema de Confección de Informes de Gestión
