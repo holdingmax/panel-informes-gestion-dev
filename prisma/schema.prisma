@@ -1,0 +1,145 @@
+// This is your Prisma schema file,
+// learn more about it in the docs: https://pris.ly/d/prisma-schema
+
+// Get a free hosted Postgres database in seconds: `npx create-db`
+
+generator client {
+  provider = "prisma-client"
+  output   = "../src/generated/prisma"
+}
+
+datasource db {
+  provider = "postgresql"
+}
+
+enum Role {
+  ADMIN
+  USER
+}
+
+model User {
+  id                 String   @id @default(cuid())
+  username           String   @unique
+  passwordHash       String
+  role               Role     @default(USER)
+  securityQuestion   String
+  securityAnswerHash String
+  active             Boolean  @default(true)
+  createdAt          DateTime @default(now())
+  updatedAt          DateTime @updatedAt
+}
+
+model Empresa {
+  codEmp     Int      @id @default(autoincrement())
+  nombreEmp  String   @db.VarChar(35)
+  imagenEmp  Bytes?
+  imagenMime String?
+  createdAt  DateTime @default(now())
+  updatedAt  DateTime @updatedAt
+
+  informes      Informe[]
+  balances      BalanceSumasYSaldos[]
+  planDeCuentas PlanDeCuentas[]
+}
+
+enum EstadoInforme {
+  PROCESO
+  EN_REVISION
+  APROBADO
+  DEFINITIVO
+}
+
+model Informe {
+  id          String        @id @default(cuid())
+  empresa     Empresa       @relation(fields: [empresaId], references: [codEmp])
+  empresaId   Int
+  periodoMes  Int
+  periodoAnio Int
+  estado      EstadoInforme @default(PROCESO)
+  createdAt   DateTime      @default(now())
+  updatedAt   DateTime      @updatedAt
+
+  @@unique([empresaId, periodoMes, periodoAnio])
+}
+
+enum TipoBSyS {
+  MES
+  ACUMULADO
+}
+
+enum EstadoBSyS {
+  PROVISORIO
+  DEFINITIVO
+}
+
+model BalanceSumasYSaldos {
+  id               String     @id @default(cuid())
+  empresa          Empresa    @relation(fields: [empresaId], references: [codEmp])
+  empresaId        Int
+  tipo             TipoBSyS
+  fechaCarga       DateTime
+  cuenta           String     @db.VarChar(90)
+  saldoIniDebe     Decimal    @db.Decimal(18, 2)
+  saldoIniHaber    Decimal    @db.Decimal(18, 2)
+  sumasDebe        Decimal    @db.Decimal(18, 2)
+  sumasHaber       Decimal    @db.Decimal(18, 2)
+  saldoCierreDebe  Decimal    @db.Decimal(18, 2)
+  saldoCierreHaber Decimal    @db.Decimal(18, 2)
+  estado           EstadoBSyS @default(PROVISORIO)
+  createdAt        DateTime   @default(now())
+}
+
+model PartidaPatrimonial {
+  codPartida Int             @id @default(autoincrement())
+  nomPartida String          @db.VarChar(40)
+  planes     PlanDeCuentas[]
+}
+
+model Rubro {
+  codRubro Int             @id @default(autoincrement())
+  nomRubro String          @db.VarChar(60)
+  planes   PlanDeCuentas[]
+}
+
+model Subrubro {
+  codSubrubro Int             @id @default(autoincrement())
+  nomSubrubro String          @db.VarChar(60)
+  planes      PlanDeCuentas[]
+}
+
+model Subrubro2 {
+  codSubrubro2 Int             @id @default(autoincrement())
+  nomSubrubro2 String          @db.VarChar(60)
+  planes       PlanDeCuentas[]
+}
+
+model Subrubro3 {
+  codSubrubro3 Int             @id @default(autoincrement())
+  nomSubrubro3 String          @db.VarChar(60)
+  planes       PlanDeCuentas[]
+}
+
+model CategoriaOyA {
+  codOyA Int             @id @default(autoincrement())
+  nomOyA String          @db.VarChar(60)
+  planes PlanDeCuentas[]
+}
+
+model PlanDeCuentas {
+  id                   String             @id @default(cuid())
+  empresa              Empresa            @relation(fields: [empresaId], references: [codEmp])
+  empresaId            Int
+  cuenta               String             @db.VarChar(90)
+  partidaPatrimonial   PartidaPatrimonial @relation(fields: [partidaPatrimonialId], references: [codPartida])
+  partidaPatrimonialId Int
+  rubro                Rubro              @relation(fields: [rubroId], references: [codRubro])
+  rubroId              Int
+  subrubro             Subrubro           @relation(fields: [subrubroId], references: [codSubrubro])
+  subrubroId           Int
+  subrubro2            Subrubro2          @relation(fields: [subrubro2Id], references: [codSubrubro2])
+  subrubro2Id          Int
+  subrubro3            Subrubro3          @relation(fields: [subrubro3Id], references: [codSubrubro3])
+  subrubro3Id          Int
+  categoriaOyA         CategoriaOyA       @relation(fields: [categoriaOyAId], references: [codOyA])
+  categoriaOyAId       Int
+}
