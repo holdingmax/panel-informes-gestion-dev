@@ -3,5 +3,20 @@
     "allow": [
       "Bash(npm install *)"
     ]
+  },
+  "hooks": {
+    "UserPromptSubmit": [
+      {
+        "hooks": [
+          {
+            "type": "command",
+            "shell": "bash",
+            "command": "bash \"c:/Users/Fvigo/Documents/PANEL INFORMES DE GESTION/panel-informes-gestion-dev/.claude/hooks/reanudar-tarea-sync.sh\"",
+            "timeout": 30,
+            "statusMessage": "Sincronizando con GitHub (REANUDAMOS TAREA)..."
+          }
+        ]
+      }
+    ]
   }
 }
