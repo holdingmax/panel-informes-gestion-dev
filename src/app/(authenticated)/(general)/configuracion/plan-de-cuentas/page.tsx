@@ -46,9 +46,9 @@ export default async function PlanDeCuentasPage() {
                 <td className="py-2 pr-4">{plan.partidaPatrimonial.nomPartida}</td>
                 <td className="py-2 pr-4">{plan.rubro.nomRubro}</td>
                 <td className="py-2 pr-4">{plan.subrubro.nomSubrubro}</td>
-                <td className="py-2 pr-4">{plan.subrubro2.nomSubrubro2}</td>
-                <td className="py-2 pr-4">{plan.subrubro3.nomSubrubro3}</td>
-                <td className="py-2 pr-4">{plan.categoriaOyA.nomOyA}</td>
+                <td className="py-2 pr-4">{plan.subrubro2?.nomSubrubro2 ?? "—"}</td>
+                <td className="py-2 pr-4">{plan.subrubro3?.nomSubrubro3 ?? "—"}</td>
+                <td className="py-2 pr-4">{plan.categoriaOyA?.nomOyA ?? "—"}</td>
               </tr>
             ))}
           </tbody>
@@ -112,9 +112,9 @@ export default async function PlanDeCuentasPage() {
           </label>
 
           <label className="flex flex-col gap-1">
-            <span className="text-lg">Subrubro 2</span>
-            <select name="subrubro2Id" required className="rounded border px-3 py-2 text-lg">
-              <option value="">Seleccionar...</option>
+            <span className="text-lg">Subrubro 2 (opcional)</span>
+            <select name="subrubro2Id" className="rounded border px-3 py-2 text-lg">
+              <option value="">Sin clasificar</option>
               {subrubros2.map((s: { codSubrubro2: number; nomSubrubro2: string }) => (
                 <option key={s.codSubrubro2} value={s.codSubrubro2}>
                   {s.nomSubrubro2}
@@ -124,9 +124,9 @@ export default async function PlanDeCuentasPage() {
           </label>
 
           <label className="flex flex-col gap-1">
-            <span className="text-lg">Subrubro 3</span>
-            <select name="subrubro3Id" required className="rounded border px-3 py-2 text-lg">
-              <option value="">Seleccionar...</option>
+            <span className="text-lg">Subrubro 3 (opcional)</span>
+            <select name="subrubro3Id" className="rounded border px-3 py-2 text-lg">
+              <option value="">Sin clasificar</option>
               {subrubros3.map((s: { codSubrubro3: number; nomSubrubro3: string }) => (
                 <option key={s.codSubrubro3} value={s.codSubrubro3}>
                   {s.nomSubrubro3}
@@ -136,9 +136,9 @@ export default async function PlanDeCuentasPage() {
           </label>
 
           <label className="flex flex-col gap-1">
-            <span className="text-lg">Categoría OyA</span>
-            <select name="categoriaOyAId" required className="rounded border px-3 py-2 text-lg">
-              <option value="">Seleccionar...</option>
+            <span className="text-lg">Categoría OyA (opcional)</span>
+            <select name="categoriaOyAId" className="rounded border px-3 py-2 text-lg">
+              <option value="">Sin clasificar</option>
               {categorias.map((c: { codOyA: number; nomOyA: string }) => (
                 <option key={c.codOyA} value={c.codOyA}>
                   {c.nomOyA}

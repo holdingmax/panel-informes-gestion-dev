@@ -89,57 +89,81 @@ model BalanceSumasYSaldos {
   createdAt        DateTime   @default(now())
 }
 
+// ACTIVO y PASIVO_PATRIMONIO_NETO van al Balance (y determinan el signo del
+// cálculo de Origen/Aplicación); RESULTADO alimenta el Resultado del período.
+enum TipoPartida {
+  ACTIVO
+  PASIVO_PATRIMONIO_NETO
+  RESULTADO
+}
+
 model PartidaPatrimonial {
   codPartida Int             @id @default(autoincrement())
-  nomPartida String          @db.VarChar(40)
+  nomPartida String          @unique @db.VarChar(40)
+  tipo       TipoPartida?
   planes     PlanDeCuentas[]
 }
 
+enum CategoriaOrigenAplicacion {
+  ORIGEN
+  APLICACION
+}
+
+enum BucketNOF {
+  OPERATIVO
+  NO_OPERATIVO
+  FINANCIAMIENTO
+}
+
 model Rubro {
-  codRubro Int             @id @default(autoincrement())
-  nomRubro String          @db.VarChar(60)
-  planes   PlanDeCuentas[]
+  codRubro     Int                        @id @default(autoincrement())
+  nomRubro     String                     @unique @db.VarChar(60)
+  categoriaOyA CategoriaOrigenAplicacion?
+  bucketNOF    BucketNOF?
+  planes       PlanDeCuentas[]
 }
 
 model Subrubro {
   codSubrubro Int             @id @default(autoincrement())
-  nomSubrubro String          @db.VarChar(60)
+  nomSubrubro String          @unique @db.VarChar(60)
   planes      PlanDeCuentas[]
 }
 
 model Subrubro2 {
   codSubrubro2 Int             @id @default(autoincrement())
-  nomSubrubro2 String          @db.VarChar(60)
+  nomSubrubro2 String          @unique @db.VarChar(60)
   planes       PlanDeCuentas[]
 }
 
 model Subrubro3 {
   codSubrubro3 Int             @id @default(autoincrement())
-  nomSubrubro3 String          @db.VarChar(60)
+  nomSubrubro3 String          @unique @db.VarChar(60)
   planes       PlanDeCuentas[]
 }
 
 model CategoriaOyA {
   codOyA Int             @id @default(autoincrement())
-  nomOyA String          @db.VarChar(60)
+  nomOyA String          @unique @db.VarChar(60)
   planes PlanDeCuentas[]
 }
 
 model PlanDeCuentas {
-  id                   String             @id @default(cuid())
-  empresa              Empresa            @relation(fields: [empresaId], references: [codEmp])
+  id                   String              @id @default(cuid())
+  empresa              Empresa             @relation(fields: [empresaId], references: [codEmp])
   empresaId            Int
-  cuenta               String             @db.VarChar(90)
-  partidaPatrimonial   PartidaPatrimonial @relation(fields: [partidaPatrimonialId], references: [codPartida])
+  cuenta               String              @db.VarChar(90)
+  partidaPatrimonial   PartidaPatrimonial  @relation(fields: [partidaPatrimonialId], references: [codPartida])
   partidaPatrimonialId Int
-  rubro                Rubro              @relation(fields: [rubroId], references: [codRubro])
+  rubro                Rubro               @relation(fields: [rubroId], references: [codRubro])
   rubroId              Int
-  subrubro             Subrubro           @relation(fields: [subrubroId], references: [codSubrubro])
+  subrubro             Subrubro            @relation(fields: [subrubroId], references: [codSubrubro])
   subrubroId           Int
-  subrubro2            Subrubro2          @relation(fields: [subrubro2Id], references: [codSubrubro2])
-  subrubro2Id          Int
-  subrubro3            Subrubro3          @relation(fields: [subrubro3Id], references: [codSubrubro3])
-  subrubro3Id          Int
-  categoriaOyA         CategoriaOyA       @relation(fields: [categoriaOyAId], references: [codOyA])
-  categoriaOyAId       Int
+  subrubro2            Subrubro2?          @relation(fields: [subrubro2Id], references: [codSubrubro2])
+  subrubro2Id          Int?
+  subrubro3            Subrubro3?          @relation(fields: [subrubro3Id], references: [codSubrubro3])
+  subrubro3Id          Int?
+  categoriaOyA         CategoriaOyA?       @relation(fields: [categoriaOyAId], references: [codOyA])
+  categoriaOyAId       Int?
+
+  @@unique([empresaId, cuenta])
 }

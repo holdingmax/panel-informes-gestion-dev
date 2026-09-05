@@ -27,16 +27,21 @@ export async function createPlanDeCuentas(formData: FormData) {
   const partidaPatrimonialId = Number(formData.get("partidaPatrimonialId"));
   const rubroId = Number(formData.get("rubroId"));
   const subrubroId = Number(formData.get("subrubroId"));
-  const subrubro2Id = Number(formData.get("subrubro2Id"));
-  const subrubro3Id = Number(formData.get("subrubro3Id"));
-  const categoriaOyAId = Number(formData.get("categoriaOyAId"));
 
-  if (
-    [empresaId, partidaPatrimonialId, rubroId, subrubroId, subrubro2Id, subrubro3Id, categoriaOyAId]
-      .some((value) => !Number.isInteger(value))
-  ) {
-    throw new Error("Completá todos los desplegables");
+  if ([empresaId, partidaPatrimonialId, rubroId, subrubroId].some((value) => !Number.isInteger(value))) {
+    throw new Error("Completá Empresa, Cuenta, Partida, Rubro y Subrubro");
   }
+
+  const optionalId = (field: string) => {
+    const raw = String(formData.get(field) ?? "").trim();
+    if (!raw) return null;
+    const value = Number(raw);
+    return Number.isInteger(value) ? value : null;
+  };
+
+  const subrubro2Id = optionalId("subrubro2Id");
+  const subrubro3Id = optionalId("subrubro3Id");
+  const categoriaOyAId = optionalId("categoriaOyAId");
 
   await prisma.planDeCuentas.create({
     data: {
