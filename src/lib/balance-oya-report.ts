@@ -6,6 +6,9 @@ export type RubroLine = {
   nombre: string;
   saldoInicio: number;
   saldoFinal: number;
+  // Positivo = Origen de fondos, negativo = Aplicación de fondos (ya
+  // ajustado por la clasificación Origen/Aplicación del rubro, no por su
+  // signo contable crudo).
   origenAplicacion: number;
 };
 
@@ -19,11 +22,12 @@ export type InformeReport = {
   fechaCargaAcumulado: Date | null;
   balance: {
     activo: RubroLine[];
-    pasivo: RubroLine[];
+    pasivoYPatrimonioNeto: RubroLine[];
     totalActivo: number;
     totalPasivoPN: number;
   };
   resultadoDelPeriodo: number;
+  ajustesEjerciciosAnteriores: number;
   origenAplicacion: {
     origenes: RubroLine[];
     aplicaciones: RubroLine[];
@@ -57,22 +61,26 @@ function sum(values: number[]) {
 }
 
 function toLine(r: RubroAgg): RubroLine {
-  // Origen/Aplicación replica la fórmula real del Excel sobre los saldos
-  // "crudos" del mayor (Debe-Haber): Activo = saldoInicio-saldoFinal,
-  // Pasivo/PN = saldoFinal-saldoInicio.
-  const origenAplicacion =
-    r.tipoPartida === "ACTIVO" ? r.saldoInicio - r.saldoFinal : r.saldoFinal - r.saldoInicio;
-
   // Para MOSTRAR el saldo (Balance Sheet), Pasivo/PN se presenta en positivo
   // (convención contable habitual) aunque su saldo natural en el mayor sea
   // acreedor/negativo; Activo ya se muestra tal cual.
   const signoDisplay = r.tipoPartida === "ACTIVO" ? 1 : -1;
+  const saldoInicio = r.saldoInicio * signoDisplay;
+  const saldoFinal = r.saldoFinal * signoDisplay;
+
+  // Cuánto creció (en su saldo ya "mostrable") este rubro en el período.
+  const incremento = saldoFinal - saldoInicio;
+
+  // Un incremento en un rubro de Origen es un Origen de fondos (+); un
+  // incremento en un rubro de Aplicación es una Aplicación de fondos (-).
+  const signoOyA = r.categoriaOyA === "APLICACION" ? -1 : 1;
+  const origenAplicacion = incremento * signoOyA;
 
   return {
     codRubro: r.codRubro,
     nombre: r.nomRubro,
-    saldoInicio: r.saldoInicio * signoDisplay,
-    saldoFinal: r.saldoFinal * signoDisplay,
+    saldoInicio,
+    saldoFinal,
     origenAplicacion,
   };
 }
@@ -155,11 +163,22 @@ export async function computeInformeReport(informeId: string): Promise<InformeRe
   const balanceRubros = [...activoRubros, ...pasivoRubros];
 
   const activo = activoRubros.map(toLine);
-  const pasivo = pasivoRubros.map(toLine);
+  const pasivoYPatrimonioNeto = pasivoRubros.map(toLine);
   const totalActivo = sum(activo.map((l) => l.saldoFinal));
-  const totalPasivoPN = sum(pasivo.map((l) => l.saldoFinal));
+  const totalPasivoPN = sum(pasivoYPatrimonioNeto.map((l) => l.saldoFinal));
 
   const resultadoDelPeriodo = -sum(resultadoRubros.map((r) => r.saldoFinal));
+
+  // Las cuentas de Resultado (Ingresos/Egresos) de este BSyS Acumulado no
+  // siempre arrancan en cero: si el "saldo inicio" del archivo no coincide
+  // con el comienzo real del ejercicio, esas cuentas ya traen una porción de
+  // resultado generada antes del período que cubre este informe. Como
+  // "Resultado del Ejercicio" toma el saldo final completo de esas cuentas
+  // (necesario para que el Balance de la hoja 2 cierre siempre exacto, sea
+  // cual sea ese saldo inicio), esa porción previa queda sin explicar en el
+  // Estado de Origen y Aplicación de Fondos si no se la resta aparte —
+  // "Ajustes Ejercicios Anteriores" es exactamente esa porción.
+  const ajustesEjerciciosAnteriores = sum(resultadoRubros.map((r) => r.saldoInicio));
 
   const origenes: RubroLine[] = [];
   const aplicaciones: RubroLine[] = [];
@@ -175,10 +194,23 @@ export async function computeInformeReport(informeId: string): Promise<InformeRe
     else aplicaciones.push(line);
   }
 
+  // origenAplicacion ya viene con signo "tag-adjusted": positivo = evento de
+  // Origen ese período, negativo = evento de Aplicación ese período — tanto
+  // para un rubro que se mueve en su dirección habitual como para uno que se
+  // mueve al revés (p. ej. un pasivo que en vez de crecer se cancela). Sumar
+  // con signo (no por valor absoluto) es lo que garantiza que el total de
+  // Orígenes coincida siempre con el total de Aplicaciones — la identidad
+  // contable de la que depende todo el estado. En la columna "Aplicaciones"
+  // se invierte el signo del grupo porque ahí el caso normal (el rubro creció)
+  // es justamente el que da origenAplicacion negativo.
   const totalOrigenes =
-    sum(origenes.map((l) => l.origenAplicacion)) + Math.max(resultadoDelPeriodo, 0);
+    sum(origenes.map((l) => l.origenAplicacion)) +
+    Math.max(resultadoDelPeriodo, 0) +
+    Math.max(ajustesEjerciciosAnteriores, 0);
   const totalAplicaciones =
-    sum(aplicaciones.map((l) => l.origenAplicacion)) + Math.max(-resultadoDelPeriodo, 0);
+    sum(aplicaciones.map((l) => -l.origenAplicacion)) +
+    Math.max(-resultadoDelPeriodo, 0) +
+    Math.max(-ajustesEjerciciosAnteriores, 0);
 
   const operativo: RubroLine[] = [];
   const noOperativo: RubroLine[] = [];
@@ -191,6 +223,8 @@ export async function computeInformeReport(informeId: string): Promise<InformeRe
     else financiamiento.push(line);
   }
 
+  // Acá sí se suma con signo: dentro de cada bucket, un Origen suma y una
+  // Aplicación resta (es el neto de esa categoría, no una lista de líneas).
   const totalOperativo = sum(operativo.map((l) => l.origenAplicacion));
   const totalNoOperativo = sum(noOperativo.map((l) => l.origenAplicacion));
   const totalFinanciamiento = sum(financiamiento.map((l) => l.origenAplicacion));
@@ -204,8 +238,9 @@ export async function computeInformeReport(informeId: string): Promise<InformeRe
     periodoAnio: informe.periodoAnio,
     estado: informe.estado,
     fechaCargaAcumulado: ultimoAcumulado?.fechaCarga ?? null,
-    balance: { activo, pasivo, totalActivo, totalPasivoPN },
+    balance: { activo, pasivoYPatrimonioNeto, totalActivo, totalPasivoPN },
     resultadoDelPeriodo,
+    ajustesEjerciciosAnteriores,
     origenAplicacion: { origenes, aplicaciones, totalOrigenes, totalAplicaciones },
     nof: {
       operativo,

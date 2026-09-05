@@ -30,15 +30,11 @@ export default async function EmpresaLayout({
         <header className="flex flex-wrap items-center gap-4 border-b bg-white/90 p-4">
           <h1 className="text-lg font-semibold">{empresa.nombreEmp}</h1>
           <nav className="flex flex-wrap items-center gap-4 text-sm">
-            <span className="text-zinc-500">Confeccionar Informe:</span>
-            <Link href={`/empresa/${empresa.codEmp}/bsys-mes`} className="underline">
-              Carga de BSyS Mes
-            </Link>
             <Link
-              href={`/empresa/${empresa.codEmp}/bsys-acumulado`}
+              href={`/empresa/${empresa.codEmp}/confeccionar-informe`}
               className="underline"
             >
-              Carga de BSyS Acumulado
+              Confeccionar Informe
             </Link>
             <Link href={`/empresa/${empresa.codEmp}/historico`} className="underline">
               Histórico de Informes

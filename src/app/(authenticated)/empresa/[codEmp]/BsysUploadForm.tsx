@@ -1,79 +1,99 @@
 "use client";
 
 import { useActionState } from "react";
-import { importBsys } from "@/lib/bsys-import";
+import { importBsysCombinado } from "@/lib/bsys-import";
+import { openInWindow } from "@/lib/openWindow";
 
 type ImportState = {
   error?: string;
   cuentasFaltantes?: string[];
   success?: true;
-  cantidad?: number;
+  informeId?: string;
+  cantidadMes?: number;
+  cantidadAcumulado?: number;
 } | null;
 
-export function BsysUploadForm({
-  empresaId,
-  tipo,
-}: {
-  empresaId: number;
-  tipo: "MES" | "ACUMULADO";
-}) {
+export function BsysUploadForm({ empresaId }: { empresaId: number }) {
   const [state, formAction, pending] = useActionState<ImportState, FormData>(
-    async (_prevState, formData) => importBsys(formData),
+    async (_prevState, formData) => importBsysCombinado(formData),
     null
   );
 
   const now = new Date();
 
   return (
-    <form action={formAction} className="flex flex-col gap-3">
-      <input type="hidden" name="empresaId" value={empresaId} />
-      <input type="hidden" name="tipo" value={tipo} />
+    <div className="flex flex-col gap-4">
+      <form action={formAction} className="flex flex-col gap-3">
+        <input type="hidden" name="empresaId" value={empresaId} />
 
-      <div className="flex gap-3">
+        <div className="flex gap-3">
+          <label className="flex flex-col gap-1">
+            <span className="text-sm">Mes</span>
+            <select
+              name="periodoMes"
+              required
+              defaultValue={now.getMonth() + 1}
+              className="rounded border px-3 py-2"
+            >
+              {Array.from({ length: 12 }, (_, i) => i + 1).map((mes) => (
+                <option key={mes} value={mes}>
+                  {mes}
+                </option>
+              ))}
+            </select>
+          </label>
+          <label className="flex flex-col gap-1">
+            <span className="text-sm">Año</span>
+            <input
+              name="periodoAnio"
+              type="number"
+              required
+              defaultValue={now.getFullYear()}
+              className="w-24 rounded border px-3 py-2"
+            />
+          </label>
+        </div>
+
         <label className="flex flex-col gap-1">
-          <span className="text-sm">Mes</span>
-          <select
-            name="periodoMes"
-            required
-            defaultValue={now.getMonth() + 1}
-            className="rounded border px-3 py-2"
-          >
-            {Array.from({ length: 12 }, (_, i) => i + 1).map((mes) => (
-              <option key={mes} value={mes}>
-                {mes}
-              </option>
-            ))}
-          </select>
+          <span className="text-sm">Archivo BSyS del Mes</span>
+          <input name="archivoMes" type="file" required className="rounded border px-3 py-2" />
         </label>
+
         <label className="flex flex-col gap-1">
-          <span className="text-sm">Año</span>
+          <span className="text-sm">Archivo BSyS Acumulado</span>
           <input
-            name="periodoAnio"
-            type="number"
+            name="archivoAcumulado"
+            type="file"
             required
-            defaultValue={now.getFullYear()}
-            className="w-24 rounded border px-3 py-2"
+            className="rounded border px-3 py-2"
           />
         </label>
-      </div>
 
-      <label className="flex flex-col gap-1">
-        <span className="text-sm">Archivo del sistema contable</span>
-        <input name="archivo" type="file" required className="rounded border px-3 py-2" />
-      </label>
-
-      <button
-        type="submit"
-        disabled={pending}
-        className="w-fit rounded bg-black px-3 py-2 text-white disabled:opacity-50"
-      >
-        {pending ? "Procesando..." : "Cargar"}
-      </button>
+        <button
+          type="submit"
+          disabled={pending}
+          className="w-fit rounded bg-black px-3 py-2 text-white disabled:opacity-50"
+        >
+          {pending ? "Procesando..." : "Cargar y confeccionar informe"}
+        </button>
+      </form>
 
       {state?.success && (
-        <p className="text-sm text-green-700">
-          Se importaron {state.cantidad} cuentas correctamente.
-        </p>
+        <div className="flex items-center gap-3 rounded border border-green-400 bg-green-50 p-3 text-sm text-green-800">
+          <p>
+            Se importaron {state.cantidadMes} cuentas (Mes) y {state.cantidadAcumulado} cuentas
+            (Acumulado).
+          </p>
+          <button
+            type="button"
+            onClick={() =>
+              openInWindow(`/empresa/${empresaId}/informe/${state.informeId}`, "informe")
+            }
+            className="w-fit rounded bg-black px-3 py-2 text-white"
+          >
+            Ver informe
+          </button>
+        </div>
       )}
 
       {state?.error && (
@@ -88,6 +108,6 @@ export function BsysUploadForm({
           )}
         </div>
       )}
-    </form>
+    </div>
   );
 }

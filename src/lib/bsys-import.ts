@@ -2,15 +2,19 @@
 
 import { revalidatePath } from "next/cache";
 import { prisma } from "@/lib/prisma";
-import { parseBsysRawFile } from "@/lib/bsys-raw-parser";
+import { parseBsysRawFile, type BsysRawRow } from "@/lib/bsys-raw-parser";
 import { normalizeCuenta } from "@/lib/cuenta-normalize";
 
-export async function importBsys(formData: FormData) {
+type ImportBsysResult =
+  | { success: true; informeId: string; cantidadMes: number; cantidadAcumulado: number }
+  | { error: string; cuentasFaltantes?: string[] };
+
+export async function importBsysCombinado(formData: FormData): Promise<ImportBsysResult> {
   const empresaId = Number(formData.get("empresaId"));
-  const tipo = formData.get("tipo") === "ACUMULADO" ? "ACUMULADO" : "MES";
   const periodoMes = Number(formData.get("periodoMes"));
   const periodoAnio = Number(formData.get("periodoAnio"));
-  const file = formData.get("archivo");
+  const archivoMes = formData.get("archivoMes");
+  const archivoAcumulado = formData.get("archivoAcumulado");
 
   if (!Number.isInteger(periodoMes) || periodoMes < 1 || periodoMes > 12) {
     return { error: "Mes inválido." };
@@ -18,47 +22,63 @@ export async function importBsys(formData: FormData) {
   if (!Number.isInteger(periodoAnio) || periodoAnio < 2000) {
     return { error: "Año inválido." };
   }
-
-  if (!(file instanceof File) || file.size === 0) {
-    return { error: "Seleccioná un archivo." };
+  if (!(archivoMes instanceof File) || archivoMes.size === 0) {
+    return { error: "Seleccioná el archivo de BSyS del Mes." };
+  }
+  if (!(archivoAcumulado instanceof File) || archivoAcumulado.size === 0) {
+    return { error: "Seleccioná el archivo de BSyS Acumulado." };
   }
 
-  const html = await file.text();
-  const rows = parseBsysRawFile(html);
+  const [htmlMes, htmlAcumulado] = await Promise.all([
+    archivoMes.text(),
+    archivoAcumulado.text(),
+  ]);
+  const rowsMes = parseBsysRawFile(htmlMes);
+  const rowsAcumulado = parseBsysRawFile(htmlAcumulado);
 
-  if (rows.length === 0) {
+  if (rowsMes.length === 0) {
     return {
-      error: "No se encontraron cuentas en el archivo. Verificá que sea el export correcto del sistema contable.",
+      error:
+        "No se encontraron cuentas en el archivo de BSyS del Mes. Verificá que sea el export correcto del sistema contable.",
+    };
+  }
+  if (rowsAcumulado.length === 0) {
+    return {
+      error:
+        "No se encontraron cuentas en el archivo de BSyS Acumulado. Verificá que sea el export correcto del sistema contable.",
     };
   }
 
   // Se compara por forma normalizada (mayúsculas/espacios): el mismo nombre de
   // cuenta puede venir con distinto casing entre el Plan de Cuentas (importado
-  // desde HOJA LLAVE) y el export mensual del sistema contable.
+  // desde HOJA LLAVE) y el export del sistema contable.
   const clasificadas = await prisma.planDeCuentas.findMany({
     where: { empresaId },
     select: { cuenta: true },
   });
   const clasificadasSet = new Set(clasificadas.map((p) => normalizeCuenta(p.cuenta)));
-  const faltantes = rows
-    .map((r) => r.cuenta)
-    .filter((c) => !clasificadasSet.has(normalizeCuenta(c)));
+
+  const cuentasArchivo = new Set([
+    ...rowsMes.map((r) => r.cuenta),
+    ...rowsAcumulado.map((r) => r.cuenta),
+  ]);
+  const faltantes = [...cuentasArchivo].filter((c) => !clasificadasSet.has(normalizeCuenta(c)));
 
   if (faltantes.length > 0) {
     return {
-      error: `Hay ${faltantes.length} cuenta(s) del archivo que no están en el Plan de Cuentas de esta empresa. Agregalas en Configuración → Plan de Cuentas y reintentá.`,
+      error: `Hay ${faltantes.length} cuenta(s) en los archivos que no están en el Plan de Cuentas de esta empresa. Agregalas en Configuración → Plan de Cuentas y reintentá.`,
       cuentasFaltantes: faltantes,
     };
   }
 
-  // Un mismo timestamp para todas las filas del batch: computeInformeReport
+  // Un mismo timestamp para todas las filas de cada tipo: computeInformeReport
   // agrupa "la carga más reciente" por fechaCarga exacta, así que calcular
   // new Date() por fila (en vez de una vez por carga) partiría el archivo en
   // más de un batch si el insert cruza un límite de milisegundo.
   const fechaCarga = new Date();
 
-  await prisma.balanceSumasYSaldos.createMany({
-    data: rows.map((r) => ({
+  const toData = (rows: BsysRawRow[], tipo: "MES" | "ACUMULADO") =>
+    rows.map((r) => ({
       empresaId,
       tipo,
       fechaCarga,
@@ -69,16 +89,25 @@ export async function importBsys(formData: FormData) {
       sumasHaber: r.sumasHaber,
       saldoCierreDebe: r.saldoCierreDebe,
       saldoCierreHaber: r.saldoCierreHaber,
-    })),
+    }));
+
+  const informe = await prisma.$transaction(async (tx) => {
+    await tx.balanceSumasYSaldos.createMany({ data: toData(rowsMes, "MES") });
+    await tx.balanceSumasYSaldos.createMany({ data: toData(rowsAcumulado, "ACUMULADO") });
+    return tx.informe.upsert({
+      where: { empresaId_periodoMes_periodoAnio: { empresaId, periodoMes, periodoAnio } },
+      update: {},
+      create: { empresaId, periodoMes, periodoAnio },
+    });
   });
 
-  await prisma.informe.upsert({
-    where: { empresaId_periodoMes_periodoAnio: { empresaId, periodoMes, periodoAnio } },
-    update: {},
-    create: { empresaId, periodoMes, periodoAnio },
-  });
-
-  revalidatePath(`/empresa/${empresaId}/bsys-${tipo === "MES" ? "mes" : "acumulado"}`);
+  revalidatePath(`/empresa/${empresaId}/confeccionar-informe`);
   revalidatePath(`/empresa/${empresaId}/historico`);
-  return { success: true as const, cantidad: rows.length };
+
+  return {
+    success: true,
+    informeId: informe.id,
+    cantidadMes: rowsMes.length,
+    cantidadAcumulado: rowsAcumulado.length,
+  };
 }
