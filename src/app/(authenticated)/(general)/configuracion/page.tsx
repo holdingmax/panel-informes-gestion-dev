@@ -15,7 +15,7 @@ export default function ConfiguracionPage() {
   return (
     <main className="flex w-full flex-col items-start gap-4 p-8">
       <h1 className="text-2xl font-semibold">Configuración</h1>
-      <ul className="flex flex-col items-start gap-3">
+      <ul className="flex flex-col items-start gap-3 rounded-lg bg-white p-6 shadow">
         {LINKS.map((link) => (
           <li key={link.href}>
             <Link href={link.href} className="text-lg underline">

@@ -17,27 +17,32 @@ export default async function PartidaPatrimonialPage() {
         de cada empresa.
       </p>
 
-      <table className="w-full text-left text-lg">
-        <thead>
-          <tr>
-            <th className="py-1 pr-4">Código</th>
-            <th className="py-1 pr-4">Nombre</th>
-            <th className="py-1 pr-4">Tipo</th>
-          </tr>
-        </thead>
-        <tbody>
-          {partidas.map((partida) => (
-            <PartidaTipoRow
-              key={partida.codPartida}
-              codPartida={partida.codPartida}
-              nomPartida={partida.nomPartida}
-              tipo={partida.tipo}
-            />
-          ))}
-        </tbody>
-      </table>
+      <div className="overflow-x-auto rounded-lg bg-white p-4 shadow">
+        <table className="w-full text-left text-lg">
+          <thead>
+            <tr>
+              <th className="py-1 pr-4">Código</th>
+              <th className="py-1 pr-4">Nombre</th>
+              <th className="py-1 pr-4">Tipo</th>
+            </tr>
+          </thead>
+          <tbody>
+            {partidas.map((partida) => (
+              <PartidaTipoRow
+                key={partida.codPartida}
+                codPartida={partida.codPartida}
+                nomPartida={partida.nomPartida}
+                tipo={partida.tipo}
+              />
+            ))}
+          </tbody>
+        </table>
+      </div>
 
-      <form action={createCatalogItem} className="flex flex-col gap-3">
+      <form
+        action={createCatalogItem}
+        className="flex flex-col gap-3 rounded-lg bg-white p-6 shadow"
+      >
         <input type="hidden" name="tabla" value="partida-patrimonial" />
         <label className="flex flex-col gap-1">
           <span className="text-lg">Nombre de partida</span>

@@ -1,4 +1,5 @@
 import { prisma } from "@/lib/prisma";
+import { normalizeCuenta } from "@/lib/cuenta-normalize";
 
 export type RubroLine = {
   codRubro: number;
@@ -108,12 +109,12 @@ export async function computeInformeReport(informeId: string): Promise<InformeRe
     where: { empresaId: informe.empresaId },
     include: { rubro: true, partidaPatrimonial: true },
   });
-  const porCuenta = new Map(planDeCuentas.map((p) => [p.cuenta, p]));
+  const porCuenta = new Map(planDeCuentas.map((p) => [normalizeCuenta(p.cuenta), p]));
 
   const rubroMap = new Map<number, RubroAgg>();
 
   for (const b of balances) {
-    const plan = porCuenta.get(b.cuenta);
+    const plan = porCuenta.get(normalizeCuenta(b.cuenta));
     if (!plan) {
       advertencias.push(
         `La cuenta "${b.cuenta}" no está clasificada en el Plan de Cuentas actual y se excluyó del informe.`

@@ -3,6 +3,7 @@
 import { revalidatePath } from "next/cache";
 import { prisma } from "@/lib/prisma";
 import { parseBsysRawFile } from "@/lib/bsys-raw-parser";
+import { normalizeCuenta } from "@/lib/cuenta-normalize";
 
 export async function importBsys(formData: FormData) {
   const empresaId = Number(formData.get("empresaId"));
@@ -31,12 +32,17 @@ export async function importBsys(formData: FormData) {
     };
   }
 
+  // Se compara por forma normalizada (mayúsculas/espacios): el mismo nombre de
+  // cuenta puede venir con distinto casing entre el Plan de Cuentas (importado
+  // desde HOJA LLAVE) y el export mensual del sistema contable.
   const clasificadas = await prisma.planDeCuentas.findMany({
-    where: { empresaId, cuenta: { in: rows.map((r) => r.cuenta) } },
+    where: { empresaId },
     select: { cuenta: true },
   });
-  const clasificadasSet = new Set(clasificadas.map((p) => p.cuenta));
-  const faltantes = rows.map((r) => r.cuenta).filter((c) => !clasificadasSet.has(c));
+  const clasificadasSet = new Set(clasificadas.map((p) => normalizeCuenta(p.cuenta)));
+  const faltantes = rows
+    .map((r) => r.cuenta)
+    .filter((c) => !clasificadasSet.has(normalizeCuenta(c)));
 
   if (faltantes.length > 0) {
     return {
@@ -45,11 +51,17 @@ export async function importBsys(formData: FormData) {
     };
   }
 
+  // Un mismo timestamp para todas las filas del batch: computeInformeReport
+  // agrupa "la carga más reciente" por fechaCarga exacta, así que calcular
+  // new Date() por fila (en vez de una vez por carga) partiría el archivo en
+  // más de un batch si el insert cruza un límite de milisegundo.
+  const fechaCarga = new Date();
+
   await prisma.balanceSumasYSaldos.createMany({
     data: rows.map((r) => ({
       empresaId,
       tipo,
-      fechaCarga: new Date(),
+      fechaCarga,
       cuenta: r.cuenta,
       saldoIniDebe: r.saldoIniDebe,
       saldoIniHaber: r.saldoIniHaber,

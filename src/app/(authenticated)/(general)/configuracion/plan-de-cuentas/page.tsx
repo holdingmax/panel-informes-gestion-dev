@@ -21,11 +21,11 @@ export default async function PlanDeCuentasPage() {
     ]);
 
   return (
-    <main className="flex w-full max-w-5xl flex-col gap-8 p-8">
+    <main className="flex w-full flex-col gap-8 p-8">
       <h1 className="text-2xl font-semibold">Plan de Cuentas</h1>
 
-      <div className="overflow-x-auto">
-        <table className="w-full text-left text-lg">
+      <div className="overflow-x-auto rounded-lg bg-white p-4 shadow">
+        <table className="w-full whitespace-nowrap text-left text-sm">
           <thead>
             <tr>
               <th className="py-1 pr-4">Empresa</th>
@@ -41,21 +41,21 @@ export default async function PlanDeCuentasPage() {
           <tbody>
             {planes.map((plan) => (
               <tr key={plan.id} className="border-t">
-                <td className="py-2 pr-4">{plan.empresa.nombreEmp}</td>
-                <td className="py-2 pr-4">{plan.cuenta}</td>
-                <td className="py-2 pr-4">{plan.partidaPatrimonial.nomPartida}</td>
-                <td className="py-2 pr-4">{plan.rubro.nomRubro}</td>
-                <td className="py-2 pr-4">{plan.subrubro.nomSubrubro}</td>
-                <td className="py-2 pr-4">{plan.subrubro2?.nomSubrubro2 ?? "—"}</td>
-                <td className="py-2 pr-4">{plan.subrubro3?.nomSubrubro3 ?? "—"}</td>
-                <td className="py-2 pr-4">{plan.categoriaOyA?.nomOyA ?? "—"}</td>
+                <td className="py-1.5 pr-4">{plan.empresa.nombreEmp}</td>
+                <td className="py-1.5 pr-4">{plan.cuenta}</td>
+                <td className="py-1.5 pr-4">{plan.partidaPatrimonial.nomPartida}</td>
+                <td className="py-1.5 pr-4">{plan.rubro.nomRubro}</td>
+                <td className="py-1.5 pr-4">{plan.subrubro.nomSubrubro}</td>
+                <td className="py-1.5 pr-4">{plan.subrubro2?.nomSubrubro2 ?? "—"}</td>
+                <td className="py-1.5 pr-4">{plan.subrubro3?.nomSubrubro3 ?? "—"}</td>
+                <td className="py-1.5 pr-4">{plan.categoriaOyA?.nomOyA ?? "—"}</td>
               </tr>
             ))}
           </tbody>
         </table>
       </div>
 
-      <section className="flex flex-col gap-4">
+      <section className="flex max-w-2xl flex-col gap-4 rounded-lg bg-white p-6 shadow">
         <h2 className="text-xl font-medium">Nueva cuenta</h2>
         <form action={createPlanDeCuentas} className="flex flex-col gap-3">
           <label className="flex flex-col gap-1">
