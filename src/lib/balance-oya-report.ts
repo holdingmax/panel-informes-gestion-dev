@@ -56,13 +56,22 @@ function sum(values: number[]) {
 }
 
 function toLine(r: RubroAgg): RubroLine {
+  // Origen/Aplicación replica la fórmula real del Excel sobre los saldos
+  // "crudos" del mayor (Debe-Haber): Activo = saldoInicio-saldoFinal,
+  // Pasivo/PN = saldoFinal-saldoInicio.
   const origenAplicacion =
     r.tipoPartida === "ACTIVO" ? r.saldoInicio - r.saldoFinal : r.saldoFinal - r.saldoInicio;
+
+  // Para MOSTRAR el saldo (Balance Sheet), Pasivo/PN se presenta en positivo
+  // (convención contable habitual) aunque su saldo natural en el mayor sea
+  // acreedor/negativo; Activo ya se muestra tal cual.
+  const signoDisplay = r.tipoPartida === "ACTIVO" ? 1 : -1;
+
   return {
     codRubro: r.codRubro,
     nombre: r.nomRubro,
-    saldoInicio: r.saldoInicio,
-    saldoFinal: r.saldoFinal,
+    saldoInicio: r.saldoInicio * signoDisplay,
+    saldoFinal: r.saldoFinal * signoDisplay,
     origenAplicacion,
   };
 }

@@ -35,14 +35,14 @@ function fmt(n: number) {
   return n.toLocaleString("es-AR", { maximumFractionDigits: 0 });
 }
 
-function Rows({ rows, useAbs }: { rows: RubroLine[]; useAbs?: boolean }) {
+function Rows({ rows, showOrigenAplicacion }: { rows: RubroLine[]; showOrigenAplicacion?: boolean }) {
   return (
     <>
       {rows.map((r) => (
         <View key={r.codRubro} style={styles.row}>
           <Text style={styles.rowLabel}>{r.nombre}</Text>
           <Text style={styles.rowValue}>
-            {fmt(useAbs ? Math.abs(r.origenAplicacion) : r.saldoFinal)}
+            {fmt(showOrigenAplicacion ? r.origenAplicacion : r.saldoFinal)}
           </Text>
         </View>
       ))}
@@ -95,7 +95,7 @@ export function InformePDF({ report }: { report: InformeReport }) {
         <View style={styles.columns}>
           <View style={styles.column}>
             <Text style={styles.sectionTitle}>Orígenes de Fondos</Text>
-            <Rows rows={report.origenAplicacion.origenes} useAbs />
+            <Rows rows={report.origenAplicacion.origenes} showOrigenAplicacion />
             <View style={styles.totalRow}>
               <Text style={styles.totalLabel}>Total Orígenes</Text>
               <Text style={styles.totalValue}>
@@ -105,7 +105,7 @@ export function InformePDF({ report }: { report: InformeReport }) {
           </View>
           <View style={styles.column}>
             <Text style={styles.sectionTitle}>Aplicaciones de Fondos</Text>
-            <Rows rows={report.origenAplicacion.aplicaciones} useAbs />
+            <Rows rows={report.origenAplicacion.aplicaciones} showOrigenAplicacion />
             <View style={styles.totalRow}>
               <Text style={styles.totalLabel}>Total Aplicaciones</Text>
               <Text style={styles.totalValue}>

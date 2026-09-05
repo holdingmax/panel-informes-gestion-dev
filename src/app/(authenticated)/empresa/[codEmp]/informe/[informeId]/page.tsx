@@ -50,7 +50,7 @@ function OrigenAplicacionTable({ rows }: { rows: RubroLine[] }) {
         {rows.map((r) => (
           <tr key={r.codRubro} className="border-t">
             <td className="py-1">{r.nombre}</td>
-            <td className="py-1 text-right">{fmt(Math.abs(r.origenAplicacion))}</td>
+            <td className="py-1 text-right">{fmt(r.origenAplicacion)}</td>
           </tr>
         ))}
       </tbody>
