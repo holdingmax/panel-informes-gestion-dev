@@ -18,3 +18,17 @@ export async function toggleActiveAction(id: string, active: boolean) {
   await updateUser(id, { active });
   revalidatePath("/admin/users");
 }
+
+export async function resetPasswordAction(id: string, newPassword: string) {
+  await updateUser(id, { newPassword });
+  revalidatePath("/admin/users");
+}
+
+export async function resetSecurityQuestionAction(
+  id: string,
+  securityQuestion: string,
+  securityAnswer: string
+) {
+  await updateUser(id, { securityQuestion, securityAnswer });
+  revalidatePath("/admin/users");
+}

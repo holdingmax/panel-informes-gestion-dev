@@ -50,17 +50,37 @@ export async function createUser(input: {
 
 export async function updateUser(
   id: string,
-  input: { role?: "ADMIN" | "USER"; active?: boolean; newPassword?: string }
+  input: {
+    role?: "ADMIN" | "USER";
+    active?: boolean;
+    newPassword?: string;
+    securityQuestion?: string;
+    securityAnswer?: string;
+  }
 ) {
   await requireAdmin();
 
-  const data: { role?: "ADMIN" | "USER"; active?: boolean; passwordHash?: string } = {
+  const data: {
+    role?: "ADMIN" | "USER";
+    active?: boolean;
+    passwordHash?: string;
+    securityQuestion?: string;
+    securityAnswerHash?: string;
+  } = {
     role: input.role,
     active: input.active,
   };
 
   if (input.newPassword) {
     data.passwordHash = await bcrypt.hash(input.newPassword, SALT_ROUNDS);
+  }
+
+  if (input.securityQuestion && input.securityAnswer) {
+    data.securityQuestion = input.securityQuestion;
+    data.securityAnswerHash = await bcrypt.hash(
+      input.securityAnswer.trim().toLowerCase(),
+      SALT_ROUNDS
+    );
   }
 
   return prisma.user.update({ where: { id }, data });

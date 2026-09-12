@@ -1,6 +1,7 @@
 import { listUsers } from "@/lib/auth-actions";
 import { createUserAction } from "./actions";
 import { ToggleActiveButton } from "./ToggleActiveButton";
+import { UserRowActions } from "./UserRowActions";
 
 export default async function AdminUsersPage() {
   const users = await listUsers();
@@ -25,7 +26,10 @@ export default async function AdminUsersPage() {
               <td className="py-2">{u.role}</td>
               <td className="py-2">{u.active ? "Activo" : "Inactivo"}</td>
               <td className="py-2">
-                <ToggleActiveButton id={u.id} active={u.active} />
+                <div className="flex flex-col items-start gap-2">
+                  <ToggleActiveButton id={u.id} active={u.active} />
+                  <UserRowActions id={u.id} />
+                </div>
               </td>
             </tr>
           ))}

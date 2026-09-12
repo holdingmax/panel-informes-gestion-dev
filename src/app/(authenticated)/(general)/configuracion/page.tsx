@@ -2,6 +2,7 @@ import Link from "next/link";
 
 const LINKS = [
   { href: "/configuracion/empresas", label: "Empresas" },
+  { href: "/admin/users", label: "Usuarios" },
   { href: "/configuracion/partida-patrimonial", label: "Partida Patrimonial" },
   { href: "/configuracion/rubro", label: "Rubro" },
   { href: "/configuracion/subrubro", label: "Subrubro" },
