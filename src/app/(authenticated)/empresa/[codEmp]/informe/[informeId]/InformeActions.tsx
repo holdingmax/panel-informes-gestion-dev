@@ -27,7 +27,7 @@ export function InformeActions({
         <button
           disabled={pending}
           onClick={() => startTransition(() => avanzarEstadoInforme(informeId))}
-          className="rounded bg-black px-3 py-2 text-white disabled:opacity-50"
+          className="rounded-md bg-accent px-4 py-2 text-sm text-white transition-colors hover:bg-accent-hover focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-accent focus-visible:ring-offset-2 disabled:cursor-not-allowed disabled:opacity-50"
         >
           {pending ? "..." : label}
         </button>
@@ -38,7 +38,7 @@ export function InformeActions({
           href={`/api/informes/${informeId}/pdf`}
           target="_blank"
           rel="noopener noreferrer"
-          className="rounded border px-3 py-2 underline"
+          className="rounded-md border border-slate-300 px-4 py-2 text-sm text-slate-700 hover:bg-slate-50 focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-accent focus-visible:ring-offset-2"
         >
           Descargar PDF
         </a>

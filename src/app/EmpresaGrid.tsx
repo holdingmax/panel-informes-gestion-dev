@@ -25,7 +25,7 @@ export function EmpresaGrid({ empresas }: { empresas: EmpresaTile[] }) {
           onClick={() =>
             openInWindow(`/empresa/${empresa.codEmp}`, `empresa-${empresa.codEmp}`)
           }
-          className="flex flex-col items-center gap-3 rounded-lg border bg-white p-8 text-center shadow-sm hover:bg-zinc-50"
+          className="flex flex-col items-center gap-3 rounded-md border border-slate-200 bg-white p-8 text-center shadow-sm transition-colors hover:bg-slate-50 focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-accent focus-visible:ring-offset-2"
         >
           {empresa.imagenMime ? (
             // eslint-disable-next-line @next/next/no-img-element

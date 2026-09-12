@@ -33,14 +33,14 @@ export function UserRowActions({ id }: { id: string }) {
         <button
           type="button"
           onClick={() => setOpen(open === "password" ? null : "password")}
-          className="rounded border px-2 py-1 text-sm"
+          className="rounded-md border border-slate-300 px-2.5 py-1.5 text-sm text-slate-700 hover:bg-slate-50 focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-accent focus-visible:ring-offset-2"
         >
           Restablecer contraseña
         </button>
         <button
           type="button"
           onClick={() => setOpen(open === "security" ? null : "security")}
-          className="rounded border px-2 py-1 text-sm"
+          className="rounded-md border border-slate-300 px-2.5 py-1.5 text-sm text-slate-700 hover:bg-slate-50 focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-accent focus-visible:ring-offset-2"
         >
           Cambiar pregunta de seguridad
         </button>
@@ -66,7 +66,7 @@ export function UserRowActions({ id }: { id: string }) {
           <button
             type="submit"
             disabled={pending}
-            className="rounded bg-black px-3 py-1.5 text-white disabled:opacity-50"
+            className="rounded-md bg-accent px-2.5 py-1.5 text-sm text-white transition-colors hover:bg-accent-hover focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-accent focus-visible:ring-offset-2 disabled:cursor-not-allowed disabled:opacity-50"
           >
             Guardar
           </button>
@@ -89,7 +89,7 @@ export function UserRowActions({ id }: { id: string }) {
           <button
             type="submit"
             disabled={pending}
-            className="rounded bg-black px-3 py-1.5 text-white disabled:opacity-50"
+            className="rounded-md bg-accent px-2.5 py-1.5 text-sm text-white transition-colors hover:bg-accent-hover focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-accent focus-visible:ring-offset-2 disabled:cursor-not-allowed disabled:opacity-50"
           >
             Guardar
           </button>

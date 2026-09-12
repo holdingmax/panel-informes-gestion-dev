@@ -10,6 +10,10 @@
   --color-foreground: var(--foreground);
   --font-sans: var(--font-geist-sans);
   --font-mono: var(--font-geist-mono);
+
+  /* Tokens de diseño: acento corporativo único (botones, foco, nav activo) */
+  --color-accent: #1f3864;
+  --color-accent-hover: #16294a;
 }
 
 @media (prefers-color-scheme: dark) {

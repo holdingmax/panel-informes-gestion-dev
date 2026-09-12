@@ -55,7 +55,7 @@ export default async function HistoricoPage({
                 <td className="py-2">
                   <Link
                     href={`/empresa/${codEmp}/informe/${informe.id}`}
-                    className="underline"
+                    className="rounded-md text-slate-700 underline hover:text-accent focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-accent focus-visible:ring-offset-2"
                   >
                     {MESES[informe.periodoMes - 1]} {informe.periodoAnio}
                   </Link>

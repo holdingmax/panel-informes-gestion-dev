@@ -29,14 +29,17 @@ export default async function EmpresaLayout({
       <div className="min-h-screen bg-white/85">
         <header className="flex flex-wrap items-center gap-4 border-b bg-white/90 p-4">
           <h1 className="text-lg font-semibold">{empresa.nombreEmp}</h1>
-          <nav className="flex flex-wrap items-center gap-4 text-sm">
+          <nav className="flex flex-wrap items-center gap-2 text-sm">
             <Link
               href={`/empresa/${empresa.codEmp}/confeccionar-informe`}
-              className="underline"
+              className="rounded-md px-3 py-1.5 text-slate-700 underline hover:bg-slate-50 hover:text-accent focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-accent focus-visible:ring-offset-2"
             >
               Confeccionar Informe
             </Link>
-            <Link href={`/empresa/${empresa.codEmp}/historico`} className="underline">
+            <Link
+              href={`/empresa/${empresa.codEmp}/historico`}
+              className="rounded-md px-3 py-1.5 text-slate-700 underline hover:bg-slate-50 hover:text-accent focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-accent focus-visible:ring-offset-2"
+            >
               Histórico de Informes
             </Link>
           </nav>

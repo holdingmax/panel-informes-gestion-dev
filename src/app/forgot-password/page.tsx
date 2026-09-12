@@ -36,7 +36,10 @@ export default function ForgotPasswordPage() {
     return (
       <main className="mx-auto flex min-h-screen max-w-sm flex-col justify-center gap-4 p-6">
         <p>Tu contraseña fue actualizada. Ya podés iniciar sesión.</p>
-        <Link href="/login" className="text-sm underline">
+        <Link
+          href="/login"
+          className="text-sm text-slate-600 underline hover:text-accent focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-accent focus-visible:ring-offset-2"
+        >
           Ir a iniciar sesión
         </Link>
       </main>
@@ -61,7 +64,7 @@ export default function ForgotPasswordPage() {
           <button
             type="submit"
             disabled={pending}
-            className="rounded bg-black px-3 py-2 text-white disabled:opacity-50"
+            className="rounded-md bg-accent px-4 py-2 text-sm text-white transition-colors hover:bg-accent-hover focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-accent focus-visible:ring-offset-2 disabled:cursor-not-allowed disabled:opacity-50"
           >
             Continuar
           </button>
@@ -95,14 +98,17 @@ export default function ForgotPasswordPage() {
           <button
             type="submit"
             disabled={pending}
-            className="rounded bg-black px-3 py-2 text-white disabled:opacity-50"
+            className="rounded-md bg-accent px-4 py-2 text-sm text-white transition-colors hover:bg-accent-hover focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-accent focus-visible:ring-offset-2 disabled:cursor-not-allowed disabled:opacity-50"
           >
             Cambiar contraseña
           </button>
         </form>
       )}
 
-      <Link href="/login" className="text-sm underline">
+      <Link
+        href="/login"
+        className="text-sm text-slate-600 underline hover:text-accent focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-accent focus-visible:ring-offset-2"
+      >
         Volver a iniciar sesión
       </Link>
     </main>

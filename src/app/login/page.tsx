@@ -45,13 +45,16 @@ export default function LoginPage() {
         <button
           type="submit"
           disabled={pending}
-          className="rounded bg-black px-3 py-2 text-white disabled:opacity-50"
+          className="rounded-md bg-accent px-4 py-2 text-sm text-white transition-colors hover:bg-accent-hover focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-accent focus-visible:ring-offset-2 disabled:cursor-not-allowed disabled:opacity-50"
         >
           {pending ? "Ingresando..." : "Ingresar"}
         </button>
       </form>
 
-      <Link href="/forgot-password" className="text-sm underline">
+      <Link
+        href="/forgot-password"
+        className="text-sm text-slate-600 underline hover:text-accent focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-accent focus-visible:ring-offset-2"
+      >
         Olvidé mi contraseña
       </Link>
     </main>

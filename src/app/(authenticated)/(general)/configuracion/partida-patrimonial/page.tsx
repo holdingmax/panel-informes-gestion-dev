@@ -48,7 +48,10 @@ export default async function PartidaPatrimonialPage() {
           <span className="text-lg">Nombre de partida</span>
           <input name="nombre" required maxLength={40} className="rounded border px-3 py-2 text-lg" />
         </label>
-        <button type="submit" className="w-fit rounded bg-black px-3 py-2 text-lg text-white">
+        <button
+          type="submit"
+          className="w-fit rounded-md bg-accent px-4 py-2 text-sm text-white transition-colors hover:bg-accent-hover focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-accent focus-visible:ring-offset-2"
+        >
           Agregar
         </button>
       </form>

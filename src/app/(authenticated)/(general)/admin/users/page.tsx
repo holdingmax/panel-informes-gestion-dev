@@ -82,7 +82,7 @@ export default async function AdminUsersPage() {
           </label>
           <button
             type="submit"
-            className="rounded bg-black px-3 py-2 text-lg text-white"
+            className="rounded-md bg-accent px-4 py-2 text-sm text-white transition-colors hover:bg-accent-hover focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-accent focus-visible:ring-offset-2"
           >
             Crear usuario
           </button>
