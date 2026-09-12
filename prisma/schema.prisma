@@ -89,11 +89,12 @@ model BalanceSumasYSaldos {
   createdAt        DateTime   @default(now())
 }
 
-// ACTIVO y PASIVO_PATRIMONIO_NETO van al Balance (y determinan el signo del
-// cálculo de Origen/Aplicación); RESULTADO alimenta el Resultado del período.
+// ACTIVO, PASIVO y PATRIMONIO_NETO van al Balance, cada uno con su propio
+// subtotal; RESULTADO alimenta el Resultado del período.
 enum TipoPartida {
   ACTIVO
-  PASIVO_PATRIMONIO_NETO
+  PASIVO
+  PATRIMONIO_NETO
   RESULTADO
 }
 
@@ -104,9 +105,13 @@ model PartidaPatrimonial {
   planes     PlanDeCuentas[]
 }
 
+// AJUSTE es para rubros como "Resultados Acumulados" cuya variación del
+// período se muestra aparte, como línea de "Ajustes Ejercicios Anteriores",
+// en vez de mezclarse en la lista general de Orígenes/Aplicaciones.
 enum CategoriaOrigenAplicacion {
   ORIGEN
   APLICACION
+  AJUSTE
 }
 
 enum BucketNOF {
@@ -119,7 +124,6 @@ model Rubro {
   codRubro     Int                        @id @default(autoincrement())
   nomRubro     String                     @unique @db.VarChar(60)
   categoriaOyA CategoriaOrigenAplicacion?
-  bucketNOF    BucketNOF?
   planes       PlanDeCuentas[]
 }
 
@@ -141,10 +145,14 @@ model Subrubro3 {
   planes       PlanDeCuentas[]
 }
 
+// Clasifica cada cuenta del Plan de Cuentas (no el Rubro) para armar la hoja
+// de Necesidades Operativas de Fondos: dos cuentas de un mismo Rubro pueden
+// caer en categorías distintas si hiciera falta.
 model CategoriaOyA {
-  codOyA Int             @id @default(autoincrement())
-  nomOyA String          @unique @db.VarChar(60)
-  planes PlanDeCuentas[]
+  codOyA    Int             @id @default(autoincrement())
+  nomOyA    String          @unique @db.VarChar(60)
+  bucketNOF BucketNOF?
+  planes    PlanDeCuentas[]
 }
 
 model PlanDeCuentas {

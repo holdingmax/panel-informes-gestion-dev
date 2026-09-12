@@ -8,7 +8,7 @@ export async function listPartidasConClasificacion() {
   return prisma.partidaPatrimonial.findMany({ orderBy: { nomPartida: "asc" } });
 }
 
-const VALID: TipoPartida[] = ["ACTIVO", "PASIVO_PATRIMONIO_NETO", "RESULTADO"];
+const VALID: TipoPartida[] = ["ACTIVO", "PASIVO", "PATRIMONIO_NETO", "RESULTADO"];
 
 export async function updatePartidaTipo(codPartida: number, value: string) {
   const tipo: TipoPartida | null = (VALID as string[]).includes(value)

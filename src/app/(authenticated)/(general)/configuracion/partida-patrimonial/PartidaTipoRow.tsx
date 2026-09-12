@@ -27,7 +27,8 @@ export function PartidaTipoRow({
         >
           <option value="">Sin clasificar</option>
           <option value="ACTIVO">Activo (Balance)</option>
-          <option value="PASIVO_PATRIMONIO_NETO">Pasivo / Patrimonio Neto (Balance)</option>
+          <option value="PASIVO">Pasivo (Balance)</option>
+          <option value="PATRIMONIO_NETO">Patrimonio Neto (Balance)</option>
           <option value="RESULTADO">Resultado (Ingresos/Egresos)</option>
         </select>
       </td>

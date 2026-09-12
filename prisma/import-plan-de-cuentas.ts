@@ -49,9 +49,8 @@ async function main() {
     const p = partidaNombre.toUpperCase();
     if (p === "INGRESOS" || p === "EGRESOS") return "RESULTADO";
     if (p === "ACTIVO") return "ACTIVO";
-    if (p === "PASIVO" || p === "REGULADORA DE PASIVO" || p === "PATRIMONIO NETO") {
-      return "PASIVO_PATRIMONIO_NETO";
-    }
+    if (p === "PASIVO" || p === "REGULADORA DE PASIVO") return "PASIVO";
+    if (p === "PATRIMONIO NETO") return "PATRIMONIO_NETO";
     return undefined;
   }
 

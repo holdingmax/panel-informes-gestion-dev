@@ -1,20 +1,20 @@
-import { listRubrosConClasificacion } from "@/lib/rubro-actions";
+import { listCategoriasOyAConClasificacion } from "@/lib/categoria-oya-actions";
 import { createCatalogItem } from "@/lib/catalog-actions";
-import { RubroClasificacionRow } from "./RubroClasificacionRow";
+import { CategoriaOyABucketRow } from "./CategoriaOyABucketRow";
 
 export const dynamic = "force-dynamic";
 
-export default async function RubroPage() {
-  const rubros = await listRubrosConClasificacion();
+export default async function CategoriaOyAPage() {
+  const categorias = await listCategoriasOyAConClasificacion();
 
   return (
     <main className="flex w-full max-w-3xl flex-col gap-8 p-8">
-      <h1 className="text-2xl font-semibold">Rubro</h1>
+      <h1 className="text-2xl font-semibold">Categoría OyA</h1>
 
       <p className="text-sm text-zinc-600">
-        Origen/Aplicación se usa para armar el informe de Balance y Origen y Aplicación de
-        Fondos de cada empresa. La clasificación de Necesidades Operativas de Fondos (NOF) se
-        hace por cuenta en Configuración → Categoría OyA, no acá.
+        Se asigna por cuenta en el Plan de Cuentas (dos cuentas de un mismo Rubro pueden tener
+        categorías distintas). El agrupamiento NOF de cada categoría se usa para armar la hoja de
+        Necesidades Operativas de Fondos del informe.
       </p>
 
       <div className="overflow-x-auto rounded-lg bg-white p-4 shadow">
@@ -23,16 +23,16 @@ export default async function RubroPage() {
             <tr>
               <th className="py-1 pr-4">Código</th>
               <th className="py-1 pr-4">Nombre</th>
-              <th className="py-1 pr-4">Origen / Aplicación</th>
+              <th className="py-1 pr-4">Agrupamiento NOF</th>
             </tr>
           </thead>
           <tbody>
-            {rubros.map((rubro) => (
-              <RubroClasificacionRow
-                key={rubro.codRubro}
-                codRubro={rubro.codRubro}
-                nomRubro={rubro.nomRubro}
-                categoriaOyA={rubro.categoriaOyA}
+            {categorias.map((categoria) => (
+              <CategoriaOyABucketRow
+                key={categoria.codOyA}
+                codOyA={categoria.codOyA}
+                nomOyA={categoria.nomOyA}
+                bucketNOF={categoria.bucketNOF}
               />
             ))}
           </tbody>
@@ -43,9 +43,9 @@ export default async function RubroPage() {
         action={createCatalogItem}
         className="flex flex-col gap-3 rounded-lg bg-white p-6 shadow"
       >
-        <input type="hidden" name="tabla" value="rubro" />
+        <input type="hidden" name="tabla" value="categoria-oya" />
         <label className="flex flex-col gap-1">
-          <span className="text-lg">Nombre de rubro</span>
+          <span className="text-lg">Nombre de categoría OyA</span>
           <input name="nombre" required maxLength={60} className="rounded border px-3 py-2 text-lg" />
         </label>
         <button type="submit" className="w-fit rounded bg-black px-3 py-2 text-lg text-white">
