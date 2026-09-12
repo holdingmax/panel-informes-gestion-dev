@@ -4,6 +4,7 @@ import { revalidatePath } from "next/cache";
 import { prisma } from "@/lib/prisma";
 import { parseBsysRawFile, type BsysRawRow } from "@/lib/bsys-raw-parser";
 import { normalizeCuenta } from "@/lib/cuenta-normalize";
+import { verificarSeriesCompletaHasta } from "@/lib/series-e-indices-actions";
 
 type ImportBsysResult =
   | { success: true; informeId: string; cantidadMes: number; cantidadAcumulado: number }
@@ -27,6 +28,15 @@ export async function importBsysCombinado(formData: FormData): Promise<ImportBsy
   }
   if (!(archivoAcumulado instanceof File) || archivoAcumulado.size === 0) {
     return { error: "Seleccioná el archivo de BSyS Acumulado." };
+  }
+
+  const seriesError = await verificarSeriesCompletaHasta(
+    new Date(Date.UTC(periodoAnio, periodoMes - 1, 1))
+  );
+  if (seriesError) {
+    return {
+      error: `${seriesError} Completá Configuración → Series e Índices antes de cargar este período.`,
+    };
   }
 
   const [htmlMes, htmlAcumulado] = await Promise.all([

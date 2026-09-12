@@ -37,9 +37,10 @@ model Empresa {
   createdAt  DateTime @default(now())
   updatedAt  DateTime @updatedAt
 
-  informes      Informe[]
-  balances      BalanceSumasYSaldos[]
-  planDeCuentas PlanDeCuentas[]
+  informes             Informe[]
+  balances             BalanceSumasYSaldos[]
+  planDeCuentas        PlanDeCuentas[]
+  resultadosHistoricos ResultadosHistoricos[]
 }
 
 enum EstadoInforme {
@@ -153,6 +154,36 @@ model CategoriaOyA {
   nomOyA    String          @unique @db.VarChar(60)
   bucketNOF BucketNOF?
   planes    PlanDeCuentas[]
+}
+
+// Serie macroeconómica única para todas las empresas (no por empresa): un
+// índice de inflación y un tipo de cambio por período, siempre mensual y
+// correlativa (sin huecos) desde el primer período cargado hasta el presente.
+model SeriesEIndices {
+  id      String   @id @default(cuid())
+  periodo DateTime @unique @db.Date
+  indice  Decimal  @db.Decimal(18, 6)
+  dolar   Decimal  @db.Decimal(18, 4)
+}
+
+// Un registro por empresa y período con los 5 componentes "de resultado" en
+// pesos nominales. Se completa a mano para períodos anteriores a la puesta en
+// marcha del sistema, y automáticamente al aprobar un Informe (ver
+// informe-actions.ts) — nunca se pisa un período que ya tiene datos.
+model ResultadosHistoricos {
+  id                      String   @id @default(cuid())
+  empresa                 Empresa  @relation(fields: [empresaId], references: [codEmp])
+  empresaId               Int
+  periodoMes              Int
+  periodoAnio             Int
+  ventas                  Decimal  @db.Decimal(18, 2)
+  costosDirectos          Decimal  @db.Decimal(18, 2)
+  gastosOperativos        Decimal  @db.Decimal(18, 2)
+  expensas                Decimal  @db.Decimal(18, 2)
+  otrasGananciasYPerdidas Decimal  @db.Decimal(18, 2)
+  createdAt               DateTime @default(now())
+
+  @@unique([empresaId, periodoMes, periodoAnio])
 }
 
 model PlanDeCuentas {
