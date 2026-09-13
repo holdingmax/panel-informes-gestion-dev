@@ -1,5 +1,5 @@
-import Link from "next/link";
 import { listInformes } from "@/lib/informe-actions";
+import { HistoricoRowLinks } from "./HistoricoRowLinks";
 
 export const dynamic = "force-dynamic";
 
@@ -42,25 +42,24 @@ export default async function HistoricoPage({
           Todavía no hay informes. Se crean automáticamente al cargar BSyS Mes o Acumulado.
         </p>
       ) : (
-        <table className="mt-4 w-full max-w-md text-left text-sm">
+        <table className="mt-4 w-full max-w-xl text-left text-sm">
           <thead>
             <tr>
               <th className="py-1">Período</th>
               <th className="py-1">Estado</th>
+              <th className="py-1">Ver informe</th>
             </tr>
           </thead>
           <tbody>
             {informes.map((informe) => (
               <tr key={informe.id} className="border-t">
                 <td className="py-2">
-                  <Link
-                    href={`/empresa/${codEmp}/informe/${informe.id}`}
-                    className="rounded-md text-slate-700 underline hover:text-accent focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-accent focus-visible:ring-offset-2"
-                  >
-                    {MESES[informe.periodoMes - 1]} {informe.periodoAnio}
-                  </Link>
+                  {MESES[informe.periodoMes - 1]} {informe.periodoAnio}
                 </td>
                 <td className="py-2">{ESTADO_LABEL[informe.estado] ?? informe.estado}</td>
+                <td className="py-2">
+                  <HistoricoRowLinks codEmp={codEmp} informeId={informe.id} />
+                </td>
               </tr>
             ))}
           </tbody>

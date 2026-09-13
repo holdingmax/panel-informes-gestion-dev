@@ -42,6 +42,12 @@ export default async function EmpresaLayout({
             >
               Histórico de Informes
             </Link>
+            <Link
+              href={`/empresa/${empresa.codEmp}/resultados-historicos`}
+              className="rounded-md px-3 py-1.5 text-slate-700 underline hover:bg-slate-50 hover:text-accent focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-accent focus-visible:ring-offset-2"
+            >
+              Resultados Históricos
+            </Link>
           </nav>
         </header>
 

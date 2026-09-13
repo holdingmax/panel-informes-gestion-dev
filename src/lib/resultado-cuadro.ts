@@ -13,13 +13,7 @@ function vacio(): ResultadoNominal {
   return { ventas: 0, costosDirectos: 0, gastosOperativos: 0, expensas: 0, otrasGananciasYPerdidas: 0 };
 }
 
-function sumar(a: ResultadoNominal, b: ResultadoNominal): ResultadoNominal {
-  const r = vacio();
-  for (const c of CAMPOS) r[c] = a[c] + b[c];
-  return r;
-}
-
-function periodoSiguiente(mes: number, anio: number): { mes: number; anio: number } {
+function periodoSiguiente(mes: number, anio: number) {
   return mes === 12 ? { mes: 1, anio: anio + 1 } : { mes: mes + 1, anio };
 }
 
@@ -36,45 +30,20 @@ function periodosDelRango(
   return periodos;
 }
 
-async function sumaHistorico(
-  empresaId: number,
-  desde: { mes: number; anio: number },
-  hasta: { mes: number; anio: number }
-): Promise<{ total: ResultadoNominal; completo: boolean }> {
-  const periodos = periodosDelRango(desde, hasta);
-  const filas = await prisma.resultadosHistoricos.findMany({
-    where: { empresaId, OR: periodos.map((p) => ({ periodoMes: p.mes, periodoAnio: p.anio })) },
-  });
-
-  let total = vacio();
-  for (const f of filas) {
-    total = sumar(total, {
-      ventas: Number(f.ventas),
-      costosDirectos: Number(f.costosDirectos),
-      gastosOperativos: Number(f.gastosOperativos),
-      expensas: Number(f.expensas),
-      otrasGananciasYPerdidas: Number(f.otrasGananciasYPerdidas),
-    });
-  }
-  return { total, completo: filas.length === periodos.length };
+// El ejercicio económico va de julio a junio. "Acum XX/YY" siempre acumula
+// desde julio del ejercicio correspondiente hasta el período del informe —
+// no es una ventana móvil de 12 meses. Al empezar un ejercicio nuevo en
+// julio, el acumulado es simplemente el mes de julio (un solo mes).
+function inicioEjercicio(mes: number, anio: number) {
+  return mes >= 7 ? { mes: 7, anio } : { mes: 7, anio: anio - 1 };
 }
 
-async function unPeriodoHistorico(
-  empresaId: number,
-  mes: number,
-  anio: number
-): Promise<ResultadoNominal | null> {
-  const fila = await prisma.resultadosHistoricos.findUnique({
-    where: { empresaId_periodoMes_periodoAnio: { empresaId, periodoMes: mes, periodoAnio: anio } },
-  });
-  if (!fila) return null;
-  return {
-    ventas: Number(fila.ventas),
-    costosDirectos: Number(fila.costosDirectos),
-    gastosOperativos: Number(fila.gastosOperativos),
-    expensas: Number(fila.expensas),
-    otrasGananciasYPerdidas: Number(fila.otrasGananciasYPerdidas),
-  };
+function mesesTranscurridosEnEjercicio(mes: number) {
+  return mes >= 7 ? mes - 6 : mes + 6;
+}
+
+function claveMes(mes: number, anio: number) {
+  return `${anio}-${String(mes).padStart(2, "0")}`;
 }
 
 export type ResultadoColumna = ResultadoNominal & {
@@ -102,19 +71,27 @@ function derivar(v: ResultadoNominal): ResultadoColumna {
   };
 }
 
+export type ResultadoBloque = {
+  actual: ResultadoColumna;
+  mismoMesAnioAnterior: ResultadoColumna;
+  acumuladoActual: ResultadoColumna;
+  acumuladoAnterior: ResultadoColumna;
+  promedio: ResultadoColumna;
+  // Meses transcurridos del ejercicio hasta el período del informe: 1 en
+  // julio (primer mes), 12 en junio (cierre) — es el divisor de "promedio" y
+  // también se muestra arriba de esa columna en el cuadro.
+  mesesTranscurridos: number;
+};
+
 export type ResultadoCuadro = {
   informeId: string;
   empresaId: number;
   empresaNombre: string;
   periodoMes: number;
   periodoAnio: number;
-  nominal: {
-    actual: ResultadoColumna;
-    mismoMesAnioAnterior: ResultadoColumna;
-    acumuladoActual: ResultadoColumna;
-    acumuladoAnterior: ResultadoColumna;
-    promedio: ResultadoColumna;
-  };
+  nominal: ResultadoBloque;
+  ajustadoPorInflacion: ResultadoBloque | null;
+  usd: ResultadoBloque | null;
   advertencias: string[];
 };
 
@@ -131,48 +108,132 @@ export async function computeResultadoCuadro(informeId: string): Promise<Resulta
   advertencias.push(...advertenciasMes);
   const actual = actualRaw ?? vacio();
 
-  const mismoMesAnterior = await unPeriodoHistorico(empresaId, periodoMes, periodoAnio - 1);
-  if (!mismoMesAnterior) {
-    advertencias.push(
-      `No hay datos en Resultados Históricos para ${String(periodoMes).padStart(2, "0")}-${periodoAnio - 1}.`
-    );
+  // Se trae todo de una sola vez (son tablas chicas) en vez de ir mes a mes.
+  const historicos = await prisma.resultadosHistoricos.findMany({ where: { empresaId } });
+  const historicoMap = new Map<string, ResultadoNominal>();
+  for (const h of historicos) {
+    historicoMap.set(claveMes(h.periodoMes, h.periodoAnio), {
+      ventas: Number(h.ventas),
+      costosDirectos: Number(h.costosDirectos),
+      gastosOperativos: Number(h.gastosOperativos),
+      expensas: Number(h.expensas),
+      otrasGananciasYPerdidas: Number(h.otrasGananciasYPerdidas),
+    });
   }
 
-  // 12 meses terminando en el período actual: los 11 anteriores salen de
-  // Resultados Históricos, el propio período usa el dato recién calculado
-  // (más fresco que lo que pueda haber en la tabla histórica).
-  const desdeActual = periodoSiguiente(periodoMes, periodoAnio - 1);
-  const hastaActual = { mes: periodoMes, anio: periodoAnio };
-  const rango11MesesActual = periodosDelRango(desdeActual, hastaActual).slice(0, -1);
-  const { total: acum11MesesActual, completo: completoActual } = await sumaHistorico(
-    empresaId,
-    rango11MesesActual[0]!,
-    rango11MesesActual[rango11MesesActual.length - 1]!
-  );
-  if (!completoActual) {
-    advertencias.push(
-      "Faltan períodos en Resultados Históricos para completar los últimos 12 meses del período actual."
-    );
-  }
-  const acumuladoActualRaw = sumar(acum11MesesActual, actual);
-
-  // 12 meses terminando en el mismo mes del año anterior, todo desde
-  // Resultados Históricos (son períodos ya cerrados).
-  const hastaAnterior = { mes: periodoMes, anio: periodoAnio - 1 };
-  const desdeAnterior = periodoSiguiente(periodoMes, periodoAnio - 2);
-  const { total: acumuladoAnteriorRaw, completo: completoAnterior } = await sumaHistorico(
-    empresaId,
-    desdeAnterior,
-    hastaAnterior
-  );
-  if (!completoAnterior) {
-    advertencias.push(
-      "Faltan períodos en Resultados Históricos para completar los 12 meses del mismo período del año anterior."
-    );
+  const series = await prisma.seriesEIndices.findMany();
+  const seriesMap = new Map<string, { indice: number; dolar: number }>();
+  for (const s of series) {
+    seriesMap.set(claveMes(s.periodo.getUTCMonth() + 1, s.periodo.getUTCFullYear()), {
+      indice: Number(s.indice),
+      dolar: Number(s.dolar),
+    });
   }
 
-  const promedioRaw = vacio();
-  for (const c of CAMPOS) promedioRaw[c] = acumuladoActualRaw[c] / 12;
+  function valorDeMes(mes: number, anio: number): ResultadoNominal | null {
+    if (mes === periodoMes && anio === periodoAnio) return actual;
+    return historicoMap.get(claveMes(mes, anio)) ?? null;
+  }
+
+  function acumular(
+    desde: { mes: number; anio: number },
+    hasta: { mes: number; anio: number },
+    factorPorMes: (mes: number, anio: number) => number | null
+  ): { total: ResultadoNominal; completo: boolean } {
+    const total = vacio();
+    let completo = true;
+    for (const p of periodosDelRango(desde, hasta)) {
+      const valores = valorDeMes(p.mes, p.anio);
+      const factor = factorPorMes(p.mes, p.anio);
+      if (!valores || factor === null) {
+        completo = false;
+        continue;
+      }
+      for (const c of CAMPOS) total[c] += valores[c] * factor;
+    }
+    return { total, completo };
+  }
+
+  function construirBloque(
+    factorPorMes: (mes: number, anio: number) => number | null,
+    etiqueta: string
+  ): ResultadoBloque | null {
+    const finAnterior = { mes: periodoMes, anio: periodoAnio - 1 };
+
+    const factorActual = factorPorMes(periodoMes, periodoAnio);
+    if (factorActual === null) {
+      advertencias.push(
+        `Falta el índice/dólar de ${claveMes(periodoMes, periodoAnio)} en Series e Índices — no se pudo armar el cuadro ${etiqueta}.`
+      );
+      return null;
+    }
+    const actualAjustado = vacio();
+    for (const c of CAMPOS) actualAjustado[c] = actual[c] * factorActual;
+
+    const valorAnterior = valorDeMes(finAnterior.mes, finAnterior.anio);
+    const factorAnterior = factorPorMes(finAnterior.mes, finAnterior.anio);
+    const mismoMesAnioAnteriorAjustado = vacio();
+    if (!valorAnterior) {
+      advertencias.push(
+        `No hay datos en Resultados Históricos para ${claveMes(finAnterior.mes, finAnterior.anio)} (cuadro ${etiqueta}).`
+      );
+    } else if (factorAnterior === null) {
+      advertencias.push(
+        `Falta el índice/dólar de ${claveMes(finAnterior.mes, finAnterior.anio)} en Series e Índices (cuadro ${etiqueta}).`
+      );
+    } else {
+      for (const c of CAMPOS) mismoMesAnioAnteriorAjustado[c] = valorAnterior[c] * factorAnterior;
+    }
+
+    const { total: acumActual, completo: completoActual } = acumular(
+      inicioEjercicio(periodoMes, periodoAnio),
+      { mes: periodoMes, anio: periodoAnio },
+      factorPorMes
+    );
+    if (!completoActual) {
+      advertencias.push(
+        `Faltan períodos para completar el ejercicio actual en el cuadro ${etiqueta}.`
+      );
+    }
+
+    const { total: acumAnterior, completo: completoAnterior } = acumular(
+      inicioEjercicio(finAnterior.mes, finAnterior.anio),
+      finAnterior,
+      factorPorMes
+    );
+    if (!completoAnterior) {
+      advertencias.push(
+        `Faltan períodos para completar el ejercicio anterior en el cuadro ${etiqueta}.`
+      );
+    }
+
+    const nMeses = mesesTranscurridosEnEjercicio(periodoMes);
+    const promedio = vacio();
+    for (const c of CAMPOS) promedio[c] = acumActual[c] / nMeses;
+
+    return {
+      actual: derivar(actualAjustado),
+      mismoMesAnioAnterior: derivar(mismoMesAnioAnteriorAjustado),
+      acumuladoActual: derivar(acumActual),
+      acumuladoAnterior: derivar(acumAnterior),
+      promedio: derivar(promedio),
+      mesesTranscurridos: nMeses,
+    };
+  }
+
+  const nominal = construirBloque(() => 1, "Nominal en Pesos")!;
+
+  const ajustadoPorInflacion = construirBloque((mes, anio) => {
+    const indiceInforme = seriesMap.get(claveMes(periodoMes, periodoAnio))?.indice;
+    const indiceMes = seriesMap.get(claveMes(mes, anio))?.indice;
+    if (indiceInforme === undefined || indiceMes === undefined) return null;
+    return indiceInforme / indiceMes;
+  }, "Ajustado por Inflación");
+
+  const usd = construirBloque((mes, anio) => {
+    const dolarMes = seriesMap.get(claveMes(mes, anio))?.dolar;
+    return dolarMes ? 1 / dolarMes : null;
+  }, "USD");
 
   return {
     informeId: informe.id,
@@ -180,13 +241,9 @@ export async function computeResultadoCuadro(informeId: string): Promise<Resulta
     empresaNombre: informe.empresa.nombreEmp,
     periodoMes,
     periodoAnio,
-    nominal: {
-      actual: derivar(actual),
-      mismoMesAnioAnterior: derivar(mismoMesAnterior ?? vacio()),
-      acumuladoActual: derivar(acumuladoActualRaw),
-      acumuladoAnterior: derivar(acumuladoAnteriorRaw),
-      promedio: derivar(promedioRaw),
-    },
+    nominal,
+    ajustadoPorInflacion,
+    usd,
     advertencias,
   };
 }
