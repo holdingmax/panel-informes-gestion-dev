@@ -1,6 +1,7 @@
 import Link from "next/link";
 
 const LINKS = [
+  { href: "/configuracion/unidades-negocio", label: "Unidades de Negocio" },
   { href: "/configuracion/empresas", label: "Empresas" },
   { href: "/admin/users", label: "Usuarios" },
   { href: "/configuracion/partida-patrimonial", label: "Partida Patrimonial" },

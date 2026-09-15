@@ -28,10 +28,10 @@ export default async function ResultadosHistoricosPage({
   params: Promise<{ codEmp: string }>;
 }) {
   const { codEmp } = await params;
-  const empresaId = Number(codEmp);
+  const unidadNegocioId = Number(codEmp);
 
   const filas = await prisma.resultadosHistoricos.findMany({
-    where: { empresaId },
+    where: { unidadNegocioId },
     orderBy: [{ periodoAnio: "desc" }, { periodoMes: "desc" }],
   });
 

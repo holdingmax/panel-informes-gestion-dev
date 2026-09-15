@@ -57,8 +57,11 @@ export type ResultadoColumna = ResultadoNominal & {
 
 function derivar(v: ResultadoNominal): ResultadoColumna {
   const margenContribucion = v.ventas + v.costosDirectos;
-  const resultadoOperativo = margenContribucion + v.gastosOperativos;
-  const rentabilidadNeta = resultadoOperativo + v.expensas + v.otrasGananciasYPerdidas;
+  // Orden verificado contra la hoja de referencia (Panel LV12 BL8:BR58):
+  // Otras Ganancias y Perdidas entra en el Resultado Operativo, no después
+  // de él — solo Expensas queda para el paso siguiente, a Rentabilidad Neta.
+  const resultadoOperativo = margenContribucion + v.gastosOperativos + v.otrasGananciasYPerdidas;
+  const rentabilidadNeta = resultadoOperativo + v.expensas;
   const div = (n: number, d: number) => (d !== 0 ? n / d : 0);
   return {
     ...v,
@@ -85,8 +88,8 @@ export type ResultadoBloque = {
 
 export type ResultadoCuadro = {
   informeId: string;
-  empresaId: number;
-  empresaNombre: string;
+  unidadNegocioId: number;
+  unidadNegocioNombre: string;
   periodoMes: number;
   periodoAnio: number;
   nominal: ResultadoBloque;
@@ -98,18 +101,18 @@ export type ResultadoCuadro = {
 export async function computeResultadoCuadro(informeId: string): Promise<ResultadoCuadro> {
   const informe = await prisma.informe.findUniqueOrThrow({
     where: { id: informeId },
-    include: { empresa: true },
+    include: { unidadNegocio: true },
   });
-  const { empresaId, periodoMes, periodoAnio } = informe;
+  const { unidadNegocioId, periodoMes, periodoAnio } = informe;
   const advertencias: string[] = [];
 
   const { valores: actualRaw, advertencias: advertenciasMes } =
-    await computeResultadoNominalMes(empresaId);
+    await computeResultadoNominalMes(unidadNegocioId);
   advertencias.push(...advertenciasMes);
   const actual = actualRaw ?? vacio();
 
   // Se trae todo de una sola vez (son tablas chicas) en vez de ir mes a mes.
-  const historicos = await prisma.resultadosHistoricos.findMany({ where: { empresaId } });
+  const historicos = await prisma.resultadosHistoricos.findMany({ where: { unidadNegocioId } });
   const historicoMap = new Map<string, ResultadoNominal>();
   for (const h of historicos) {
     historicoMap.set(claveMes(h.periodoMes, h.periodoAnio), {
@@ -237,8 +240,8 @@ export async function computeResultadoCuadro(informeId: string): Promise<Resulta
 
   return {
     informeId: informe.id,
-    empresaId,
-    empresaNombre: informe.empresa.nombreEmp,
+    unidadNegocioId,
+    unidadNegocioNombre: informe.unidadNegocio.nombreUnidad,
     periodoMes,
     periodoAnio,
     nominal,

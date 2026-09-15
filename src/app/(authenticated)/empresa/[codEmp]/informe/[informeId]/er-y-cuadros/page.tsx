@@ -128,7 +128,7 @@ export default async function ErYCuadrosPage({
   return (
     <div className="flex flex-col gap-8">
       <h2 className="text-lg font-medium">
-        ER y Cuadros — {periodoLabel} — {report.empresaNombre}
+        ER y Cuadros — {periodoLabel} — {report.unidadNegocioNombre}
       </h2>
 
       {report.advertencias.length > 0 && (

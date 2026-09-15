@@ -21,26 +21,25 @@ function toDate(value: unknown): Date | null {
   return null;
 }
 
-// Nombres de fila (columna B) tal como vienen en el archivo, mapeados a los
-// campos del modelo. Las filas que no están acá (Margen de Contribución, %MC,
-// Resultado Operativo, Resultado Neto) son valores derivados que el motor de
-// informes calcula al vuelo — no se guardan.
+// Mismo diccionario que prisma/import-resultados-historicos.ts: las filas que
+// no están acá (Margen de Contribucion, %MC, Resultado Operativo, Resultado
+// Neto) son valores derivados que el motor de informes calcula al vuelo.
 const CAMPOS: Record<string, "ventas" | "costosDirectos" | "gastosOperativos" | "expensas" | "otrasGananciasYPerdidas"> = {
   Ventas: "ventas",
   "Costos directo de ventas": "costosDirectos",
-  "Gastos Operativos": "gastosOperativos",
+  "Costos Fijos": "gastosOperativos",
   Expensas: "expensas",
   "Otras Ganancias y perdidas": "otrasGananciasYPerdidas",
 };
 
 async function main() {
-  const [filePath, unidadNegocioIdRaw, hastaPeriodoRaw] = process.argv.slice(2);
-  if (!filePath || !unidadNegocioIdRaw) {
+  const [filePath, hastaPeriodoRaw] = process.argv.slice(2);
+  if (!filePath) {
     throw new Error(
-      'Uso: npx tsx prisma/import-resultados-historicos.ts "<ruta al xlsx>" <unidadNegocioId> [hastaAAAA-MM]'
+      'Uso: npx tsx prisma/import-resultados-historicos-lv12.ts "<ruta al xlsx>" [hastaAAAA-MM]'
     );
   }
-  const unidadNegocioId = Number(unidadNegocioIdRaw);
+  const unidadNegocioId = 4; // Grupo LV12
   const hastaPeriodo = hastaPeriodoRaw ? new Date(`${hastaPeriodoRaw}-01T00:00:00Z`) : null;
 
   const wb = new ExcelJS.Workbook();
@@ -48,9 +47,12 @@ async function main() {
   const sheet = wb.worksheets[0];
   if (!sheet) throw new Error("El archivo no tiene hojas.");
 
-  const filaPeriodos = sheet.getRow(2);
-  const periodos = new Map<number, Date>(); // columna -> período
-  for (let c = 3; c <= sheet.columnCount; c++) {
+  // A diferencia de prisma/import-resultados-historicos.ts (que tiene una
+  // columna/fila de margen extra), este archivo de LV12 arranca directo: fila
+  // 1 = períodos (desde columna 2), columna 1 = etiqueta de cada fila.
+  const filaPeriodos = sheet.getRow(1);
+  const periodos = new Map<number, Date>();
+  for (let c = 2; c <= sheet.columnCount; c++) {
     const periodo = toDate(cellValue(filaPeriodos.getCell(c)));
     if (periodo) periodos.set(c, periodo);
   }
@@ -58,7 +60,7 @@ async function main() {
   const valoresPorPeriodo = new Map<number, Partial<Record<string, number>>>();
   for (let r = 1; r <= sheet.rowCount; r++) {
     const row = sheet.getRow(r);
-    const etiqueta = String(cellValue(row.getCell(2)) ?? "").trim();
+    const etiqueta = String(cellValue(row.getCell(1)) ?? "").trim();
     const campo = CAMPOS[etiqueta];
     if (!campo) continue;
 
@@ -111,7 +113,7 @@ async function main() {
     count++;
   }
 
-  console.log(`Listo: ${count} períodos de Resultados Históricos importados (unidad de negocio ${unidadNegocioId}).`);
+  console.log(`Listo: ${count} períodos de Resultados Históricos importados (Grupo LV12).`);
   if (omitidos > 0) console.log(`${omitidos} período(s) omitido(s) por datos incompletos.`);
 }
 

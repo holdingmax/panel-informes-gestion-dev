@@ -6,14 +6,22 @@ import { openInWindow } from "@/lib/openWindow";
 
 type ImportState = {
   error?: string;
+  empresaNombre?: string;
   cuentasFaltantes?: string[];
   success?: true;
   informeId?: string;
-  cantidadMes?: number;
-  cantidadAcumulado?: number;
+  detalle?: { empresaNombre: string; cantidadMes: number; cantidadAcumulado: number }[];
 } | null;
 
-export function BsysUploadForm({ empresaId }: { empresaId: number }) {
+type EmpresaDeUnidad = { codEmp: number; nombreEmp: string };
+
+export function BsysUploadForm({
+  unidadNegocioId,
+  empresas,
+}: {
+  unidadNegocioId: number;
+  empresas: EmpresaDeUnidad[];
+}) {
   const [state, formAction, pending] = useActionState<ImportState, FormData>(
     async (_prevState, formData) => importBsysCombinado(formData),
     null
@@ -21,10 +29,22 @@ export function BsysUploadForm({ empresaId }: { empresaId: number }) {
 
   const now = new Date();
 
+  if (empresas.length === 0) {
+    return (
+      <p className="text-sm text-red-600">
+        Esta unidad de negocio no tiene empresas vinculadas. Vinculá al menos una en
+        Configuración → Unidades de Negocio.
+      </p>
+    );
+  }
+
   return (
     <div className="flex flex-col gap-4">
-      <form action={formAction} className="flex flex-col gap-3">
-        <input type="hidden" name="empresaId" value={empresaId} />
+      <form action={formAction} className="flex flex-col gap-4">
+        <input type="hidden" name="unidadNegocioId" value={unidadNegocioId} />
+        {empresas.map((empresa) => (
+          <input key={empresa.codEmp} type="hidden" name="empresaId" value={empresa.codEmp} />
+        ))}
 
         <div className="flex gap-3">
           <label className="flex flex-col gap-1">
@@ -54,20 +74,36 @@ export function BsysUploadForm({ empresaId }: { empresaId: number }) {
           </label>
         </div>
 
-        <label className="flex flex-col gap-1">
-          <span className="text-sm">Archivo BSyS del Mes</span>
-          <input name="archivoMes" type="file" required className="rounded border px-3 py-2" />
-        </label>
-
-        <label className="flex flex-col gap-1">
-          <span className="text-sm">Archivo BSyS Acumulado</span>
-          <input
-            name="archivoAcumulado"
-            type="file"
-            required
-            className="rounded border px-3 py-2"
-          />
-        </label>
+        <div className="flex flex-col gap-3">
+          {empresas.map((empresa) => (
+            <div
+              key={empresa.codEmp}
+              className="flex flex-col gap-2 rounded border border-slate-200 p-3 sm:flex-row sm:items-end sm:gap-4"
+            >
+              <span className="w-full shrink-0 text-sm font-medium sm:w-48">
+                {empresa.nombreEmp}
+              </span>
+              <label className="flex flex-1 flex-col gap-1">
+                <span className="text-sm">Archivo BSyS del Mes</span>
+                <input
+                  name={`archivoMes_${empresa.codEmp}`}
+                  type="file"
+                  required
+                  className="rounded border px-3 py-2"
+                />
+              </label>
+              <label className="flex flex-1 flex-col gap-1">
+                <span className="text-sm">Archivo BSyS Acumulado</span>
+                <input
+                  name={`archivoAcumulado_${empresa.codEmp}`}
+                  type="file"
+                  required
+                  className="rounded border px-3 py-2"
+                />
+              </label>
+            </div>
+          ))}
+        </div>
 
         <button
           type="submit"
@@ -79,29 +115,38 @@ export function BsysUploadForm({ empresaId }: { empresaId: number }) {
       </form>
 
       {state?.success && (
-        <div className="flex items-center gap-3 rounded border border-green-400 bg-green-50 p-3 text-sm text-green-800">
-          <p>
-            Se importaron {state.cantidadMes} cuentas (Mes) y {state.cantidadAcumulado} cuentas
-            (Acumulado).
-          </p>
-          <button
-            type="button"
-            onClick={() =>
-              openInWindow(`/empresa/${empresaId}/informe/${state.informeId}`, "informe")
-            }
-            className="w-fit rounded-md bg-accent px-4 py-2 text-sm text-white transition-colors hover:bg-accent-hover focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-accent focus-visible:ring-offset-2"
-          >
-            ESP y OyAF
-          </button>
-          <button
-            type="button"
-            onClick={() =>
-              openInWindow(`/empresa/${empresaId}/informe/${state.informeId}/er-y-cuadros`, "er-y-cuadros")
-            }
-            className="w-fit rounded-md bg-accent px-4 py-2 text-sm text-white transition-colors hover:bg-accent-hover focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-accent focus-visible:ring-offset-2"
-          >
-            ER y Cuadros
-          </button>
+        <div className="flex flex-col gap-3 rounded border border-green-400 bg-green-50 p-3 text-sm text-green-800">
+          <ul className="list-disc pl-5">
+            {state.detalle?.map((d) => (
+              <li key={d.empresaNombre}>
+                {d.empresaNombre}: {d.cantidadMes} cuentas (Mes), {d.cantidadAcumulado} cuentas
+                (Acumulado)
+              </li>
+            ))}
+          </ul>
+          <div className="flex items-center gap-3">
+            <button
+              type="button"
+              onClick={() =>
+                openInWindow(`/empresa/${unidadNegocioId}/informe/${state.informeId}`, "informe")
+              }
+              className="w-fit rounded-md bg-accent px-4 py-2 text-sm text-white transition-colors hover:bg-accent-hover focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-accent focus-visible:ring-offset-2"
+            >
+              ESP y OyAF
+            </button>
+            <button
+              type="button"
+              onClick={() =>
+                openInWindow(
+                  `/empresa/${unidadNegocioId}/informe/${state.informeId}/er-y-cuadros`,
+                  "er-y-cuadros"
+                )
+              }
+              className="w-fit rounded-md bg-accent px-4 py-2 text-sm text-white transition-colors hover:bg-accent-hover focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-accent focus-visible:ring-offset-2"
+            >
+              ER y Cuadros
+            </button>
+          </div>
         </div>
       )}
 

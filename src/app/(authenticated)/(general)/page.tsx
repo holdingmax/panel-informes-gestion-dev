@@ -1,10 +1,10 @@
 import { auth } from "@/auth";
-import { listEmpresas } from "@/lib/empresa-actions";
-import { EmpresaGrid } from "../../EmpresaGrid";
+import { listUnidadesNegocio } from "@/lib/unidad-negocio-actions";
+import { UnidadNegocioGrid } from "../../UnidadNegocioGrid";
 
 export default async function Home() {
   const session = await auth();
-  const empresas = await listEmpresas();
+  const unidades = await listUnidadesNegocio();
 
   return (
     <main className="flex w-full flex-col gap-6 p-8">
@@ -17,7 +17,7 @@ export default async function Home() {
         {session?.user.role})
       </p>
 
-      <EmpresaGrid empresas={empresas} />
+      <UnidadNegocioGrid unidades={unidades} />
     </main>
   );
 }

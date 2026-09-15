@@ -29,18 +29,37 @@ model User {
   updatedAt          DateTime @updatedAt
 }
 
-model Empresa {
-  codEmp     Int      @id @default(autoincrement())
-  nombreEmp  String   @db.VarChar(35)
-  imagenEmp  Bytes?
-  imagenMime String?
-  createdAt  DateTime @default(now())
-  updatedAt  DateTime @updatedAt
+// El "grupo" que se ve en la pantalla principal y con el que se confecciona
+// un informe: puede combinar el Plan de Cuentas de una o más Empresas (ver
+// modelo Empresa) — cada una con su propio BSyS, consolidados en un solo
+// informe para esta unidad.
+model UnidadNegocio {
+  codUnidad    Int      @id @default(autoincrement())
+  nombreUnidad String   @db.VarChar(35)
+  imagenUnidad Bytes?
+  imagenMime   String?
+  createdAt    DateTime @default(now())
+  updatedAt    DateTime @updatedAt
 
+  empresas             Empresa[]
   informes             Informe[]
-  balances             BalanceSumasYSaldos[]
-  planDeCuentas        PlanDeCuentas[]
   resultadosHistoricos ResultadosHistoricos[]
+}
+
+// La entidad contable real: tiene su propio Plan de Cuentas y su propio BSyS
+// (Mes y Acumulado). Se vincula a una Unidad de Negocio desde la pantalla de
+// configuración de esta última.
+model Empresa {
+  codEmp    Int      @id @default(autoincrement())
+  nombreEmp String   @db.VarChar(60)
+  createdAt DateTime @default(now())
+  updatedAt DateTime @updatedAt
+
+  unidadNegocioId Int?
+  unidadNegocio   UnidadNegocio? @relation(fields: [unidadNegocioId], references: [codUnidad])
+
+  balances      BalanceSumasYSaldos[]
+  planDeCuentas PlanDeCuentas[]
 }
 
 enum EstadoInforme {
@@ -51,16 +70,16 @@ enum EstadoInforme {
 }
 
 model Informe {
-  id          String        @id @default(cuid())
-  empresa     Empresa       @relation(fields: [empresaId], references: [codEmp])
-  empresaId   Int
-  periodoMes  Int
-  periodoAnio Int
-  estado      EstadoInforme @default(PROCESO)
-  createdAt   DateTime      @default(now())
-  updatedAt   DateTime      @updatedAt
+  id              String        @id @default(cuid())
+  unidadNegocio   UnidadNegocio @relation(fields: [unidadNegocioId], references: [codUnidad])
+  unidadNegocioId Int
+  periodoMes      Int
+  periodoAnio     Int
+  estado          EstadoInforme @default(PROCESO)
+  createdAt       DateTime      @default(now())
+  updatedAt       DateTime      @updatedAt
 
-  @@unique([empresaId, periodoMes, periodoAnio])
+  @@unique([unidadNegocioId, periodoMes, periodoAnio])
 }
 
 enum TipoBSyS {
@@ -171,19 +190,19 @@ model SeriesEIndices {
 // marcha del sistema, y automáticamente al aprobar un Informe (ver
 // informe-actions.ts) — nunca se pisa un período que ya tiene datos.
 model ResultadosHistoricos {
-  id                      String   @id @default(cuid())
-  empresa                 Empresa  @relation(fields: [empresaId], references: [codEmp])
-  empresaId               Int
+  id                      String        @id @default(cuid())
+  unidadNegocio           UnidadNegocio @relation(fields: [unidadNegocioId], references: [codUnidad])
+  unidadNegocioId         Int
   periodoMes              Int
   periodoAnio             Int
-  ventas                  Decimal  @db.Decimal(18, 2)
-  costosDirectos          Decimal  @db.Decimal(18, 2)
-  gastosOperativos        Decimal  @db.Decimal(18, 2)
-  expensas                Decimal  @db.Decimal(18, 2)
-  otrasGananciasYPerdidas Decimal  @db.Decimal(18, 2)
-  createdAt               DateTime @default(now())
+  ventas                  Decimal       @db.Decimal(18, 2)
+  costosDirectos          Decimal       @db.Decimal(18, 2)
+  gastosOperativos        Decimal       @db.Decimal(18, 2)
+  expensas                Decimal       @db.Decimal(18, 2)
+  otrasGananciasYPerdidas Decimal       @db.Decimal(18, 2)
+  createdAt               DateTime      @default(now())
 
-  @@unique([empresaId, periodoMes, periodoAnio])
+  @@unique([unidadNegocioId, periodoMes, periodoAnio])
 }
 
 model PlanDeCuentas {

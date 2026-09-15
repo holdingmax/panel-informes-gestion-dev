@@ -104,7 +104,7 @@ function NofRows({ rows }: { rows: RubroLine[] }) {
 }
 
 export function InformePDF({ report }: { report: InformeReport }) {
-  const titulo = `${report.empresaNombre.toUpperCase()} – ${MESES[report.periodoMes - 1].toUpperCase()} ${report.periodoAnio}`;
+  const titulo = `${report.unidadNegocioNombre.toUpperCase()} – ${MESES[report.periodoMes - 1].toUpperCase()} ${report.periodoAnio}`;
   const {
     balance,
     origenAplicacion,

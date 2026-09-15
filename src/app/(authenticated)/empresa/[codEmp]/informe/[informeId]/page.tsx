@@ -104,7 +104,7 @@ export default async function InformeDetallePage({
     <div className="flex flex-col gap-10">
       <div className="flex items-center justify-between">
         <h2 className="text-lg font-medium">
-          Informe {MESES[report.periodoMes - 1]} {report.periodoAnio} — {report.empresaNombre}
+          Informe {MESES[report.periodoMes - 1]} {report.periodoAnio} — {report.unidadNegocioNombre}
         </h2>
         <InformeActions informeId={report.informeId} estado={report.estado} />
       </div>

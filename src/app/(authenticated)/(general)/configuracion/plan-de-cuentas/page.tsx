@@ -28,6 +28,7 @@ export default async function PlanDeCuentasPage() {
         <table className="w-full whitespace-nowrap text-left text-sm">
           <thead>
             <tr>
+              <th className="py-1 pr-4">Unidad de Negocio</th>
               <th className="py-1 pr-4">Empresa</th>
               <th className="py-1 pr-4">Cuenta</th>
               <th className="py-1 pr-4">Partida</th>
@@ -41,6 +42,9 @@ export default async function PlanDeCuentasPage() {
           <tbody>
             {planes.map((plan) => (
               <tr key={plan.id} className="border-t">
+                <td className="py-1.5 pr-4">
+                  {plan.empresa.unidadNegocio?.nombreUnidad ?? "— sin vincular —"}
+                </td>
                 <td className="py-1.5 pr-4">{plan.empresa.nombreEmp}</td>
                 <td className="py-1.5 pr-4">{plan.cuenta}</td>
                 <td className="py-1.5 pr-4">{plan.partidaPatrimonial.nomPartida}</td>
@@ -65,6 +69,7 @@ export default async function PlanDeCuentasPage() {
               {empresas.map((empresa) => (
                 <option key={empresa.codEmp} value={empresa.codEmp}>
                   {empresa.nombreEmp}
+                  {empresa.unidadNegocio ? ` (${empresa.unidadNegocio.nombreUnidad})` : ""}
                 </option>
               ))}
             </select>

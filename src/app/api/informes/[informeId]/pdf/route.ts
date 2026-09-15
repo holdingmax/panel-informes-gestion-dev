@@ -22,7 +22,7 @@ export async function GET(
   return new Response(new Uint8Array(buffer), {
     headers: {
       "Content-Type": "application/pdf",
-      "Content-Disposition": `inline; filename="informe-${report.empresaNombre}-${report.periodoMes}-${report.periodoAnio}.pdf"`,
+      "Content-Disposition": `inline; filename="informe-${report.unidadNegocioNombre}-${report.periodoMes}-${report.periodoAnio}.pdf"`,
     },
   });
 }

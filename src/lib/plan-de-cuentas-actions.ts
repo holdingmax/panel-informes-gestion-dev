@@ -6,7 +6,7 @@ import { prisma } from "@/lib/prisma";
 export async function listPlanDeCuentas() {
   return prisma.planDeCuentas.findMany({
     include: {
-      empresa: true,
+      empresa: { include: { unidadNegocio: true } },
       partidaPatrimonial: true,
       rubro: true,
       subrubro: true,

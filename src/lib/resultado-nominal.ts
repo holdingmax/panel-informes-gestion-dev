@@ -21,10 +21,23 @@ const RUBRO_A_CAMPO: Record<string, keyof ResultadoNominal> = {
   "Otras Ganancias y Perdidas": "otrasGananciasYPerdidas",
 };
 
+function vacio(): ResultadoNominal {
+  return {
+    ventas: 0,
+    costosDirectos: 0,
+    gastosOperativos: 0,
+    expensas: 0,
+    otrasGananciasYPerdidas: 0,
+  };
+}
+
 // El BSyS "Mes" trae, para cada cuenta, el saldo acumulado a fin del mes
 // anterior (saldo inicio) y a fin de este mes (saldo cierre) — el movimiento
 // propio del mes es la diferencia entre ambos, no el saldo de cierre solo.
-export async function computeResultadoNominalMes(empresaId: number): Promise<{
+async function computeResultadoNominalMesDeEmpresa(
+  empresaId: number,
+  empresaNombre: string
+): Promise<{
   valores: ResultadoNominal | null;
   fechaCarga: Date | null;
   advertencias: string[];
@@ -36,7 +49,11 @@ export async function computeResultadoNominalMes(empresaId: number): Promise<{
     select: { fechaCarga: true },
   });
   if (!ultimoMes) {
-    return { valores: null, fechaCarga: null, advertencias: ["No hay ningún BSyS Mes cargado para esta empresa."] };
+    return {
+      valores: null,
+      fechaCarga: null,
+      advertencias: [`No hay ningún BSyS Mes cargado para "${empresaNombre}".`],
+    };
   }
 
   const balances = await prisma.balanceSumasYSaldos.findMany({
@@ -49,18 +66,14 @@ export async function computeResultadoNominalMes(empresaId: number): Promise<{
   });
   const porCuenta = new Map(planDeCuentas.map((p) => [normalizeCuenta(p.cuenta), p]));
 
-  const valores: ResultadoNominal = {
-    ventas: 0,
-    costosDirectos: 0,
-    gastosOperativos: 0,
-    expensas: 0,
-    otrasGananciasYPerdidas: 0,
-  };
+  const valores = vacio();
 
   for (const b of balances) {
     const plan = porCuenta.get(normalizeCuenta(b.cuenta));
     if (!plan) {
-      advertencias.push(`La cuenta "${b.cuenta}" no está clasificada en el Plan de Cuentas actual.`);
+      advertencias.push(
+        `La cuenta "${b.cuenta}" (${empresaNombre}) no está clasificada en el Plan de Cuentas actual.`
+      );
       continue;
     }
     if (plan.partidaPatrimonial.tipo !== "RESULTADO") continue;
@@ -68,7 +81,7 @@ export async function computeResultadoNominalMes(empresaId: number): Promise<{
     const campo = RUBRO_A_CAMPO[plan.rubro.nomRubro];
     if (!campo) {
       advertencias.push(
-        `El rubro "${plan.rubro.nomRubro}" (cuenta "${b.cuenta}") no corresponde a ninguno de los 5 campos de Resultado (Ventas, Costos directos/variables, Gastos Fijos Operativos, Expensas, Otras Ganancias y Perdidas).`
+        `El rubro "${plan.rubro.nomRubro}" (cuenta "${b.cuenta}", ${empresaNombre}) no corresponde a ninguno de los 5 campos de Resultado (Ventas, Costos directos/variables, Gastos Fijos Operativos, Expensas, Otras Ganancias y Perdidas).`
       );
       continue;
     }
@@ -83,4 +96,47 @@ export async function computeResultadoNominalMes(empresaId: number): Promise<{
   }
 
   return { valores, fechaCarga: ultimoMes.fechaCarga, advertencias };
+}
+
+// Una Unidad de Negocio puede combinar el resultado de varias Empresas: se
+// consolida sumando el resultado nominal del mes más reciente de cada una.
+// Si alguna empresa vinculada todavía no tiene ningún BSyS Mes cargado, su
+// aporte queda en cero y se advierte, pero no bloquea el cálculo de las
+// demás.
+export async function computeResultadoNominalMes(unidadNegocioId: number): Promise<{
+  valores: ResultadoNominal | null;
+  fechaCarga: Date | null;
+  advertencias: string[];
+}> {
+  const empresas = await prisma.empresa.findMany({ where: { unidadNegocioId } });
+  if (empresas.length === 0) {
+    return {
+      valores: null,
+      fechaCarga: null,
+      advertencias: ["Esta unidad de negocio no tiene empresas vinculadas."],
+    };
+  }
+
+  const porEmpresa = await Promise.all(
+    empresas.map((e) => computeResultadoNominalMesDeEmpresa(e.codEmp, e.nombreEmp))
+  );
+
+  const advertencias = porEmpresa.flatMap((r) => r.advertencias);
+  const conDatos = porEmpresa.filter((r) => r.valores !== null);
+  if (conDatos.length === 0) {
+    return { valores: null, fechaCarga: null, advertencias };
+  }
+
+  const valores = vacio();
+  for (const r of conDatos) {
+    for (const campo of Object.keys(valores) as (keyof ResultadoNominal)[]) {
+      valores[campo] += r.valores![campo];
+    }
+  }
+
+  const fechaCarga = conDatos
+    .map((r) => r.fechaCarga!)
+    .reduce((max, f) => (f > max ? f : max));
+
+  return { valores, fechaCarga, advertencias };
 }

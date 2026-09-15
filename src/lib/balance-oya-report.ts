@@ -40,8 +40,8 @@ export type RubroLine = {
 
 export type InformeReport = {
   informeId: string;
-  empresaId: number;
-  empresaNombre: string;
+  unidadNegocioId: number;
+  unidadNegocioNombre: string;
   periodoMes: number;
   periodoAnio: number;
   periodoLabel: string;
@@ -147,36 +147,19 @@ function nofLine(r: NofAgg): RubroLine {
 export async function computeInformeReport(informeId: string): Promise<InformeReport> {
   const informe = await prisma.informe.findUniqueOrThrow({
     where: { id: informeId },
-    include: { empresa: true },
+    include: { unidadNegocio: true },
   });
 
   const advertencias: string[] = [];
 
-  const ultimoAcumulado = await prisma.balanceSumasYSaldos.findFirst({
-    where: { empresaId: informe.empresaId, tipo: "ACUMULADO" },
-    orderBy: { fechaCarga: "desc" },
-    select: { fechaCarga: true },
-  });
-
-  if (!ultimoAcumulado) {
-    advertencias.push("Todavía no se cargó ningún BSyS Acumulado para esta empresa.");
+  // Una Unidad de Negocio puede combinar el Plan de Cuentas y el BSyS de
+  // varias Empresas: se consolida sumando, rubro por rubro, la carga
+  // ACUMULADO más reciente de cada una — cada Empresa avanza a su propio
+  // ritmo, así que no se exige que compartan la misma fechaCarga exacta.
+  const empresas = await prisma.empresa.findMany({ where: { unidadNegocioId: informe.unidadNegocioId } });
+  if (empresas.length === 0) {
+    advertencias.push("Esta unidad de negocio no tiene empresas vinculadas.");
   }
-
-  const balances = ultimoAcumulado
-    ? await prisma.balanceSumasYSaldos.findMany({
-        where: {
-          empresaId: informe.empresaId,
-          tipo: "ACUMULADO",
-          fechaCarga: ultimoAcumulado.fechaCarga,
-        },
-      })
-    : [];
-
-  const planDeCuentas = await prisma.planDeCuentas.findMany({
-    where: { empresaId: informe.empresaId },
-    include: { rubro: true, partidaPatrimonial: true, categoriaOyA: true },
-  });
-  const porCuenta = new Map(planDeCuentas.map((p) => [normalizeCuenta(p.cuenta), p]));
 
   const rubroMap = new Map<number, RubroAgg>();
   // Clasificado por cuenta (no por Rubro): dos cuentas de un mismo Rubro
@@ -184,50 +167,82 @@ export async function computeInformeReport(informeId: string): Promise<InformeRe
   // combinación Rubro + Categoría OyA.
   const nofMap = new Map<string, NofAgg>();
 
-  for (const b of balances) {
-    const plan = porCuenta.get(normalizeCuenta(b.cuenta));
-    if (!plan) {
-      advertencias.push(
-        `La cuenta "${b.cuenta}" no está clasificada en el Plan de Cuentas actual y se excluyó del informe.`
-      );
+  let fechaCargaAcumulado: Date | null = null;
+
+  for (const empresa of empresas) {
+    const ultimoAcumulado = await prisma.balanceSumasYSaldos.findFirst({
+      where: { empresaId: empresa.codEmp, tipo: "ACUMULADO" },
+      orderBy: { fechaCarga: "desc" },
+      select: { fechaCarga: true },
+    });
+
+    if (!ultimoAcumulado) {
+      advertencias.push(`Todavía no se cargó ningún BSyS Acumulado para "${empresa.nombreEmp}".`);
       continue;
     }
-
-    const debeHaber = Number(b.saldoIniDebe) - Number(b.saldoIniHaber);
-    const debeHaberFinal = Number(b.saldoCierreDebe) - Number(b.saldoCierreHaber);
-
-    let agg = rubroMap.get(plan.rubroId);
-    if (!agg) {
-      agg = {
-        codRubro: plan.rubro.codRubro,
-        nomRubro: plan.rubro.nomRubro,
-        categoriaOyA: plan.rubro.categoriaOyA,
-        tipoPartida: plan.partidaPatrimonial.tipo,
-        saldoInicio: 0,
-        saldoFinal: 0,
-      };
-      rubroMap.set(plan.rubroId, agg);
+    if (!fechaCargaAcumulado || ultimoAcumulado.fechaCarga > fechaCargaAcumulado) {
+      fechaCargaAcumulado = ultimoAcumulado.fechaCarga;
     }
-    agg.saldoInicio += debeHaber;
-    agg.saldoFinal += debeHaberFinal;
 
-    const bucketNOF = plan.categoriaOyA?.bucketNOF;
-    if (bucketNOF) {
-      const key = `${plan.rubroId}:${plan.categoriaOyAId}`;
-      let nofAgg = nofMap.get(key);
-      if (!nofAgg) {
-        nofAgg = {
+    const balances = await prisma.balanceSumasYSaldos.findMany({
+      where: {
+        empresaId: empresa.codEmp,
+        tipo: "ACUMULADO",
+        fechaCarga: ultimoAcumulado.fechaCarga,
+      },
+    });
+
+    const planDeCuentas = await prisma.planDeCuentas.findMany({
+      where: { empresaId: empresa.codEmp },
+      include: { rubro: true, partidaPatrimonial: true, categoriaOyA: true },
+    });
+    const porCuenta = new Map(planDeCuentas.map((p) => [normalizeCuenta(p.cuenta), p]));
+
+    for (const b of balances) {
+      const plan = porCuenta.get(normalizeCuenta(b.cuenta));
+      if (!plan) {
+        advertencias.push(
+          `La cuenta "${b.cuenta}" (${empresa.nombreEmp}) no está clasificada en el Plan de Cuentas actual y se excluyó del informe.`
+        );
+        continue;
+      }
+
+      const debeHaber = Number(b.saldoIniDebe) - Number(b.saldoIniHaber);
+      const debeHaberFinal = Number(b.saldoCierreDebe) - Number(b.saldoCierreHaber);
+
+      let agg = rubroMap.get(plan.rubroId);
+      if (!agg) {
+        agg = {
           codRubro: plan.rubro.codRubro,
           nomRubro: plan.rubro.nomRubro,
-          categoriaOyARubro: plan.rubro.categoriaOyA,
-          bucketNOF,
+          categoriaOyA: plan.rubro.categoriaOyA,
+          tipoPartida: plan.partidaPatrimonial.tipo,
           saldoInicio: 0,
           saldoFinal: 0,
         };
-        nofMap.set(key, nofAgg);
+        rubroMap.set(plan.rubroId, agg);
       }
-      nofAgg.saldoInicio += debeHaber;
-      nofAgg.saldoFinal += debeHaberFinal;
+      agg.saldoInicio += debeHaber;
+      agg.saldoFinal += debeHaberFinal;
+
+      const bucketNOF = plan.categoriaOyA?.bucketNOF;
+      if (bucketNOF) {
+        const key = `${plan.rubroId}:${plan.categoriaOyAId}`;
+        let nofAgg = nofMap.get(key);
+        if (!nofAgg) {
+          nofAgg = {
+            codRubro: plan.rubro.codRubro,
+            nomRubro: plan.rubro.nomRubro,
+            categoriaOyARubro: plan.rubro.categoriaOyA,
+            bucketNOF,
+            saldoInicio: 0,
+            saldoFinal: 0,
+          };
+          nofMap.set(key, nofAgg);
+        }
+        nofAgg.saldoInicio += debeHaber;
+        nofAgg.saldoFinal += debeHaberFinal;
+      }
     }
   }
 
@@ -345,14 +360,14 @@ export async function computeInformeReport(informeId: string): Promise<InformeRe
 
   return {
     informeId: informe.id,
-    empresaId: informe.empresaId,
-    empresaNombre: informe.empresa.nombreEmp,
+    unidadNegocioId: informe.unidadNegocioId,
+    unidadNegocioNombre: informe.unidadNegocio.nombreUnidad,
     periodoMes: informe.periodoMes,
     periodoAnio: informe.periodoAnio,
     periodoLabel: formatPeriodoAbrev(informe.periodoMes, informe.periodoAnio),
     periodoAnteriorLabel: formatPeriodoAbrev(informe.periodoMes, informe.periodoAnio - 1),
     estado: informe.estado,
-    fechaCargaAcumulado: ultimoAcumulado?.fechaCarga ?? null,
+    fechaCargaAcumulado,
     balance: {
       activo,
       pasivo,
