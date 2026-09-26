@@ -1,36 +1,33 @@
-import { notFound } from "next/navigation";
-import { CATALOGS, CATALOG_ROUTES } from "@/lib/catalogs";
-import { listCatalog, createCatalogItem } from "@/lib/catalog-actions";
+import { listMonedas, createMoneda } from "@/lib/moneda-actions";
 import { CollapsibleAdd } from "@/components/CollapsibleAdd";
-import { CatalogRow } from "./CatalogRow";
+import { MonedaRow } from "./MonedaRow";
 
 export const dynamic = "force-dynamic";
 
-export default async function CatalogoPage({
-  params,
-}: {
-  params: Promise<{ tabla: string }>;
-}) {
-  const { tabla } = await params;
-  const route = CATALOG_ROUTES[tabla];
-  if (!route) notFound();
-
-  const { codeField, nameField } = CATALOGS[route.key];
-  const items: Record<string, unknown>[] = await listCatalog(route.key);
+export default async function MonedasPage() {
+  const monedas = await listMonedas();
 
   return (
     <main className="flex w-full max-w-xl flex-col gap-8 p-8">
-      <h1 className="text-2xl font-semibold">{route.title}</h1>
+      <h1 className="text-2xl font-semibold">Monedas</h1>
 
       <CollapsibleAdd>
-        <form action={createCatalogItem} className="flex flex-col gap-3">
-          <input type="hidden" name="tabla" value={tabla} />
+        <form action={createMoneda} className="flex flex-col gap-3">
           <label className="flex flex-col gap-1">
-            <span className="text-lg">{route.fieldLabel}</span>
+            <span className="text-lg">Nombre</span>
             <input
-              name="nombre"
+              name="nomMoneda"
               required
               maxLength={60}
+              className="rounded border px-3 py-2 text-lg"
+            />
+          </label>
+          <label className="flex flex-col gap-1">
+            <span className="text-lg">Símbolo</span>
+            <input
+              name="simbolo"
+              required
+              maxLength={5}
               className="rounded border px-3 py-2 text-lg"
             />
           </label>
@@ -49,16 +46,17 @@ export default async function CatalogoPage({
             <tr>
               <th className="py-1">Código</th>
               <th className="py-1">Nombre</th>
+              <th className="py-1">Símbolo</th>
               <th className="py-1">Acciones</th>
             </tr>
           </thead>
           <tbody>
-            {items.map((item) => (
-              <CatalogRow
-                key={String(item[codeField])}
-                catalogKey={route.key}
-                codigo={Number(item[codeField])}
-                nombre={String(item[nameField])}
+            {monedas.map((moneda) => (
+              <MonedaRow
+                key={moneda.codMoneda}
+                codMoneda={moneda.codMoneda}
+                nomMoneda={moneda.nomMoneda}
+                simbolo={moneda.simbolo}
               />
             ))}
           </tbody>

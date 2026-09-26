@@ -5,7 +5,13 @@ import { createSeriesEIndices } from "@/lib/series-e-indices-actions";
 
 type FormState = { error?: string; success?: true } | null;
 
-export function SeriesEIndicesForm({ proximoPeriodo }: { proximoPeriodo: string }) {
+export function SeriesEIndicesForm({
+  tablaId,
+  proximoPeriodo,
+}: {
+  tablaId: number;
+  proximoPeriodo: string;
+}) {
   const [state, formAction, pending] = useActionState<FormState, FormData>(
     async (_prevState, formData) => createSeriesEIndices(formData),
     null
@@ -13,6 +19,7 @@ export function SeriesEIndicesForm({ proximoPeriodo }: { proximoPeriodo: string 
 
   return (
     <form action={formAction} className="flex flex-col gap-3">
+      <input type="hidden" name="tablaId" value={tablaId} />
       <label className="flex flex-col gap-1">
         <span className="text-lg">Período (MM-AAAA)</span>
         <input

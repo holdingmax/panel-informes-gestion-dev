@@ -44,6 +44,9 @@ model UnidadNegocio {
   empresas             Empresa[]
   informes             Informe[]
   resultadosHistoricos ResultadosHistoricos[]
+
+  seriesTablaId Int?
+  seriesTabla   SeriesEIndicesTabla? @relation(fields: [seriesTablaId], references: [codTabla])
 }
 
 // La entidad contable real: tiene su propio Plan de Cuentas y su propio BSyS
@@ -58,8 +61,32 @@ model Empresa {
   unidadNegocioId Int?
   unidadNegocio   UnidadNegocio? @relation(fields: [unidadNegocioId], references: [codUnidad])
 
+  monedaPrimariaId Int?
+  monedaPrimaria   Moneda? @relation("EmpresaMonedaPrimaria", fields: [monedaPrimariaId], references: [codMoneda])
+
+  monedaSecundariaId Int?
+  monedaSecundaria   Moneda? @relation("EmpresaMonedaSecundaria", fields: [monedaSecundariaId], references: [codMoneda])
+
+  actualiza Boolean @default(false)
+
+  monedaActualizaId Int?
+  monedaActualiza   Moneda? @relation("EmpresaMonedaActualiza", fields: [monedaActualizaId], references: [codMoneda])
+
   balances      BalanceSumasYSaldos[]
   planDeCuentas PlanDeCuentas[]
+}
+
+// Catálogo de monedas usado por Empresa para elegir su moneda primaria,
+// secundaria y — si "actualiza" está activo — la moneda en la que se
+// actualizan sus saldos.
+model Moneda {
+  codMoneda Int    @id @default(autoincrement())
+  nomMoneda String @unique @db.VarChar(60)
+  simbolo   String @db.VarChar(5)
+
+  empresasPrimaria   Empresa[] @relation("EmpresaMonedaPrimaria")
+  empresasSecundaria Empresa[] @relation("EmpresaMonedaSecundaria")
+  empresasActualiza  Empresa[] @relation("EmpresaMonedaActualiza")
 }
 
 enum EstadoInforme {
@@ -175,14 +202,27 @@ model CategoriaOyA {
   planes    PlanDeCuentas[]
 }
 
-// Serie macroeconómica única para todas las empresas (no por empresa): un
-// índice de inflación y un tipo de cambio por período, siempre mensual y
-// correlativa (sin huecos) desde el primer período cargado hasta el presente.
+// Una Unidad de Negocio puede necesitar su propia serie de índice/dólar (ej.
+// otro rubro de actividad, otro criterio de actualización) — cada
+// SeriesEIndicesTabla es una serie independiente, mensual y correlativa
+// (sin huecos) desde su primer período hasta el presente, y una misma tabla
+// puede servir a más de una Unidad de Negocio (ver UnidadNegocio.seriesTabla).
+model SeriesEIndicesTabla {
+  codTabla  Int              @id @default(autoincrement())
+  tipoTabla String           @db.VarChar(60)
+  filas     SeriesEIndices[]
+  unidades  UnidadNegocio[]
+}
+
 model SeriesEIndices {
-  id      String   @id @default(cuid())
-  periodo DateTime @unique @db.Date
-  indice  Decimal  @db.Decimal(18, 6)
-  dolar   Decimal  @db.Decimal(18, 4)
+  id      String              @id @default(cuid())
+  tablaId Int
+  tabla   SeriesEIndicesTabla @relation(fields: [tablaId], references: [codTabla])
+  periodo DateTime            @db.Date
+  indice  Decimal             @db.Decimal(18, 6)
+  dolar   Decimal             @db.Decimal(18, 4)
+
+  @@unique([tablaId, periodo])
 }
 
 // Un registro por empresa y período con los 5 componentes "de resultado" en
@@ -206,21 +246,21 @@ model ResultadosHistoricos {
 }
 
 model PlanDeCuentas {
-  id                   String              @id @default(cuid())
-  empresa              Empresa             @relation(fields: [empresaId], references: [codEmp])
+  id                   String             @id @default(cuid())
+  empresa              Empresa            @relation(fields: [empresaId], references: [codEmp])
   empresaId            Int
-  cuenta               String              @db.VarChar(90)
-  partidaPatrimonial   PartidaPatrimonial  @relation(fields: [partidaPatrimonialId], references: [codPartida])
+  cuenta               String             @db.VarChar(90)
+  partidaPatrimonial   PartidaPatrimonial @relation(fields: [partidaPatrimonialId], references: [codPartida])
   partidaPatrimonialId Int
-  rubro                Rubro               @relation(fields: [rubroId], references: [codRubro])
+  rubro                Rubro              @relation(fields: [rubroId], references: [codRubro])
   rubroId              Int
-  subrubro             Subrubro            @relation(fields: [subrubroId], references: [codSubrubro])
+  subrubro             Subrubro           @relation(fields: [subrubroId], references: [codSubrubro])
   subrubroId           Int
-  subrubro2            Subrubro2?          @relation(fields: [subrubro2Id], references: [codSubrubro2])
+  subrubro2            Subrubro2?         @relation(fields: [subrubro2Id], references: [codSubrubro2])
   subrubro2Id          Int?
-  subrubro3            Subrubro3?          @relation(fields: [subrubro3Id], references: [codSubrubro3])
+  subrubro3            Subrubro3?         @relation(fields: [subrubro3Id], references: [codSubrubro3])
   subrubro3Id          Int?
-  categoriaOyA         CategoriaOyA?       @relation(fields: [categoriaOyAId], references: [codOyA])
+  categoriaOyA         CategoriaOyA?      @relation(fields: [categoriaOyAId], references: [codOyA])
   categoriaOyAId       Int?
 
   @@unique([empresaId, cuenta])

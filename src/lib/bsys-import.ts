@@ -38,7 +38,9 @@ export async function importBsysCombinado(formData: FormData): Promise<ImportBsy
     };
   }
 
+  const unidad = await prisma.unidadNegocio.findUniqueOrThrow({ where: { codUnidad: unidadNegocioId } });
   const seriesError = await verificarSeriesCompletaHasta(
+    unidad.seriesTablaId,
     new Date(Date.UTC(periodoAnio, periodoMes - 1, 1))
   );
   if (seriesError) {

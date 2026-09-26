@@ -2,6 +2,7 @@
 
 import { revalidatePath } from "next/cache";
 import { prisma } from "@/lib/prisma";
+import type { DeleteCheckResult } from "@/components/ConfirmDeleteButton";
 
 const ALLOWED_MIME = [
   "image/jpeg",
@@ -14,14 +15,14 @@ const MAX_IMAGE_BYTES = 2 * 1024 * 1024;
 
 export async function listUnidadesNegocio() {
   return prisma.unidadNegocio.findMany({
-    orderBy: { nombreUnidad: "asc" },
+    orderBy: { codUnidad: "asc" },
     select: { codUnidad: true, nombreUnidad: true, imagenMime: true },
   });
 }
 
 export async function listUnidadesNegocioConEmpresas() {
   return prisma.unidadNegocio.findMany({
-    orderBy: { nombreUnidad: "asc" },
+    orderBy: { codUnidad: "asc" },
     include: { empresas: { orderBy: { nombreEmp: "asc" } } },
   });
 }
@@ -56,6 +57,64 @@ export async function createUnidadNegocio(formData: FormData) {
     data: { nombreUnidad, imagenUnidad, imagenMime },
   });
 
+  revalidatePath("/configuracion/unidades-negocio");
+  revalidatePath("/");
+}
+
+export async function updateUnidadNegocioNombre(codUnidad: number, nombreUnidad: string) {
+  const value = nombreUnidad.trim();
+  if (!value) throw new Error("El nombre es obligatorio");
+  if (value.length > 35) throw new Error("El nombre no puede superar 35 caracteres");
+
+  await prisma.unidadNegocio.update({ where: { codUnidad }, data: { nombreUnidad: value } });
+  revalidatePath("/configuracion/unidades-negocio");
+  revalidatePath("/");
+}
+
+export async function updateUnidadNegocioLogo(formData: FormData) {
+  const codUnidad = Number(formData.get("codUnidad"));
+  const file = formData.get("imagen");
+  if (!(file instanceof File) || file.size === 0) {
+    throw new Error("Seleccioná una imagen");
+  }
+  if (!ALLOWED_MIME.includes(file.type)) {
+    throw new Error("Formato de imagen no permitido (usar JPG, PNG, GIF, WebP o SVG)");
+  }
+  if (file.size > MAX_IMAGE_BYTES) {
+    throw new Error("La imagen no puede superar 2MB");
+  }
+
+  const imagenUnidad = new Uint8Array(await file.arrayBuffer());
+  await prisma.unidadNegocio.update({
+    where: { codUnidad },
+    data: { imagenUnidad, imagenMime: file.type },
+  });
+
+  revalidatePath("/configuracion/unidades-negocio");
+  revalidatePath("/");
+}
+
+export async function checkDeleteUnidadNegocio(codUnidad: number): Promise<DeleteCheckResult> {
+  const [empresas, informes, historicos] = await Promise.all([
+    prisma.empresa.count({ where: { unidadNegocioId: codUnidad } }),
+    prisma.informe.count({ where: { unidadNegocioId: codUnidad } }),
+    prisma.resultadosHistoricos.count({ where: { unidadNegocioId: codUnidad } }),
+  ]);
+
+  const motivos: string[] = [];
+  if (empresas > 0) motivos.push(`${empresas} empresa(s) vinculada(s)`);
+  if (informes > 0) motivos.push(`${informes} informe(s)`);
+  if (historicos > 0) motivos.push(`${historicos} período(s) de Resultados Históricos`);
+
+  if (motivos.length === 0) return { blocked: false };
+  return { blocked: true, reason: `No se puede eliminar: tiene ${motivos.join(", ")}.` };
+}
+
+export async function deleteUnidadNegocio(codUnidad: number) {
+  const check = await checkDeleteUnidadNegocio(codUnidad);
+  if (check.blocked) throw new Error(check.reason);
+
+  await prisma.unidadNegocio.delete({ where: { codUnidad } });
   revalidatePath("/configuracion/unidades-negocio");
   revalidatePath("/");
 }

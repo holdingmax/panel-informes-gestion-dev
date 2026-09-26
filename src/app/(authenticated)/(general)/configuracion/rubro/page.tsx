@@ -1,5 +1,6 @@
 import { listRubrosConClasificacion } from "@/lib/rubro-actions";
 import { createCatalogItem } from "@/lib/catalog-actions";
+import { CollapsibleAdd } from "@/components/CollapsibleAdd";
 import { RubroClasificacionRow } from "./RubroClasificacionRow";
 
 export const dynamic = "force-dynamic";
@@ -17,6 +18,22 @@ export default async function RubroPage() {
         hace por cuenta en Configuración → Categoría OyA, no acá.
       </p>
 
+      <CollapsibleAdd>
+        <form action={createCatalogItem} className="flex flex-col gap-3">
+          <input type="hidden" name="tabla" value="rubro" />
+          <label className="flex flex-col gap-1">
+            <span className="text-lg">Nombre de rubro</span>
+            <input name="nombre" required maxLength={60} className="rounded border px-3 py-2 text-lg" />
+          </label>
+          <button
+            type="submit"
+            className="w-fit rounded-md bg-accent px-4 py-2 text-sm text-white transition-colors hover:bg-accent-hover focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-accent focus-visible:ring-offset-2"
+          >
+            Agregar
+          </button>
+        </form>
+      </CollapsibleAdd>
+
       <div className="overflow-x-auto rounded-lg bg-white p-4 shadow">
         <table className="w-full text-left text-lg">
           <thead>
@@ -24,6 +41,7 @@ export default async function RubroPage() {
               <th className="py-1 pr-4">Código</th>
               <th className="py-1 pr-4">Nombre</th>
               <th className="py-1 pr-4">Origen / Aplicación</th>
+              <th className="py-1 pr-4">Acciones</th>
             </tr>
           </thead>
           <tbody>
@@ -38,23 +56,6 @@ export default async function RubroPage() {
           </tbody>
         </table>
       </div>
-
-      <form
-        action={createCatalogItem}
-        className="flex flex-col gap-3 rounded-lg bg-white p-6 shadow"
-      >
-        <input type="hidden" name="tabla" value="rubro" />
-        <label className="flex flex-col gap-1">
-          <span className="text-lg">Nombre de rubro</span>
-          <input name="nombre" required maxLength={60} className="rounded border px-3 py-2 text-lg" />
-        </label>
-        <button
-          type="submit"
-          className="w-fit rounded-md bg-accent px-4 py-2 text-sm text-white transition-colors hover:bg-accent-hover focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-accent focus-visible:ring-offset-2"
-        >
-          Agregar
-        </button>
-      </form>
     </main>
   );
 }

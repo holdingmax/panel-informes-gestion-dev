@@ -22,10 +22,16 @@ function toDate(value: unknown): Date | null {
 }
 
 async function main() {
-  const [filePath] = process.argv.slice(2);
-  if (!filePath) {
-    throw new Error('Uso: npx tsx prisma/import-series-e-indices.ts "<ruta al xlsx>"');
+  const [filePath, tipoTabla] = process.argv.slice(2);
+  if (!filePath || !tipoTabla) {
+    throw new Error(
+      'Uso: npx tsx prisma/import-series-e-indices.ts "<ruta al xlsx>" "<tipo de tabla>"'
+    );
   }
+
+  const tabla =
+    (await prisma.seriesEIndicesTabla.findFirst({ where: { tipoTabla } })) ??
+    (await prisma.seriesEIndicesTabla.create({ data: { tipoTabla } }));
 
   const wb = new ExcelJS.Workbook();
   await wb.xlsx.readFile(filePath);
@@ -43,14 +49,14 @@ async function main() {
     }
 
     await prisma.seriesEIndices.upsert({
-      where: { periodo },
+      where: { tablaId_periodo: { tablaId: tabla.codTabla, periodo } },
       update: { indice: Number(indice), dolar: Number(dolar) },
-      create: { periodo, indice: Number(indice), dolar: Number(dolar) },
+      create: { tablaId: tabla.codTabla, periodo, indice: Number(indice), dolar: Number(dolar) },
     });
     count++;
   }
 
-  console.log(`Listo: ${count} períodos de Series e Índices importados.`);
+  console.log(`Listo: ${count} períodos de Series e Índices importados en la tabla "${tipoTabla}".`);
 }
 
 main()

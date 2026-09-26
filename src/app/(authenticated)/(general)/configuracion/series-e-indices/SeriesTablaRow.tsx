@@ -1,71 +1,63 @@
 "use client";
 
 import { useState, useTransition } from "react";
+import Link from "next/link";
 import {
-  updatePartidaTipo,
-  updatePartidaNombre,
-  checkDeletePartida,
-  deletePartida,
-} from "@/lib/partida-actions";
+  updateSeriesEIndicesTabla,
+  checkDeleteSeriesEIndicesTabla,
+  deleteSeriesEIndicesTabla,
+} from "@/lib/series-e-indices-actions";
 import { ConfirmDeleteButton } from "@/components/ConfirmDeleteButton";
 
-export function PartidaTipoRow({
-  codPartida,
-  nomPartida,
-  tipo,
+export function SeriesTablaRow({
+  codTabla,
+  tipoTabla,
+  cantidadFilas,
+  cantidadUnidades,
 }: {
-  codPartida: number;
-  nomPartida: string;
-  tipo: string | null;
+  codTabla: number;
+  tipoTabla: string;
+  cantidadFilas: number;
+  cantidadUnidades: number;
 }) {
-  const [pending, startTransition] = useTransition();
   const [editing, setEditing] = useState(false);
-  const [nombreValue, setNombreValue] = useState(nomPartida);
+  const [value, setValue] = useState(tipoTabla);
+  const [pending, startTransition] = useTransition();
 
-  function guardarNombre() {
+  function guardar() {
     startTransition(async () => {
-      await updatePartidaNombre(codPartida, nombreValue);
+      await updateSeriesEIndicesTabla(codTabla, value);
       setEditing(false);
     });
   }
 
   return (
     <tr className="border-t">
-      <td className="py-2 pr-4">{codPartida}</td>
+      <td className="py-2 pr-4">{codTabla}</td>
       <td className="py-2 pr-4">
         {editing ? (
           <input
-            value={nombreValue}
-            onChange={(e) => setNombreValue(e.target.value)}
-            maxLength={40}
+            value={value}
+            onChange={(e) => setValue(e.target.value)}
+            maxLength={60}
             disabled={pending}
             className="rounded border px-2 py-1 text-lg"
           />
         ) : (
-          nomPartida
+          <Link href={`/configuracion/series-e-indices/${codTabla}`} className="underline hover:text-accent">
+            {tipoTabla}
+          </Link>
         )}
       </td>
-      <td className="py-2 pr-4">
-        <select
-          defaultValue={tipo ?? ""}
-          disabled={pending}
-          onChange={(e) => startTransition(() => updatePartidaTipo(codPartida, e.target.value))}
-          className="rounded border px-2 py-1 text-lg"
-        >
-          <option value="">Sin clasificar</option>
-          <option value="ACTIVO">Activo (Balance)</option>
-          <option value="PASIVO">Pasivo (Balance)</option>
-          <option value="PATRIMONIO_NETO">Patrimonio Neto (Balance)</option>
-          <option value="RESULTADO">Resultado (Ingresos/Egresos)</option>
-        </select>
-      </td>
-      <td className="py-2 pr-4">
+      <td className="py-2 pr-4">{cantidadFilas}</td>
+      <td className="py-2 pr-4">{cantidadUnidades}</td>
+      <td className="py-2">
         <div className="flex gap-2">
           {editing ? (
             <>
               <button
                 type="button"
-                onClick={guardarNombre}
+                onClick={guardar}
                 disabled={pending}
                 className="rounded-md bg-accent px-2.5 py-1.5 text-sm text-white transition-colors hover:bg-accent-hover disabled:cursor-not-allowed disabled:opacity-50"
               >
@@ -74,7 +66,7 @@ export function PartidaTipoRow({
               <button
                 type="button"
                 onClick={() => {
-                  setNombreValue(nomPartida);
+                  setValue(tipoTabla);
                   setEditing(false);
                 }}
                 disabled={pending}
@@ -93,9 +85,9 @@ export function PartidaTipoRow({
                 Editar
               </button>
               <ConfirmDeleteButton
-                itemLabel={`"${nomPartida}"`}
-                check={() => checkDeletePartida(codPartida)}
-                onConfirm={() => deletePartida(codPartida)}
+                itemLabel={`la tabla "${tipoTabla}"`}
+                check={() => checkDeleteSeriesEIndicesTabla(codTabla)}
+                onConfirm={() => deleteSeriesEIndicesTabla(codTabla)}
               />
             </>
           )}

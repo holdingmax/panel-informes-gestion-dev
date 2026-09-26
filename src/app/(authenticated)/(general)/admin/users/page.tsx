@@ -2,6 +2,7 @@ import { listUsers } from "@/lib/auth-actions";
 import { createUserAction } from "./actions";
 import { ToggleActiveButton } from "./ToggleActiveButton";
 import { UserRowActions } from "./UserRowActions";
+import { CollapsibleAdd } from "@/components/CollapsibleAdd";
 
 export default async function AdminUsersPage() {
   const users = await listUsers();
@@ -36,8 +37,7 @@ export default async function AdminUsersPage() {
         </tbody>
       </table>
 
-      <section className="flex flex-col gap-4">
-        <h2 className="text-xl font-medium">Crear usuario</h2>
+      <CollapsibleAdd label="Crear usuario">
         <form action={createUserAction} className="flex flex-col gap-3">
           <label className="flex flex-col gap-1">
             <span className="text-lg">Usuario</span>
@@ -82,12 +82,12 @@ export default async function AdminUsersPage() {
           </label>
           <button
             type="submit"
-            className="rounded-md bg-accent px-4 py-2 text-sm text-white transition-colors hover:bg-accent-hover focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-accent focus-visible:ring-offset-2"
+            className="w-fit rounded-md bg-accent px-4 py-2 text-sm text-white transition-colors hover:bg-accent-hover focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-accent focus-visible:ring-offset-2"
           >
             Crear usuario
           </button>
         </form>
-      </section>
+      </CollapsibleAdd>
     </main>
   );
 }

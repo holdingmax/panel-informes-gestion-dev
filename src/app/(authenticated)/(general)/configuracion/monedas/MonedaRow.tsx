@@ -1,71 +1,66 @@
 "use client";
 
 import { useState, useTransition } from "react";
-import {
-  updatePartidaTipo,
-  updatePartidaNombre,
-  checkDeletePartida,
-  deletePartida,
-} from "@/lib/partida-actions";
+import { updateMoneda, checkDeleteMoneda, deleteMoneda } from "@/lib/moneda-actions";
 import { ConfirmDeleteButton } from "@/components/ConfirmDeleteButton";
 
-export function PartidaTipoRow({
-  codPartida,
-  nomPartida,
-  tipo,
+export function MonedaRow({
+  codMoneda,
+  nomMoneda,
+  simbolo,
 }: {
-  codPartida: number;
-  nomPartida: string;
-  tipo: string | null;
+  codMoneda: number;
+  nomMoneda: string;
+  simbolo: string;
 }) {
-  const [pending, startTransition] = useTransition();
   const [editing, setEditing] = useState(false);
-  const [nombreValue, setNombreValue] = useState(nomPartida);
+  const [nombreValue, setNombreValue] = useState(nomMoneda);
+  const [simboloValue, setSimboloValue] = useState(simbolo);
+  const [pending, startTransition] = useTransition();
 
-  function guardarNombre() {
+  function guardar() {
     startTransition(async () => {
-      await updatePartidaNombre(codPartida, nombreValue);
+      await updateMoneda(codMoneda, nombreValue, simboloValue);
       setEditing(false);
     });
   }
 
   return (
     <tr className="border-t">
-      <td className="py-2 pr-4">{codPartida}</td>
-      <td className="py-2 pr-4">
+      <td className="py-2">{codMoneda}</td>
+      <td className="py-2">
         {editing ? (
           <input
             value={nombreValue}
             onChange={(e) => setNombreValue(e.target.value)}
-            maxLength={40}
+            maxLength={60}
             disabled={pending}
             className="rounded border px-2 py-1 text-lg"
           />
         ) : (
-          nomPartida
+          nomMoneda
         )}
       </td>
-      <td className="py-2 pr-4">
-        <select
-          defaultValue={tipo ?? ""}
-          disabled={pending}
-          onChange={(e) => startTransition(() => updatePartidaTipo(codPartida, e.target.value))}
-          className="rounded border px-2 py-1 text-lg"
-        >
-          <option value="">Sin clasificar</option>
-          <option value="ACTIVO">Activo (Balance)</option>
-          <option value="PASIVO">Pasivo (Balance)</option>
-          <option value="PATRIMONIO_NETO">Patrimonio Neto (Balance)</option>
-          <option value="RESULTADO">Resultado (Ingresos/Egresos)</option>
-        </select>
+      <td className="py-2">
+        {editing ? (
+          <input
+            value={simboloValue}
+            onChange={(e) => setSimboloValue(e.target.value)}
+            maxLength={5}
+            disabled={pending}
+            className="rounded border px-2 py-1 text-lg"
+          />
+        ) : (
+          simbolo
+        )}
       </td>
-      <td className="py-2 pr-4">
+      <td className="py-2">
         <div className="flex gap-2">
           {editing ? (
             <>
               <button
                 type="button"
-                onClick={guardarNombre}
+                onClick={guardar}
                 disabled={pending}
                 className="rounded-md bg-accent px-2.5 py-1.5 text-sm text-white transition-colors hover:bg-accent-hover disabled:cursor-not-allowed disabled:opacity-50"
               >
@@ -74,7 +69,8 @@ export function PartidaTipoRow({
               <button
                 type="button"
                 onClick={() => {
-                  setNombreValue(nomPartida);
+                  setNombreValue(nomMoneda);
+                  setSimboloValue(simbolo);
                   setEditing(false);
                 }}
                 disabled={pending}
@@ -93,9 +89,9 @@ export function PartidaTipoRow({
                 Editar
               </button>
               <ConfirmDeleteButton
-                itemLabel={`"${nomPartida}"`}
-                check={() => checkDeletePartida(codPartida)}
-                onConfirm={() => deletePartida(codPartida)}
+                itemLabel={`la moneda "${nomMoneda}"`}
+                check={() => checkDeleteMoneda(codMoneda)}
+                onConfirm={() => deleteMoneda(codMoneda)}
               />
             </>
           )}

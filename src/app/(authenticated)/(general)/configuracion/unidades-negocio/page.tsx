@@ -1,6 +1,7 @@
 import { listUnidadesNegocioConEmpresas, createUnidadNegocio } from "@/lib/unidad-negocio-actions";
 import { listEmpresas } from "@/lib/empresa-actions";
-import { EmpresasVinculadasForm } from "./EmpresasVinculadasForm";
+import { CollapsibleAdd } from "@/components/CollapsibleAdd";
+import { UnidadNegocioRow } from "./UnidadNegocioRow";
 
 export const dynamic = "force-dynamic";
 
@@ -20,48 +21,7 @@ export default async function UnidadesNegocioPage() {
         con su propio BSyS, consolidadas en un solo informe.
       </p>
 
-      <div className="overflow-x-auto rounded-lg bg-white p-4 shadow">
-        <table className="w-full text-left text-lg">
-          <thead>
-            <tr>
-              <th className="py-1 pr-4">Código</th>
-              <th className="py-1 pr-4">Logo</th>
-              <th className="py-1 pr-4">Nombre</th>
-              <th className="py-1">Empresas vinculadas</th>
-            </tr>
-          </thead>
-          <tbody>
-            {unidades.map((unidad) => (
-              <tr key={unidad.codUnidad} className="border-t align-top">
-                <td className="py-2 pr-4">{unidad.codUnidad}</td>
-                <td className="py-2 pr-4">
-                  {unidad.imagenMime ? (
-                    // eslint-disable-next-line @next/next/no-img-element
-                    <img
-                      src={`/api/unidades-negocio/${unidad.codUnidad}/logo`}
-                      alt={unidad.nombreUnidad}
-                      className="h-10 w-10 object-contain"
-                    />
-                  ) : (
-                    "—"
-                  )}
-                </td>
-                <td className="py-2 pr-4">{unidad.nombreUnidad}</td>
-                <td className="py-2 text-sm">
-                  <EmpresasVinculadasForm
-                    codUnidad={unidad.codUnidad}
-                    empresas={empresas}
-                    vinculadasIds={unidad.empresas.map((e) => e.codEmp)}
-                  />
-                </td>
-              </tr>
-            ))}
-          </tbody>
-        </table>
-      </div>
-
-      <section className="flex flex-col gap-4 rounded-lg bg-white p-6 shadow">
-        <h2 className="text-xl font-medium">Nueva unidad de negocio</h2>
+      <CollapsibleAdd label="Crear unidad de negocio">
         <form action={createUnidadNegocio} className="flex flex-col gap-3">
           <label className="flex flex-col gap-1">
             <span className="text-lg">Nombre (hasta 35 caracteres)</span>
@@ -88,7 +48,33 @@ export default async function UnidadesNegocioPage() {
             Crear unidad de negocio
           </button>
         </form>
-      </section>
+      </CollapsibleAdd>
+
+      <div className="overflow-x-auto rounded-lg bg-white p-4 shadow">
+        <table className="w-full text-left text-lg">
+          <thead>
+            <tr>
+              <th className="py-1 pr-4">Código</th>
+              <th className="py-1 pr-4">Logo</th>
+              <th className="py-1 pr-4">Nombre</th>
+              <th className="py-1 pr-4">Empresas vinculadas</th>
+              <th className="py-1">Acciones</th>
+            </tr>
+          </thead>
+          <tbody>
+            {unidades.map((unidad) => (
+              <UnidadNegocioRow
+                key={unidad.codUnidad}
+                codUnidad={unidad.codUnidad}
+                nombreUnidad={unidad.nombreUnidad}
+                imagenMime={unidad.imagenMime}
+                empresas={empresas}
+                vinculadasIds={unidad.empresas.map((e) => e.codEmp)}
+              />
+            ))}
+          </tbody>
+        </table>
+      </div>
     </main>
   );
 }

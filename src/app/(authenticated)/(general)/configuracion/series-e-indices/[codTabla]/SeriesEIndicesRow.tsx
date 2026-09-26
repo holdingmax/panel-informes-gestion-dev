@@ -2,70 +2,77 @@
 
 import { useState, useTransition } from "react";
 import {
-  updatePartidaTipo,
-  updatePartidaNombre,
-  checkDeletePartida,
-  deletePartida,
-} from "@/lib/partida-actions";
+  updateSeriesEIndicesValores,
+  checkDeleteSeriesEIndices,
+  deleteSeriesEIndices,
+} from "@/lib/series-e-indices-actions";
 import { ConfirmDeleteButton } from "@/components/ConfirmDeleteButton";
 
-export function PartidaTipoRow({
-  codPartida,
-  nomPartida,
-  tipo,
-}: {
-  codPartida: number;
-  nomPartida: string;
-  tipo: string | null;
-}) {
-  const [pending, startTransition] = useTransition();
-  const [editing, setEditing] = useState(false);
-  const [nombreValue, setNombreValue] = useState(nomPartida);
+function formatPeriodo(d: Date) {
+  return `${String(d.getUTCMonth() + 1).padStart(2, "0")}-${d.getUTCFullYear()}`;
+}
 
-  function guardarNombre() {
+export function SeriesEIndicesRow({
+  id,
+  periodo,
+  indice,
+  dolar,
+}: {
+  id: string;
+  periodo: Date;
+  indice: number;
+  dolar: number;
+}) {
+  const [editing, setEditing] = useState(false);
+  const [indiceValue, setIndiceValue] = useState(String(indice));
+  const [dolarValue, setDolarValue] = useState(String(dolar));
+  const [pending, startTransition] = useTransition();
+
+  function guardar() {
     startTransition(async () => {
-      await updatePartidaNombre(codPartida, nombreValue);
+      await updateSeriesEIndicesValores(id, Number(indiceValue), Number(dolarValue));
       setEditing(false);
     });
   }
 
   return (
     <tr className="border-t">
-      <td className="py-2 pr-4">{codPartida}</td>
-      <td className="py-2 pr-4">
+      <td className="py-1.5 pr-4">{formatPeriodo(periodo)}</td>
+      <td className="py-1.5 pr-4">
         {editing ? (
           <input
-            value={nombreValue}
-            onChange={(e) => setNombreValue(e.target.value)}
-            maxLength={40}
+            value={indiceValue}
+            onChange={(e) => setIndiceValue(e.target.value)}
+            type="number"
+            step="0.000001"
             disabled={pending}
-            className="rounded border px-2 py-1 text-lg"
+            className="w-32 rounded border px-2 py-1"
           />
         ) : (
-          nomPartida
+          indice.toLocaleString("es-AR")
         )}
       </td>
-      <td className="py-2 pr-4">
-        <select
-          defaultValue={tipo ?? ""}
-          disabled={pending}
-          onChange={(e) => startTransition(() => updatePartidaTipo(codPartida, e.target.value))}
-          className="rounded border px-2 py-1 text-lg"
-        >
-          <option value="">Sin clasificar</option>
-          <option value="ACTIVO">Activo (Balance)</option>
-          <option value="PASIVO">Pasivo (Balance)</option>
-          <option value="PATRIMONIO_NETO">Patrimonio Neto (Balance)</option>
-          <option value="RESULTADO">Resultado (Ingresos/Egresos)</option>
-        </select>
+      <td className="py-1.5 pr-4">
+        {editing ? (
+          <input
+            value={dolarValue}
+            onChange={(e) => setDolarValue(e.target.value)}
+            type="number"
+            step="0.0001"
+            disabled={pending}
+            className="w-32 rounded border px-2 py-1"
+          />
+        ) : (
+          dolar.toLocaleString("es-AR")
+        )}
       </td>
-      <td className="py-2 pr-4">
+      <td className="py-1.5 pr-4">
         <div className="flex gap-2">
           {editing ? (
             <>
               <button
                 type="button"
-                onClick={guardarNombre}
+                onClick={guardar}
                 disabled={pending}
                 className="rounded-md bg-accent px-2.5 py-1.5 text-sm text-white transition-colors hover:bg-accent-hover disabled:cursor-not-allowed disabled:opacity-50"
               >
@@ -74,7 +81,8 @@ export function PartidaTipoRow({
               <button
                 type="button"
                 onClick={() => {
-                  setNombreValue(nomPartida);
+                  setIndiceValue(String(indice));
+                  setDolarValue(String(dolar));
                   setEditing(false);
                 }}
                 disabled={pending}
@@ -93,9 +101,9 @@ export function PartidaTipoRow({
                 Editar
               </button>
               <ConfirmDeleteButton
-                itemLabel={`"${nomPartida}"`}
-                check={() => checkDeletePartida(codPartida)}
-                onConfirm={() => deletePartida(codPartida)}
+                itemLabel={`el período ${formatPeriodo(periodo)}`}
+                check={() => checkDeleteSeriesEIndices(id)}
+                onConfirm={() => deleteSeriesEIndices(id)}
               />
             </>
           )}

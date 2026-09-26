@@ -4,25 +4,41 @@ export const CATALOGS = {
   partidaPatrimonial: {
     codeField: "codPartida",
     nameField: "nomPartida",
+    // Campo en PlanDeCuentas que apunta a esta tabla — se usa para detectar
+    // conflictos antes de borrar (ver checkDeleteCatalogItem).
+    planDeCuentasField: "partidaPatrimonialId",
     model: prisma.partidaPatrimonial,
   },
-  rubro: { codeField: "codRubro", nameField: "nomRubro", model: prisma.rubro },
+  rubro: {
+    codeField: "codRubro",
+    nameField: "nomRubro",
+    planDeCuentasField: "rubroId",
+    model: prisma.rubro,
+  },
   subrubro: {
     codeField: "codSubrubro",
     nameField: "nomSubrubro",
+    planDeCuentasField: "subrubroId",
     model: prisma.subrubro,
   },
   subrubro2: {
     codeField: "codSubrubro2",
     nameField: "nomSubrubro2",
+    planDeCuentasField: "subrubro2Id",
     model: prisma.subrubro2,
   },
   subrubro3: {
     codeField: "codSubrubro3",
     nameField: "nomSubrubro3",
+    planDeCuentasField: "subrubro3Id",
     model: prisma.subrubro3,
   },
-  categoriaOyA: { codeField: "codOyA", nameField: "nomOyA", model: prisma.categoriaOyA },
+  categoriaOyA: {
+    codeField: "codOyA",
+    nameField: "nomOyA",
+    planDeCuentasField: "categoriaOyAId",
+    model: prisma.categoriaOyA,
+  },
 } as const;
 
 export type CatalogKey = keyof typeof CATALOGS;

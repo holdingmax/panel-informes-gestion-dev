@@ -124,7 +124,15 @@ export async function computeResultadoCuadro(informeId: string): Promise<Resulta
     });
   }
 
-  const series = await prisma.seriesEIndices.findMany();
+  const seriesTablaId = informe.unidadNegocio.seriesTablaId;
+  if (!seriesTablaId) {
+    advertencias.push(
+      "Esta unidad de negocio no tiene una tabla de Series e Índices vinculada — no se pudieron armar los cuadros Ajustado por Inflación ni USD. Vinculá una en Configuración → Series e Índices."
+    );
+  }
+  const series = seriesTablaId
+    ? await prisma.seriesEIndices.findMany({ where: { tablaId: seriesTablaId } })
+    : [];
   const seriesMap = new Map<string, { indice: number; dolar: number }>();
   for (const s of series) {
     seriesMap.set(claveMes(s.periodo.getUTCMonth() + 1, s.periodo.getUTCFullYear()), {

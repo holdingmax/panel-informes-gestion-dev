@@ -1,12 +1,15 @@
 import { listEmpresas, createEmpresa } from "@/lib/empresa-actions";
+import { listMonedas } from "@/lib/moneda-actions";
+import { CollapsibleAdd } from "@/components/CollapsibleAdd";
+import { EmpresaRow } from "./EmpresaRow";
 
 export const dynamic = "force-dynamic";
 
 export default async function EmpresasPage() {
-  const empresas = await listEmpresas();
+  const [empresas, monedas] = await Promise.all([listEmpresas(), listMonedas()]);
 
   return (
-    <main className="flex w-full max-w-3xl flex-col gap-8 p-8">
+    <main className="flex w-full max-w-5xl flex-col gap-8 p-8">
       <h1 className="text-2xl font-semibold">Empresas</h1>
 
       <p className="text-sm text-zinc-600">
@@ -14,30 +17,8 @@ export default async function EmpresasPage() {
         Acumulado). Se vincula a una Unidad de Negocio desde Configuración → Unidades de Negocio.
       </p>
 
-      <div className="overflow-x-auto rounded-lg bg-white p-4 shadow">
-        <table className="w-full text-left text-lg">
-          <thead>
-            <tr>
-              <th className="py-1 pr-4">Código</th>
-              <th className="py-1 pr-4">Nombre</th>
-              <th className="py-1">Unidad de Negocio</th>
-            </tr>
-          </thead>
-          <tbody>
-            {empresas.map((empresa) => (
-              <tr key={empresa.codEmp} className="border-t">
-                <td className="py-2 pr-4">{empresa.codEmp}</td>
-                <td className="py-2 pr-4">{empresa.nombreEmp}</td>
-                <td className="py-2">{empresa.unidadNegocio?.nombreUnidad ?? "— sin vincular —"}</td>
-              </tr>
-            ))}
-          </tbody>
-        </table>
-      </div>
-
-      <section className="flex max-w-md flex-col gap-4 rounded-lg bg-white p-6 shadow">
-        <h2 className="text-xl font-medium">Nueva empresa</h2>
-        <form action={createEmpresa} className="flex flex-col gap-3">
+      <CollapsibleAdd label="Crear empresa">
+        <form action={createEmpresa} className="flex flex-wrap items-end gap-3">
           <label className="flex flex-col gap-1">
             <span className="text-lg">Nombre (hasta 60 caracteres)</span>
             <input
@@ -47,6 +28,43 @@ export default async function EmpresasPage() {
               className="rounded border px-3 py-2 text-lg"
             />
           </label>
+          <label className="flex flex-col gap-1">
+            <span className="text-lg">Moneda primaria</span>
+            <select name="monedaPrimariaId" className="rounded border px-3 py-2 text-lg">
+              <option value="">— sin definir —</option>
+              {monedas.map((m) => (
+                <option key={m.codMoneda} value={m.codMoneda}>
+                  {m.nomMoneda} ({m.simbolo})
+                </option>
+              ))}
+            </select>
+          </label>
+          <label className="flex flex-col gap-1">
+            <span className="text-lg">Moneda secundaria</span>
+            <select name="monedaSecundariaId" className="rounded border px-3 py-2 text-lg">
+              <option value="">— sin definir —</option>
+              {monedas.map((m) => (
+                <option key={m.codMoneda} value={m.codMoneda}>
+                  {m.nomMoneda} ({m.simbolo})
+                </option>
+              ))}
+            </select>
+          </label>
+          <label className="flex items-center gap-2 text-lg">
+            <input type="checkbox" name="actualiza" />
+            <span>Actualiza</span>
+          </label>
+          <label className="flex flex-col gap-1">
+            <span className="text-lg">Moneda actualiza</span>
+            <select name="monedaActualizaId" className="rounded border px-3 py-2 text-lg">
+              <option value="">— sin definir —</option>
+              {monedas.map((m) => (
+                <option key={m.codMoneda} value={m.codMoneda}>
+                  {m.nomMoneda} ({m.simbolo})
+                </option>
+              ))}
+            </select>
+          </label>
           <button
             type="submit"
             className="w-fit rounded-md bg-accent px-4 py-2 text-sm text-white transition-colors hover:bg-accent-hover focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-accent focus-visible:ring-offset-2"
@@ -54,7 +72,38 @@ export default async function EmpresasPage() {
             Crear empresa
           </button>
         </form>
-      </section>
+      </CollapsibleAdd>
+
+      <div className="overflow-x-auto rounded-lg bg-white p-4 shadow">
+        <table className="w-full text-left text-lg">
+          <thead>
+            <tr>
+              <th className="py-1 pr-4">Código</th>
+              <th className="py-1 pr-4">Nombre</th>
+              <th className="py-1 pr-4">Unidad de Negocio</th>
+              <th className="py-1 pr-4">Moneda primaria</th>
+              <th className="py-1 pr-4">Moneda secundaria</th>
+              <th className="py-1 pr-4">Actualiza</th>
+              <th className="py-1 pr-4">Acciones</th>
+            </tr>
+          </thead>
+          <tbody>
+            {empresas.map((empresa) => (
+              <EmpresaRow
+                key={empresa.codEmp}
+                codEmp={empresa.codEmp}
+                nombreEmp={empresa.nombreEmp}
+                unidadNegocioNombre={empresa.unidadNegocio?.nombreUnidad ?? null}
+                monedas={monedas}
+                monedaPrimaria={empresa.monedaPrimaria}
+                monedaSecundaria={empresa.monedaSecundaria}
+                actualiza={empresa.actualiza}
+                monedaActualiza={empresa.monedaActualiza}
+              />
+            ))}
+          </tbody>
+        </table>
+      </div>
     </main>
   );
 }

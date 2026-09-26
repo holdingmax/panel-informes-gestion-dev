@@ -1,56 +1,66 @@
-import { listSeriesEIndices } from "@/lib/series-e-indices-actions";
-import { SeriesEIndicesForm } from "./SeriesEIndicesForm";
+import { listSeriesEIndicesTablas, createSeriesEIndicesTabla } from "@/lib/series-e-indices-actions";
+import { CollapsibleAdd } from "@/components/CollapsibleAdd";
+import { SeriesTablaRow } from "./SeriesTablaRow";
 
 export const dynamic = "force-dynamic";
 
-function formatPeriodo(d: Date) {
-  return `${String(d.getUTCMonth() + 1).padStart(2, "0")}-${d.getUTCFullYear()}`;
-}
-
 export default async function SeriesEIndicesPage() {
-  const series = await listSeriesEIndices();
-  const ultimo = series[series.length - 1];
-  const proximo = ultimo
-    ? formatPeriodo(new Date(Date.UTC(ultimo.periodo.getUTCFullYear(), ultimo.periodo.getUTCMonth() + 1, 1)))
-    : "";
+  const tablas = await listSeriesEIndicesTablas();
 
   return (
     <main className="flex w-full max-w-3xl flex-col gap-8 p-8">
       <h1 className="text-2xl font-semibold">Series e Índices</h1>
 
       <p className="text-sm text-zinc-600">
-        Serie única para todas las empresas, correlativa mes a mes (sin huecos). Se usa para
-        validar que la información esté al día antes de confeccionar un informe, y para los
-        cuadros comparativos ajustados por inflación y en dólares.
+        Cada tabla es una serie mensual y correlativa (sin huecos) de índice de inflación y
+        dólar. Una Unidad de Negocio usa una sola tabla a la vez para sus cuadros comparativos
+        ajustados por inflación y en dólares — una misma tabla puede servir a varias unidades.
       </p>
 
-      <div className="max-h-96 overflow-auto rounded-lg bg-white p-4 shadow">
+      <CollapsibleAdd>
+        <form action={createSeriesEIndicesTabla} className="flex flex-col gap-3">
+          <label className="flex flex-col gap-1">
+            <span className="text-lg">Tipo de tabla</span>
+            <input
+              name="tipoTabla"
+              required
+              maxLength={60}
+              className="rounded border px-3 py-2 text-lg"
+            />
+          </label>
+          <button
+            type="submit"
+            className="w-fit rounded-md bg-accent px-4 py-2 text-sm text-white transition-colors hover:bg-accent-hover focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-accent focus-visible:ring-offset-2"
+          >
+            Agregar
+          </button>
+        </form>
+      </CollapsibleAdd>
+
+      <div className="overflow-x-auto rounded-lg bg-white p-4 shadow">
         <table className="w-full text-left text-lg">
           <thead>
             <tr>
-              <th className="py-1 pr-4">Período</th>
-              <th className="py-1 pr-4">Índice</th>
-              <th className="py-1 pr-4">Dólar</th>
+              <th className="py-1 pr-4">Código</th>
+              <th className="py-1 pr-4">Tipo de tabla</th>
+              <th className="py-1 pr-4">Períodos</th>
+              <th className="py-1 pr-4">Unidades vinculadas</th>
+              <th className="py-1">Acciones</th>
             </tr>
           </thead>
           <tbody>
-            {series.map((s) => (
-              <tr key={s.id} className="border-t">
-                <td className="py-1.5 pr-4">{formatPeriodo(s.periodo)}</td>
-                <td className="py-1.5 pr-4">{Number(s.indice).toLocaleString("es-AR")}</td>
-                <td className="py-1.5 pr-4">{Number(s.dolar).toLocaleString("es-AR")}</td>
-              </tr>
+            {tablas.map((t) => (
+              <SeriesTablaRow
+                key={t.codTabla}
+                codTabla={t.codTabla}
+                tipoTabla={t.tipoTabla}
+                cantidadFilas={t._count.filas}
+                cantidadUnidades={t._count.unidades}
+              />
             ))}
           </tbody>
         </table>
       </div>
-
-      <section className="flex max-w-md flex-col gap-4 rounded-lg bg-white p-6 shadow">
-        <h2 className="text-xl font-medium">
-          {ultimo ? `Agregar período (siguiente: ${proximo})` : "Agregar primer período"}
-        </h2>
-        <SeriesEIndicesForm proximoPeriodo={proximo} />
-      </section>
     </main>
   );
 }
