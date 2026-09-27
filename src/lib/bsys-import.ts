@@ -5,6 +5,48 @@ import { prisma } from "@/lib/prisma";
 import { parseBsysRawFile, type BsysRawRow } from "@/lib/bsys-raw-parser";
 import { normalizeCuenta } from "@/lib/cuenta-normalize";
 import { verificarSeriesCompletaHasta } from "@/lib/series-e-indices-actions";
+import { aplicarRefundicion } from "@/lib/refundicion";
+
+function primerDiaDelMes(mes: number, anio: number): Date {
+  return new Date(Date.UTC(anio, mes - 1, 1));
+}
+
+function ultimoDiaDelMes(mes: number, anio: number): Date {
+  return new Date(Date.UTC(anio, mes, 0));
+}
+
+// El ejercicio va de julio a junio: el período 06/2026 pertenece al
+// ejercicio que arrancó en julio de 2025 (mismo criterio que
+// resultado-cuadro.ts).
+function inicioEjercicio(mes: number, anio: number): { mes: number; anio: number } {
+  return mes >= 7 ? { mes: 7, anio } : { mes: 7, anio: anio - 1 };
+}
+
+function fmtFechaISO(date: Date): string {
+  return date.toISOString().slice(0, 10);
+}
+
+// Los archivos que exporta el sistema contable suelen traer el rango de
+// fechas en el propio nombre (ej. "... Desde 2026-06-01 hasta 2026-06-30").
+// Si el nombre no trae ese patrón, no se puede validar y se deja pasar — no
+// todos los sistemas de origen nombran los archivos así.
+function extraerRangoFecha(nombreArchivo: string): { desde: Date; hasta: Date } | null {
+  const match = /desde\s+(\d{4}-\d{2}-\d{2})\s+hasta\s+(\d{4}-\d{2}-\d{2})/i.exec(nombreArchivo);
+  if (!match) return null;
+  const desde = new Date(`${match[1]}T00:00:00Z`);
+  const hasta = new Date(`${match[2]}T00:00:00Z`);
+  if (Number.isNaN(desde.getTime()) || Number.isNaN(hasta.getTime())) return null;
+  return { desde, hasta };
+}
+
+function validarRangoArchivo(archivo: File, desdeEsperado: Date, hastaEsperado: Date): string | null {
+  const rango = extraerRangoFecha(archivo.name);
+  if (!rango) return null;
+  if (rango.desde.getTime() !== desdeEsperado.getTime() || rango.hasta.getTime() !== hastaEsperado.getTime()) {
+    return `el archivo "${archivo.name}" no corresponde al período seleccionado — se esperaba un rango "Desde ${fmtFechaISO(desdeEsperado)} hasta ${fmtFechaISO(hastaEsperado)}".`;
+  }
+  return null;
+}
 
 type ImportBsysResult =
   | {
@@ -24,6 +66,7 @@ export async function importBsysCombinado(formData: FormData): Promise<ImportBsy
   const periodoMes = Number(formData.get("periodoMes"));
   const periodoAnio = Number(formData.get("periodoAnio"));
   const empresaIds = formData.getAll("empresaId").map(Number);
+  const refundicionPendiente = formData.get("refundicionPendiente") === "on";
 
   if (!Number.isInteger(periodoMes) || periodoMes < 1 || periodoMes > 12) {
     return { error: "Mes inválido." };
@@ -39,21 +82,29 @@ export async function importBsysCombinado(formData: FormData): Promise<ImportBsy
   }
 
   const unidad = await prisma.unidadNegocio.findUniqueOrThrow({ where: { codUnidad: unidadNegocioId } });
-  const seriesError = await verificarSeriesCompletaHasta(
-    unidad.seriesTablaId,
-    new Date(Date.UTC(periodoAnio, periodoMes - 1, 1))
-  );
-  if (seriesError) {
-    return {
-      error: `${seriesError} Completá Configuración → Series e Índices antes de cargar este período.`,
-    };
-  }
 
   const empresas = await prisma.empresa.findMany({
     where: { codEmp: { in: empresaIds }, unidadNegocioId },
   });
   if (empresas.length !== empresaIds.length) {
     return { error: "Alguna de las empresas indicadas ya no está vinculada a esta unidad de negocio. Recargá la página." };
+  }
+
+  // Series e Índices solo hace falta si alguna Empresa de esta unidad ajusta
+  // por inflación o tiene moneda secundaria configurada (ver Configuración →
+  // Empresas) — el ESP y el OyAF siempre van en la moneda primaria nominal,
+  // sin necesitar ninguna serie.
+  const necesitaSeries = empresas.some((e) => e.actualiza || e.monedaSecundariaId);
+  if (necesitaSeries) {
+    const seriesError = await verificarSeriesCompletaHasta(
+      unidad.seriesTablaId,
+      new Date(Date.UTC(periodoAnio, periodoMes - 1, 1))
+    );
+    if (seriesError) {
+      return {
+        error: `${seriesError} Completá Configuración → Series e Índices antes de cargar este período.`,
+      };
+    }
   }
 
   type Parsed = {
@@ -75,12 +126,31 @@ export async function importBsysCombinado(formData: FormData): Promise<ImportBsy
       return { error: `Seleccioná el archivo de BSyS Acumulado de "${empresa.nombreEmp}".` };
     }
 
+    const hastaEsperado = ultimoDiaDelMes(periodoMes, periodoAnio);
+    const inicioEj = inicioEjercicio(periodoMes, periodoAnio);
+    const errorRangoMes = validarRangoArchivo(
+      archivoMes,
+      primerDiaDelMes(periodoMes, periodoAnio),
+      hastaEsperado
+    );
+    if (errorRangoMes) {
+      return { error: `Archivo BSyS del Mes de "${empresa.nombreEmp}": ${errorRangoMes}` };
+    }
+    const errorRangoAcumulado = validarRangoArchivo(
+      archivoAcumulado,
+      primerDiaDelMes(inicioEj.mes, inicioEj.anio),
+      hastaEsperado
+    );
+    if (errorRangoAcumulado) {
+      return { error: `Archivo BSyS Acumulado de "${empresa.nombreEmp}": ${errorRangoAcumulado}` };
+    }
+
     const [htmlMes, htmlAcumulado] = await Promise.all([
       archivoMes.text(),
       archivoAcumulado.text(),
     ]);
     const rowsMes = parseBsysRawFile(htmlMes);
-    const rowsAcumulado = parseBsysRawFile(htmlAcumulado);
+    let rowsAcumulado = parseBsysRawFile(htmlAcumulado);
 
     if (rowsMes.length === 0) {
       return {
@@ -91,6 +161,18 @@ export async function importBsysCombinado(formData: FormData): Promise<ImportBsy
       return {
         error: `No se encontraron cuentas en el archivo de BSyS Acumulado de "${empresa.nombreEmp}". Verificá que sea el export correcto del sistema contable.`,
       };
+    }
+
+    if (refundicionPendiente) {
+      const cuentaRNA = String(formData.get(`cuentaRNA_${empresa.codEmp}`) ?? "").trim();
+      if (!cuentaRNA) {
+        return { error: `Falta indicar la cuenta de RNA de "${empresa.nombreEmp}" para la refundición.` };
+      }
+      const refundicion = aplicarRefundicion(rowsAcumulado, cuentaRNA);
+      if ("error" in refundicion) {
+        return { error: `Refundición de "${empresa.nombreEmp}": ${refundicion.error}` };
+      }
+      rowsAcumulado = refundicion.rows;
     }
 
     // Se compara por forma normalizada (mayúsculas/espacios): el mismo nombre

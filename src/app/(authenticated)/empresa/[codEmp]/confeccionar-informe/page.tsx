@@ -1,5 +1,6 @@
 import { prisma } from "@/lib/prisma";
 import { listEmpresasDeUnidad } from "@/lib/empresa-actions";
+import { listPlanDeCuentasPorEmpresas } from "@/lib/plan-de-cuentas-actions";
 import { BsysUploadForm } from "../BsysUploadForm";
 
 export const dynamic = "force-dynamic";
@@ -27,6 +28,22 @@ export default async function ConfeccionarInformePage({
   const unidadNegocioId = Number(codEmp);
 
   const empresas = await listEmpresasDeUnidad(unidadNegocioId);
+
+  const planes =
+    empresas.length > 0
+      ? await listPlanDeCuentasPorEmpresas(empresas.map((e) => e.codEmp))
+      : [];
+  // La cuenta de RNA (Resultados No Asignados) siempre es una cuenta de
+  // Patrimonio Neto, cuyo código empieza con "3" en el plan de cuentas de
+  // todas las empresas — se acota la lista para que el operador no tenga que
+  // buscarla entre cientos de cuentas de Activo/Pasivo/Resultado.
+  const cuentasPorEmpresa: Record<number, string[]> = {};
+  for (const empresa of empresas) {
+    cuentasPorEmpresa[empresa.codEmp] = planes
+      .filter((p) => p.empresaId === empresa.codEmp && p.cuenta.trim().startsWith("3"))
+      .map((p) => p.cuenta)
+      .sort();
+  }
 
   const ultimasCargas = await Promise.all(
     empresas.map(async (empresa) => ({
@@ -71,7 +88,11 @@ export default async function ConfeccionarInformePage({
         </div>
       )}
 
-      <BsysUploadForm unidadNegocioId={unidadNegocioId} empresas={empresas} />
+      <BsysUploadForm
+        unidadNegocioId={unidadNegocioId}
+        empresas={empresas}
+        cuentasPorEmpresa={cuentasPorEmpresa}
+      />
     </div>
   );
 }

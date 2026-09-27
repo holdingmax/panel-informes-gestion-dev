@@ -1,7 +1,7 @@
 import "dotenv/config";
 import ExcelJS from "exceljs";
 import { PrismaClient } from "../src/generated/prisma/client";
-import type { CategoriaOrigenAplicacion, TipoPartida } from "../src/generated/prisma/enums";
+import type { CategoriaOrigenAplicacion, RolTipoPartida } from "../src/generated/prisma/enums";
 import { PrismaPg } from "@prisma/adapter-pg";
 
 const adapter = new PrismaPg({ connectionString: process.env.DATABASE_URL! });
@@ -42,7 +42,7 @@ const PARTIDA_CANONICA: Record<string, string> = {
   EGRESOS: "EGRESOS",
 };
 
-function defaultTipoPartida(partidaNombre: string): TipoPartida | undefined {
+function defaultRolPartida(partidaNombre: string): RolTipoPartida | undefined {
   const p = partidaNombre.toUpperCase();
   if (p === "INGRESOS" || p === "EGRESOS") return "RESULTADO";
   if (p === "ACTIVO") return "ACTIVO";
@@ -107,13 +107,29 @@ async function main() {
     ["TUCSON", tucson.codEmp],
   ]);
 
-  const partidaCache = new Map<string, { id: number; tipo: TipoPartida | null }>();
-  for (const p of await prisma.partidaPatrimonial.findMany()) {
-    partidaCache.set(p.nomPartida, { id: p.codPartida, tipo: p.tipo });
+  const partidaCache = new Map<string, { id: number; rol: RolTipoPartida | null }>();
+  for (const p of await prisma.partidaPatrimonial.findMany({ include: { tipo: true } })) {
+    partidaCache.set(p.nomPartida, { id: p.codPartida, rol: p.tipo?.rol ?? null });
+  }
+
+  const tipoIdPorRolCache = new Map<RolTipoPartida, number>();
+  const NOMBRE_TIPO_POR_ROL: Record<RolTipoPartida, string> = {
+    ACTIVO: "Activo",
+    PASIVO: "Pasivo",
+    PATRIMONIO_NETO: "Patrimonio Neto",
+    RESULTADO: "Resultado",
+  };
+  async function getTipoIdPorRol(rol: RolTipoPartida): Promise<number> {
+    if (tipoIdPorRolCache.has(rol)) return tipoIdPorRolCache.get(rol)!;
+    const row =
+      (await prisma.tipoPartida.findFirst({ where: { rol } })) ??
+      (await prisma.tipoPartida.create({ data: { nomTipo: NOMBRE_TIPO_POR_ROL[rol], rol } }));
+    tipoIdPorRolCache.set(rol, row.codTipo);
+    return row.codTipo;
   }
 
   const rubroCache = new Map<string, number>(); // normalizado -> id (para reuso)
-  const rubroGrupoAsignado = new Map<string, TipoPartida | "OTRO">(); // nombre exacto usado -> grupo, detectado durante esta importación
+  const rubroGrupoAsignado = new Map<string, RolTipoPartida | "OTRO">(); // nombre exacto usado -> grupo, detectado durante esta importación
   for (const r of await prisma.rubro.findMany()) {
     rubroCache.set(normalize(r.nomRubro), r.codRubro);
   }
@@ -126,10 +142,12 @@ async function main() {
   async function getPartida(nombreCanonico: string) {
     const cached = partidaCache.get(nombreCanonico);
     if (cached) return cached;
+    const rol = defaultRolPartida(nombreCanonico);
+    const tipoId = rol ? await getTipoIdPorRol(rol) : null;
     const row = await prisma.partidaPatrimonial.create({
-      data: { nomPartida: nombreCanonico, tipo: defaultTipoPartida(nombreCanonico) },
+      data: { nomPartida: nombreCanonico, tipoId },
     });
-    const entry = { id: row.codPartida, tipo: row.tipo };
+    const entry = { id: row.codPartida, rol: rol ?? null };
     partidaCache.set(nombreCanonico, entry);
     return entry;
   }
@@ -139,7 +157,7 @@ async function main() {
   // cuentas de ACTIVO como de PASIVO) termine representando, con un solo id,
   // dos cosas distintas de cada lado del balance. Si aparece de nuevo con un
   // grupo distinto, se crea un Rubro nuevo con un sufijo aclaratorio.
-  async function getRubro(nombreOriginal: string, partidaNombre: string, grupo: TipoPartida | "OTRO") {
+  async function getRubro(nombreOriginal: string, partidaNombre: string, grupo: RolTipoPartida | "OTRO") {
     let nombre = nombreOriginal;
     const grupoPrevio = rubroGrupoAsignado.get(normalize(nombre));
     if (grupoPrevio !== undefined && grupoPrevio !== grupo) {
@@ -214,7 +232,7 @@ async function main() {
       partidaNombre = "ACTIVO";
     }
 
-    const grupo: TipoPartida | "OTRO" = defaultTipoPartida(partidaNombre) ?? "OTRO";
+    const grupo: RolTipoPartida | "OTRO" = defaultRolPartida(partidaNombre) ?? "OTRO";
 
     let rubroNombre: string;
     let subrubroNombre: string;

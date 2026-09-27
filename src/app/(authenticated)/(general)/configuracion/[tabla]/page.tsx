@@ -19,7 +19,7 @@ export default async function CatalogoPage({
   const items: Record<string, unknown>[] = await listCatalog(route.key);
 
   return (
-    <main className="flex w-full max-w-xl flex-col gap-8 p-8">
+    <main className="flex w-full flex-col gap-8 p-8">
       <h1 className="text-2xl font-semibold">{route.title}</h1>
 
       <CollapsibleAdd>

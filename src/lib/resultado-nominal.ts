@@ -62,7 +62,7 @@ async function computeResultadoNominalMesDeEmpresa(
 
   const planDeCuentas = await prisma.planDeCuentas.findMany({
     where: { empresaId },
-    include: { rubro: true, partidaPatrimonial: true },
+    include: { rubro: true, partidaPatrimonial: { include: { tipo: true } } },
   });
   const porCuenta = new Map(planDeCuentas.map((p) => [normalizeCuenta(p.cuenta), p]));
 
@@ -76,7 +76,7 @@ async function computeResultadoNominalMesDeEmpresa(
       );
       continue;
     }
-    if (plan.partidaPatrimonial.tipo !== "RESULTADO") continue;
+    if (plan.partidaPatrimonial.tipo?.rol !== "RESULTADO") continue;
 
     const campo = RUBRO_A_CAMPO[plan.rubro.nomRubro];
     if (!campo) {

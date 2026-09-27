@@ -1,4 +1,6 @@
+import Link from "next/link";
 import { listPartidasConClasificacion } from "@/lib/partida-actions";
+import { listTiposPartida } from "@/lib/tipo-partida-actions";
 import { createCatalogItem } from "@/lib/catalog-actions";
 import { CollapsibleAdd } from "@/components/CollapsibleAdd";
 import { PartidaTipoRow } from "./PartidaTipoRow";
@@ -6,16 +8,20 @@ import { PartidaTipoRow } from "./PartidaTipoRow";
 export const dynamic = "force-dynamic";
 
 export default async function PartidaPatrimonialPage() {
-  const partidas = await listPartidasConClasificacion();
+  const [partidas, tipos] = await Promise.all([listPartidasConClasificacion(), listTiposPartida()]);
 
   return (
-    <main className="flex w-full max-w-2xl flex-col gap-8 p-8">
+    <main className="flex w-full flex-col gap-8 p-8">
       <h1 className="text-2xl font-semibold">Partida Patrimonial</h1>
 
       <p className="text-sm text-zinc-600">
         El &quot;Tipo&quot; indica si la partida forma parte del Balance (Activo/Pasivo/Patrimonio Neto)
         o del Resultado del período (Ingresos/Egresos). Se usa para armar el informe de Balance
-        de cada empresa.
+        de cada empresa. Los valores posibles de Tipo se administran en{" "}
+        <Link href="/configuracion/tipo-partida" className="underline hover:text-accent">
+          Configuración → Tipo de Partida
+        </Link>
+        .
       </p>
 
       <CollapsibleAdd>
@@ -50,7 +56,8 @@ export default async function PartidaPatrimonialPage() {
                 key={partida.codPartida}
                 codPartida={partida.codPartida}
                 nomPartida={partida.nomPartida}
-                tipo={partida.tipo}
+                tipoId={partida.tipoId}
+                tipos={tipos}
               />
             ))}
           </tbody>

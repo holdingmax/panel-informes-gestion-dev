@@ -9,7 +9,7 @@ export default async function EmpresasPage() {
   const [empresas, monedas] = await Promise.all([listEmpresas(), listMonedas()]);
 
   return (
-    <main className="flex w-full max-w-5xl flex-col gap-8 p-8">
+    <main className="flex w-full flex-col gap-8 p-8">
       <h1 className="text-2xl font-semibold">Empresas</h1>
 
       <p className="text-sm text-zinc-600">
@@ -38,6 +38,10 @@ export default async function EmpresasPage() {
                 </option>
               ))}
             </select>
+          </label>
+          <label className="flex items-center gap-2 text-lg">
+            <input type="checkbox" name="presentaEnMiles" />
+            <span>Presenta en miles</span>
           </label>
           <label className="flex flex-col gap-1">
             <span className="text-lg">Moneda secundaria</span>
@@ -82,6 +86,7 @@ export default async function EmpresasPage() {
               <th className="py-1 pr-4">Nombre</th>
               <th className="py-1 pr-4">Unidad de Negocio</th>
               <th className="py-1 pr-4">Moneda primaria</th>
+              <th className="py-1 pr-4">Presenta en miles</th>
               <th className="py-1 pr-4">Moneda secundaria</th>
               <th className="py-1 pr-4">Actualiza</th>
               <th className="py-1 pr-4">Acciones</th>
@@ -96,6 +101,7 @@ export default async function EmpresasPage() {
                 unidadNegocioNombre={empresa.unidadNegocio?.nombreUnidad ?? null}
                 monedas={monedas}
                 monedaPrimaria={empresa.monedaPrimaria}
+                presentaEnMiles={empresa.presentaEnMiles}
                 monedaSecundaria={empresa.monedaSecundaria}
                 actualiza={empresa.actualiza}
                 monedaActualiza={empresa.monedaActualiza}

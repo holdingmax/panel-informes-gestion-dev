@@ -1,7 +1,7 @@
 import "dotenv/config";
 import ExcelJS from "exceljs";
 import { PrismaClient } from "../src/generated/prisma/client";
-import type { CategoriaOrigenAplicacion, TipoPartida } from "../src/generated/prisma/enums";
+import type { CategoriaOrigenAplicacion, RolTipoPartida } from "../src/generated/prisma/enums";
 import { PrismaPg } from "@prisma/adapter-pg";
 
 const adapter = new PrismaPg({ connectionString: process.env.DATABASE_URL! });
@@ -41,11 +41,28 @@ async function main() {
   const subrubroCache = new Map<string, number>();
   const subrubro2Cache = new Map<string, number>();
   const subrubro3Cache = new Map<string, number>();
+  const tipoIdPorRolCache = new Map<RolTipoPartida, number>();
+
+  const NOMBRE_TIPO_POR_ROL: Record<RolTipoPartida, string> = {
+    ACTIVO: "Activo",
+    PASIVO: "Pasivo",
+    PATRIMONIO_NETO: "Patrimonio Neto",
+    RESULTADO: "Resultado",
+  };
+
+  async function getTipoIdPorRol(rol: RolTipoPartida): Promise<number> {
+    if (tipoIdPorRolCache.has(rol)) return tipoIdPorRolCache.get(rol)!;
+    const row =
+      (await prisma.tipoPartida.findFirst({ where: { rol } })) ??
+      (await prisma.tipoPartida.create({ data: { nomTipo: NOMBRE_TIPO_POR_ROL[rol], rol } }));
+    tipoIdPorRolCache.set(rol, row.codTipo);
+    return row.codTipo;
+  }
 
   // Estos "default" son solo una conveniencia al importar por primera vez una
   // Partida/Rubro: el valor real que usa el motor de informes siempre se lee
   // de la tabla (editable en Configuración), nunca de esta función.
-  function defaultTipoPartida(partidaNombre: string): TipoPartida | undefined {
+  function defaultRolPartida(partidaNombre: string): RolTipoPartida | undefined {
     const p = partidaNombre.toUpperCase();
     if (p === "INGRESOS" || p === "EGRESOS") return "RESULTADO";
     if (p === "ACTIVO") return "ACTIVO";
@@ -65,10 +82,12 @@ async function main() {
 
   async function getPartidaId(nombre: string) {
     if (partidaCache.has(nombre)) return partidaCache.get(nombre)!;
+    const rol = defaultRolPartida(nombre);
+    const tipoId = rol ? await getTipoIdPorRol(rol) : null;
     const row = await prisma.partidaPatrimonial.upsert({
       where: { nomPartida: nombre },
       update: {},
-      create: { nomPartida: nombre, tipo: defaultTipoPartida(nombre) },
+      create: { nomPartida: nombre, tipoId },
     });
     partidaCache.set(nombre, row.codPartida);
     return row.codPartida;
@@ -180,10 +199,11 @@ async function main() {
   let partidasBackfilled = 0;
   for (const [partidaNombre, partidaId] of partidaCache) {
     const actual = await prisma.partidaPatrimonial.findUnique({ where: { codPartida: partidaId } });
-    if (actual && actual.tipo === null) {
-      const tipo = defaultTipoPartida(partidaNombre);
-      if (tipo) {
-        await prisma.partidaPatrimonial.update({ where: { codPartida: partidaId }, data: { tipo } });
+    if (actual && actual.tipoId === null) {
+      const rol = defaultRolPartida(partidaNombre);
+      if (rol) {
+        const tipoId = await getTipoIdPorRol(rol);
+        await prisma.partidaPatrimonial.update({ where: { codPartida: partidaId }, data: { tipoId } });
         partidasBackfilled++;
       }
     }

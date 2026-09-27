@@ -58,7 +58,7 @@ export async function createUnidadNegocio(formData: FormData) {
   });
 
   revalidatePath("/configuracion/unidades-negocio");
-  revalidatePath("/");
+  revalidatePath("/preparacion-informes");
 }
 
 export async function updateUnidadNegocioNombre(codUnidad: number, nombreUnidad: string) {
@@ -68,7 +68,7 @@ export async function updateUnidadNegocioNombre(codUnidad: number, nombreUnidad:
 
   await prisma.unidadNegocio.update({ where: { codUnidad }, data: { nombreUnidad: value } });
   revalidatePath("/configuracion/unidades-negocio");
-  revalidatePath("/");
+  revalidatePath("/preparacion-informes");
 }
 
 export async function updateUnidadNegocioLogo(formData: FormData) {
@@ -91,7 +91,7 @@ export async function updateUnidadNegocioLogo(formData: FormData) {
   });
 
   revalidatePath("/configuracion/unidades-negocio");
-  revalidatePath("/");
+  revalidatePath("/preparacion-informes");
 }
 
 export async function checkDeleteUnidadNegocio(codUnidad: number): Promise<DeleteCheckResult> {
@@ -116,7 +116,7 @@ export async function deleteUnidadNegocio(codUnidad: number) {
 
   await prisma.unidadNegocio.delete({ where: { codUnidad } });
   revalidatePath("/configuracion/unidades-negocio");
-  revalidatePath("/");
+  revalidatePath("/preparacion-informes");
 }
 
 // Reemplaza por completo el conjunto de Empresas vinculadas a esta Unidad de

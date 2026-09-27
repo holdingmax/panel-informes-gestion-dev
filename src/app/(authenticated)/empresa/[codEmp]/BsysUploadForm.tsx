@@ -1,6 +1,6 @@
 "use client";
 
-import { useActionState } from "react";
+import { useActionState, useState } from "react";
 import { importBsysCombinado } from "@/lib/bsys-import";
 import { openInWindow } from "@/lib/openWindow";
 
@@ -18,14 +18,17 @@ type EmpresaDeUnidad = { codEmp: number; nombreEmp: string };
 export function BsysUploadForm({
   unidadNegocioId,
   empresas,
+  cuentasPorEmpresa,
 }: {
   unidadNegocioId: number;
   empresas: EmpresaDeUnidad[];
+  cuentasPorEmpresa: Record<number, string[]>;
 }) {
   const [state, formAction, pending] = useActionState<ImportState, FormData>(
     async (_prevState, formData) => importBsysCombinado(formData),
     null
   );
+  const [refundicionPendiente, setRefundicionPendiente] = useState(false);
 
   const now = new Date();
 
@@ -74,36 +77,94 @@ export function BsysUploadForm({
           </label>
         </div>
 
-        <div className="flex flex-col gap-3">
+        <fieldset className="flex flex-col gap-2 rounded border border-slate-200 p-3">
+          <legend className="px-1 text-sm font-medium">Archivo BSyS del Mes</legend>
           {empresas.map((empresa) => (
-            <div
-              key={empresa.codEmp}
-              className="flex flex-col gap-2 rounded border border-slate-200 p-3 sm:flex-row sm:items-end sm:gap-4"
-            >
-              <span className="w-full shrink-0 text-sm font-medium sm:w-48">
-                {empresa.nombreEmp}
-              </span>
-              <label className="flex flex-1 flex-col gap-1">
-                <span className="text-sm">Archivo BSyS del Mes</span>
-                <input
-                  name={`archivoMes_${empresa.codEmp}`}
-                  type="file"
-                  required
-                  className="rounded border px-3 py-2"
-                />
-              </label>
-              <label className="flex flex-1 flex-col gap-1">
-                <span className="text-sm">Archivo BSyS Acumulado</span>
-                <input
-                  name={`archivoAcumulado_${empresa.codEmp}`}
-                  type="file"
-                  required
-                  className="rounded border px-3 py-2"
-                />
-              </label>
+            <div key={empresa.codEmp} className="flex flex-col gap-1">
+              <span className="text-sm font-medium text-zinc-700">{empresa.nombreEmp}</span>
+              <input
+                name={`archivoMes_${empresa.codEmp}`}
+                type="file"
+                required
+                className="rounded border px-3 py-2"
+              />
             </div>
           ))}
-        </div>
+        </fieldset>
+
+        <fieldset className="flex flex-col gap-2 rounded border border-slate-200 p-3">
+          <legend className="px-1 text-sm font-medium">Archivo BSyS Acumulado</legend>
+          {empresas.map((empresa) => (
+            <div key={empresa.codEmp} className="flex flex-col gap-1">
+              <span className="text-sm font-medium text-zinc-700">{empresa.nombreEmp}</span>
+              <input
+                name={`archivoAcumulado_${empresa.codEmp}`}
+                type="file"
+                required
+                className="rounded border px-3 py-2"
+              />
+            </div>
+          ))}
+        </fieldset>
+
+        <fieldset className="flex flex-col gap-3 rounded border border-slate-200 p-3">
+          <legend className="px-1 text-sm font-medium">Refundición pendiente</legend>
+          <p className="text-xs text-zinc-500">
+            Marcá &quot;Sí&quot; solo si el sistema contable de origen todavía no posteó el
+            asiento de cierre de ejercicio: el Acumulado de cada empresa se ajusta para llevar a
+            cero el saldo de inicio de sus cuentas de Ingresos y Egresos, imputando la
+            contrapartida a la cuenta de RNA que indiques.
+          </p>
+          <div className="flex items-center gap-4">
+            <label className="flex items-center gap-2 text-sm">
+              <input
+                type="radio"
+                name="refundicionPendienteChoice"
+                value="no"
+                checked={!refundicionPendiente}
+                onChange={() => setRefundicionPendiente(false)}
+              />
+              <span>No</span>
+            </label>
+            <label className="flex items-center gap-2 text-sm">
+              <input
+                type="radio"
+                name="refundicionPendienteChoice"
+                value="si"
+                checked={refundicionPendiente}
+                onChange={() => setRefundicionPendiente(true)}
+              />
+              <span>Sí</span>
+            </label>
+          </div>
+          {refundicionPendiente && (
+            <>
+              <input type="hidden" name="refundicionPendiente" value="on" />
+              <div className="flex flex-col gap-2">
+                {empresas.map((empresa) => (
+                  <label key={empresa.codEmp} className="flex flex-col gap-1">
+                    <span className="text-sm">Cuenta de RNA de {empresa.nombreEmp}</span>
+                    <select
+                      name={`cuentaRNA_${empresa.codEmp}`}
+                      required
+                      defaultValue=""
+                      className="rounded border px-3 py-2"
+                    >
+                      <option value="" disabled>
+                        Seleccionar...
+                      </option>
+                      {(cuentasPorEmpresa[empresa.codEmp] ?? []).map((cuenta) => (
+                        <option key={cuenta} value={cuenta}>
+                          {cuenta}
+                        </option>
+                      ))}
+                    </select>
+                  </label>
+                ))}
+              </div>
+            </>
+          )}
+        </fieldset>
 
         <button
           type="submit"

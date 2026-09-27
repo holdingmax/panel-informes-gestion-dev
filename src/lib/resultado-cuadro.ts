@@ -92,6 +92,14 @@ export type ResultadoCuadro = {
   unidadNegocioNombre: string;
   periodoMes: number;
   periodoAnio: number;
+  monedaPrimariaNombre: string | null;
+  presentaEnMiles: boolean;
+  monedaSecundariaNombre: string | null;
+  // Refleja lo que la Empresa tiene configurado (Configuración → Empresas),
+  // no si el cálculo salió bien — permite distinguir "no corresponde" (no se
+  // muestra nada) de "corresponde pero faltan datos" (se muestra el aviso).
+  tieneAjustePorInflacion: boolean;
+  tieneMonedaSecundaria: boolean;
   nominal: ResultadoBloque;
   ajustadoPorInflacion: ResultadoBloque | null;
   usd: ResultadoBloque | null;
@@ -105,6 +113,24 @@ export async function computeResultadoCuadro(informeId: string): Promise<Resulta
   });
   const { unidadNegocioId, periodoMes, periodoAnio } = informe;
   const advertencias: string[] = [];
+
+  // El ESP y el OyAF se arman siempre en la moneda primaria nominal (una
+  // sola versión). El ER en cambio se puede multiplicar en hasta 3 cuadros:
+  // Nominal (siempre), Ajustado por Inflación (solo si la empresa lo tiene
+  // marcado) y convertido a la moneda secundaria (solo si tiene una
+  // configurada) — ambos usando Series e Índices para el ajuste/conversión.
+  // Todas las Empresas de una misma Unidad de Negocio comparten hoy la misma
+  // configuración de moneda; se toma la primera que la tenga.
+  const empresas = await prisma.empresa.findMany({
+    where: { unidadNegocioId },
+    include: { monedaPrimaria: true, monedaSecundaria: true },
+  });
+  const empresaConMonedaPrimaria = empresas.find((e) => e.monedaPrimaria);
+  const monedaPrimariaNombre = empresaConMonedaPrimaria?.monedaPrimaria?.nomMoneda ?? null;
+  const presentaEnMiles = empresaConMonedaPrimaria?.presentaEnMiles ?? false;
+  const monedaSecundaria = empresas.find((e) => e.monedaSecundaria)?.monedaSecundaria ?? null;
+  const tieneAjustePorInflacion = empresas.some((e) => e.actualiza);
+  const tieneMonedaSecundaria = monedaSecundaria !== null;
 
   const { valores: actualRaw, advertencias: advertenciasMes } =
     await computeResultadoNominalMes(unidadNegocioId);
@@ -124,10 +150,11 @@ export async function computeResultadoCuadro(informeId: string): Promise<Resulta
     });
   }
 
+  const necesitaSeries = tieneAjustePorInflacion || tieneMonedaSecundaria;
   const seriesTablaId = informe.unidadNegocio.seriesTablaId;
-  if (!seriesTablaId) {
+  if (necesitaSeries && !seriesTablaId) {
     advertencias.push(
-      "Esta unidad de negocio no tiene una tabla de Series e Índices vinculada — no se pudieron armar los cuadros Ajustado por Inflación ni USD. Vinculá una en Configuración → Series e Índices."
+      "Esta unidad de negocio no tiene una tabla de Series e Índices vinculada — no se pudieron armar los cuadros Ajustado por Inflación ni de moneda secundaria. Vinculá una en Configuración → Series e Índices."
     );
   }
   const series = seriesTablaId
@@ -232,19 +259,23 @@ export async function computeResultadoCuadro(informeId: string): Promise<Resulta
     };
   }
 
-  const nominal = construirBloque(() => 1, "Nominal en Pesos")!;
+  const nominal = construirBloque(() => 1, "Nominal")!;
 
-  const ajustadoPorInflacion = construirBloque((mes, anio) => {
-    const indiceInforme = seriesMap.get(claveMes(periodoMes, periodoAnio))?.indice;
-    const indiceMes = seriesMap.get(claveMes(mes, anio))?.indice;
-    if (indiceInforme === undefined || indiceMes === undefined) return null;
-    return indiceInforme / indiceMes;
-  }, "Ajustado por Inflación");
+  const ajustadoPorInflacion = tieneAjustePorInflacion
+    ? construirBloque((mes, anio) => {
+        const indiceInforme = seriesMap.get(claveMes(periodoMes, periodoAnio))?.indice;
+        const indiceMes = seriesMap.get(claveMes(mes, anio))?.indice;
+        if (indiceInforme === undefined || indiceMes === undefined) return null;
+        return indiceInforme / indiceMes;
+      }, "Ajustado por Inflación")
+    : null;
 
-  const usd = construirBloque((mes, anio) => {
-    const dolarMes = seriesMap.get(claveMes(mes, anio))?.dolar;
-    return dolarMes ? 1 / dolarMes : null;
-  }, "USD");
+  const usd = tieneMonedaSecundaria
+    ? construirBloque((mes, anio) => {
+        const dolarMes = seriesMap.get(claveMes(mes, anio))?.dolar;
+        return dolarMes ? 1 / dolarMes : null;
+      }, monedaSecundaria?.nomMoneda ?? "moneda secundaria")
+    : null;
 
   return {
     informeId: informe.id,
@@ -252,6 +283,11 @@ export async function computeResultadoCuadro(informeId: string): Promise<Resulta
     unidadNegocioNombre: informe.unidadNegocio.nombreUnidad,
     periodoMes,
     periodoAnio,
+    monedaPrimariaNombre,
+    presentaEnMiles,
+    monedaSecundariaNombre: monedaSecundaria?.nomMoneda ?? null,
+    tieneAjustePorInflacion,
+    tieneMonedaSecundaria,
     nominal,
     ajustadoPorInflacion,
     usd,

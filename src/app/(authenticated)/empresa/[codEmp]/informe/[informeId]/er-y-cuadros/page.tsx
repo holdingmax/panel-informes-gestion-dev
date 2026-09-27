@@ -3,10 +3,11 @@ import { formatPeriodoAbrev } from "@/lib/balance-oya-report";
 
 export const dynamic = "force-dynamic";
 
-// INFORMES1 (la hoja de referencia) muestra todos los montos en miles de
-// pesos, no en pesos completos.
-function fmtParen(n: number) {
-  const rounded = Math.round(n / 1000);
+// "Presenta en miles" es configurable por Empresa (Configuración →
+// Empresas): solo afecta a la moneda primaria (Nominal y Ajustado por
+// Inflación) — la moneda secundaria siempre se muestra en unidades (fmtUsd).
+function fmtParen(n: number, enMiles: boolean) {
+  const rounded = Math.round(enMiles ? n / 1000 : n);
   return rounded < 0 ? `(${Math.abs(rounded).toLocaleString("es-AR")})` : rounded.toLocaleString("es-AR");
 }
 
@@ -143,45 +144,47 @@ export default async function ErYCuadrosPage({
       )}
 
       <CuadroResultado
-        titulo="Nominal en Pesos (en miles de $)"
+        titulo={`Nominal en ${report.monedaPrimariaNombre ?? "moneda primaria"}${report.presentaEnMiles ? " (en miles)" : ""}`}
         bloque={report.nominal}
         periodoLabel={periodoLabel}
         periodoAnteriorLabel={periodoAnteriorLabel}
         periodoAnio={report.periodoAnio}
-        fmt={fmtParen}
+        fmt={(n) => fmtParen(n, report.presentaEnMiles)}
       />
 
-      {report.ajustadoPorInflacion ? (
-        <CuadroResultado
-          titulo="Ajustado por Inflación (en miles de $ de hoy)"
-          bloque={report.ajustadoPorInflacion}
-          periodoLabel={periodoLabel}
-          periodoAnteriorLabel={periodoAnteriorLabel}
-          periodoAnio={report.periodoAnio}
-          fmt={fmtParen}
-        />
-      ) : (
-        <p className="text-sm text-zinc-600">
-          No se pudo armar el cuadro Ajustado por Inflación (falta información en Series e
-          Índices) — ver advertencias arriba.
-        </p>
-      )}
+      {report.tieneAjustePorInflacion &&
+        (report.ajustadoPorInflacion ? (
+          <CuadroResultado
+            titulo={`Ajustado por Inflación (${report.presentaEnMiles ? "en miles de " : ""}${report.monedaPrimariaNombre ?? "moneda primaria"} de hoy)`}
+            bloque={report.ajustadoPorInflacion}
+            periodoLabel={periodoLabel}
+            periodoAnteriorLabel={periodoAnteriorLabel}
+            periodoAnio={report.periodoAnio}
+            fmt={(n) => fmtParen(n, report.presentaEnMiles)}
+          />
+        ) : (
+          <p className="text-sm text-zinc-600">
+            No se pudo armar el cuadro Ajustado por Inflación (falta información en Series e
+            Índices) — ver advertencias arriba.
+          </p>
+        ))}
 
-      {report.usd ? (
-        <CuadroResultado
-          titulo="USD"
-          bloque={report.usd}
-          periodoLabel={periodoLabel}
-          periodoAnteriorLabel={periodoAnteriorLabel}
-          periodoAnio={report.periodoAnio}
-          fmt={fmtUsd}
-        />
-      ) : (
-        <p className="text-sm text-zinc-600">
-          No se pudo armar el cuadro USD (falta información en Series e Índices) — ver
-          advertencias arriba.
-        </p>
-      )}
+      {report.tieneMonedaSecundaria &&
+        (report.usd ? (
+          <CuadroResultado
+            titulo={report.monedaSecundariaNombre ?? "Moneda secundaria"}
+            bloque={report.usd}
+            periodoLabel={periodoLabel}
+            periodoAnteriorLabel={periodoAnteriorLabel}
+            periodoAnio={report.periodoAnio}
+            fmt={fmtUsd}
+          />
+        ) : (
+          <p className="text-sm text-zinc-600">
+            No se pudo armar el cuadro en {report.monedaSecundariaNombre ?? "moneda secundaria"}{" "}
+            (falta información en Series e Índices) — ver advertencias arriba.
+          </p>
+        ))}
     </div>
   );
 }

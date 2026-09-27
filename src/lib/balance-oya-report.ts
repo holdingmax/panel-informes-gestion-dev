@@ -93,6 +93,11 @@ type RubroAgg = {
   nomRubro: string;
   categoriaOyA: "ORIGEN" | "APLICACION" | "AJUSTE" | null;
   tipoPartida: "ACTIVO" | "PASIVO" | "PATRIMONIO_NETO" | "RESULTADO" | null;
+  // Si la Partida tiene un Tipo asignado, aunque ese Tipo no tenga rol (p.
+  // ej. Cuenta de Orden): distingue "sin clasificar todavía" (advertencia
+  // de siempre) de "clasificado a propósito como fuera del Balance".
+  tieneTipo: boolean;
+  exigeSaldoCero: boolean;
   saldoInicio: number;
   saldoFinal: number;
 };
@@ -138,7 +143,13 @@ function toLine(r: RubroAgg): RubroLine {
 // invertida) — no una negación pareja para todos, que rompería la resta
 // entre Orígenes y Aplicaciones dentro de un mismo bucket mixto.
 function nofLine(r: NofAgg): RubroLine {
-  const line = toLine({ ...r, categoriaOyA: r.categoriaOyARubro, tipoPartida: null });
+  const line = toLine({
+    ...r,
+    categoriaOyA: r.categoriaOyARubro,
+    tipoPartida: null,
+    tieneTipo: true,
+    exigeSaldoCero: false,
+  });
   const origenAplicacion =
     r.categoriaOyARubro === "APLICACION" ? -line.origenAplicacion : line.origenAplicacion;
   return { ...line, origenAplicacion };
@@ -194,7 +205,11 @@ export async function computeInformeReport(informeId: string): Promise<InformeRe
 
     const planDeCuentas = await prisma.planDeCuentas.findMany({
       where: { empresaId: empresa.codEmp },
-      include: { rubro: true, partidaPatrimonial: true, categoriaOyA: true },
+      include: {
+        rubro: true,
+        partidaPatrimonial: { include: { tipo: true } },
+        categoriaOyA: true,
+      },
     });
     const porCuenta = new Map(planDeCuentas.map((p) => [normalizeCuenta(p.cuenta), p]));
 
@@ -216,7 +231,9 @@ export async function computeInformeReport(informeId: string): Promise<InformeRe
           codRubro: plan.rubro.codRubro,
           nomRubro: plan.rubro.nomRubro,
           categoriaOyA: plan.rubro.categoriaOyA,
-          tipoPartida: plan.partidaPatrimonial.tipo,
+          tipoPartida: plan.partidaPatrimonial.tipo?.rol ?? null,
+          tieneTipo: plan.partidaPatrimonial.tipo !== null,
+          exigeSaldoCero: plan.partidaPatrimonial.tipo?.exigeSaldoCero ?? false,
           saldoInicio: 0,
           saldoFinal: 0,
         };
@@ -248,11 +265,28 @@ export async function computeInformeReport(informeId: string): Promise<InformeRe
 
   const rubros = [...rubroMap.values()];
 
+  const EPSILON_SALDO_CERO = 0.01;
   for (const r of rubros) {
-    if (!r.tipoPartida) {
+    if (r.tipoPartida) continue;
+
+    if (!r.tieneTipo) {
       advertencias.push(
         `El rubro "${r.nomRubro}" no tiene Partida (Activo/Pasivo/Patrimonio Neto/Resultado) clasificada — se excluyó del informe. Clasificala en Configuración → Partida Patrimonial.`
       );
+    } else if (r.exigeSaldoCero) {
+      // Partidas como "Cuenta de Orden" quedan fuera del Balance a propósito
+      // porque siempre deben netear a cero — si no es así, es una señal real
+      // de que algo quedó mal cargado, no un caso a ignorar en silencio.
+      if (Math.abs(r.saldoFinal) > EPSILON_SALDO_CERO) {
+        advertencias.push(
+          `El rubro "${r.nomRubro}" es de un Tipo que exige saldo cero (ej. Cuenta de Orden) pero tiene un saldo final de ${r.saldoFinal.toLocaleString("es-AR")} — revisar la carga.`
+        );
+      }
+      if (Math.abs(r.saldoInicio) > EPSILON_SALDO_CERO) {
+        advertencias.push(
+          `El rubro "${r.nomRubro}" es de un Tipo que exige saldo cero (ej. Cuenta de Orden) pero tiene un saldo de inicio de ${r.saldoInicio.toLocaleString("es-AR")} — revisar la carga.`
+        );
+      }
     }
   }
 

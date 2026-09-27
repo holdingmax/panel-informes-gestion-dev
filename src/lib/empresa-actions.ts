@@ -43,6 +43,7 @@ export async function createEmpresa(formData: FormData) {
     data: {
       nombreEmp,
       monedaPrimariaId: optionalMonedaId(formData, "monedaPrimariaId"),
+      presentaEnMiles: formData.get("presentaEnMiles") === "on",
       monedaSecundariaId: optionalMonedaId(formData, "monedaSecundariaId"),
       actualiza: formData.get("actualiza") === "on",
       monedaActualizaId: optionalMonedaId(formData, "monedaActualizaId"),
@@ -62,6 +63,7 @@ export async function updateEmpresa(codEmp: number, formData: FormData) {
     data: {
       nombreEmp,
       monedaPrimariaId: optionalMonedaId(formData, "monedaPrimariaId"),
+      presentaEnMiles: formData.get("presentaEnMiles") === "on",
       monedaSecundariaId: optionalMonedaId(formData, "monedaSecundariaId"),
       actualiza: formData.get("actualiza") === "on",
       monedaActualizaId: optionalMonedaId(formData, "monedaActualizaId"),

@@ -36,7 +36,7 @@ export default async function SeriesEIndicesTablaPage({
     : "";
 
   return (
-    <main className="flex w-full max-w-3xl flex-col gap-8 p-8">
+    <main className="flex w-full flex-col gap-8 p-8">
       <div>
         <h1 className="text-2xl font-semibold">Series e Índices — {tabla.tipoTabla}</h1>
         <p className="mt-1 text-sm text-zinc-600">

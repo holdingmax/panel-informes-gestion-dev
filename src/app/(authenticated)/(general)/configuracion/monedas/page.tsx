@@ -8,7 +8,7 @@ export default async function MonedasPage() {
   const monedas = await listMonedas();
 
   return (
-    <main className="flex w-full max-w-xl flex-col gap-8 p-8">
+    <main className="flex w-full flex-col gap-8 p-8">
       <h1 className="text-2xl font-semibold">Monedas</h1>
 
       <CollapsibleAdd>

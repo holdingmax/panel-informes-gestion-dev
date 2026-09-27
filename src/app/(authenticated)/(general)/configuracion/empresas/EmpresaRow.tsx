@@ -41,6 +41,7 @@ export function EmpresaRow({
   unidadNegocioNombre,
   monedas,
   monedaPrimaria,
+  presentaEnMiles,
   monedaSecundaria,
   actualiza,
   monedaActualiza,
@@ -50,6 +51,7 @@ export function EmpresaRow({
   unidadNegocioNombre: string | null;
   monedas: MonedaOpcion[];
   monedaPrimaria: MonedaRef;
+  presentaEnMiles: boolean;
   monedaSecundaria: MonedaRef;
   actualiza: boolean;
   monedaActualiza: MonedaRef;
@@ -90,6 +92,15 @@ export function EmpresaRow({
                 defaultValue={monedaPrimaria?.codMoneda ?? null}
                 disabled={pending}
               />
+            </label>
+            <label className="flex items-center gap-2 text-sm">
+              <input
+                type="checkbox"
+                name="presentaEnMiles"
+                defaultChecked={presentaEnMiles}
+                disabled={pending}
+              />
+              <span>Presenta en miles</span>
             </label>
             <label className="flex flex-col gap-1 text-sm">
               <span>Moneda secundaria</span>
@@ -147,6 +158,7 @@ export function EmpresaRow({
       <td className="py-2 pr-4">
         {monedaPrimaria ? `${monedaPrimaria.nomMoneda} (${monedaPrimaria.simbolo})` : "—"}
       </td>
+      <td className="py-2 pr-4">{presentaEnMiles ? "Sí" : "No"}</td>
       <td className="py-2 pr-4">
         {monedaSecundaria ? `${monedaSecundaria.nomMoneda} (${monedaSecundaria.simbolo})` : "—"}
       </td>

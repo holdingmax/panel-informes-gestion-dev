@@ -2,40 +2,39 @@
 
 import { useState, useTransition } from "react";
 import {
-  updatePartidaTipoId,
-  updatePartidaNombre,
-  checkDeletePartida,
-  deletePartida,
-} from "@/lib/partida-actions";
+  updateTipoPartidaNombre,
+  updateTipoPartidaRol,
+  updateTipoPartidaExigeSaldoCero,
+  checkDeleteTipoPartida,
+  deleteTipoPartida,
+} from "@/lib/tipo-partida-actions";
 import { ConfirmDeleteButton } from "@/components/ConfirmDeleteButton";
 
-type TipoOpcion = { codTipo: number; nomTipo: string };
-
-export function PartidaTipoRow({
-  codPartida,
-  nomPartida,
-  tipoId,
-  tipos,
+export function TipoPartidaRow({
+  codTipo,
+  nomTipo,
+  rol,
+  exigeSaldoCero,
 }: {
-  codPartida: number;
-  nomPartida: string;
-  tipoId: number | null;
-  tipos: TipoOpcion[];
+  codTipo: number;
+  nomTipo: string;
+  rol: string | null;
+  exigeSaldoCero: boolean;
 }) {
   const [pending, startTransition] = useTransition();
   const [editing, setEditing] = useState(false);
-  const [nombreValue, setNombreValue] = useState(nomPartida);
+  const [nombreValue, setNombreValue] = useState(nomTipo);
 
   function guardarNombre() {
     startTransition(async () => {
-      await updatePartidaNombre(codPartida, nombreValue);
+      await updateTipoPartidaNombre(codTipo, nombreValue);
       setEditing(false);
     });
   }
 
   return (
     <tr className="border-t">
-      <td className="py-2 pr-4">{codPartida}</td>
+      <td className="py-2 pr-4">{codTipo}</td>
       <td className="py-2 pr-4">
         {editing ? (
           <input
@@ -46,23 +45,33 @@ export function PartidaTipoRow({
             className="rounded border px-2 py-1 text-lg"
           />
         ) : (
-          nomPartida
+          nomTipo
         )}
       </td>
       <td className="py-2 pr-4">
         <select
-          defaultValue={tipoId ?? ""}
+          defaultValue={rol ?? ""}
           disabled={pending}
-          onChange={(e) => startTransition(() => updatePartidaTipoId(codPartida, e.target.value))}
+          onChange={(e) => startTransition(() => updateTipoPartidaRol(codTipo, e.target.value))}
           className="rounded border px-2 py-1 text-lg"
         >
-          <option value="">Sin clasificar</option>
-          {tipos.map((t) => (
-            <option key={t.codTipo} value={t.codTipo}>
-              {t.nomTipo}
-            </option>
-          ))}
+          <option value="">Sin rol (fuera del Balance/Resultado)</option>
+          <option value="ACTIVO">Activo (Balance)</option>
+          <option value="PASIVO">Pasivo (Balance)</option>
+          <option value="PATRIMONIO_NETO">Patrimonio Neto (Balance)</option>
+          <option value="RESULTADO">Resultado (Ingresos/Egresos)</option>
         </select>
+      </td>
+      <td className="py-2 pr-4">
+        <input
+          type="checkbox"
+          defaultChecked={exigeSaldoCero}
+          disabled={pending}
+          onChange={(e) =>
+            startTransition(() => updateTipoPartidaExigeSaldoCero(codTipo, e.target.checked))
+          }
+          className="h-5 w-5"
+        />
       </td>
       <td className="py-2 pr-4">
         <div className="flex gap-2">
@@ -79,7 +88,7 @@ export function PartidaTipoRow({
               <button
                 type="button"
                 onClick={() => {
-                  setNombreValue(nomPartida);
+                  setNombreValue(nomTipo);
                   setEditing(false);
                 }}
                 disabled={pending}
@@ -98,9 +107,9 @@ export function PartidaTipoRow({
                 Editar
               </button>
               <ConfirmDeleteButton
-                itemLabel={`"${nomPartida}"`}
-                check={() => checkDeletePartida(codPartida)}
-                onConfirm={() => deletePartida(codPartida)}
+                itemLabel={`"${nomTipo}"`}
+                check={() => checkDeleteTipoPartida(codTipo)}
+                onConfirm={() => deleteTipoPartida(codTipo)}
               />
             </>
           )}

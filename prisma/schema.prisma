@@ -63,6 +63,10 @@ model Empresa {
 
   monedaPrimariaId Int?
   monedaPrimaria   Moneda? @relation("EmpresaMonedaPrimaria", fields: [monedaPrimariaId], references: [codMoneda])
+  // Presenta los cuadros Nominal y (si corresponde) Ajustado por Inflación
+  // en miles de la moneda primaria en vez de en unidades — no afecta a la
+  // moneda secundaria, que siempre se muestra en unidades.
+  presentaEnMiles  Boolean @default(false)
 
   monedaSecundariaId Int?
   monedaSecundaria   Moneda? @relation("EmpresaMonedaSecundaria", fields: [monedaSecundariaId], references: [codMoneda])
@@ -136,19 +140,35 @@ model BalanceSumasYSaldos {
   createdAt        DateTime   @default(now())
 }
 
-// ACTIVO, PASIVO y PATRIMONIO_NETO van al Balance, cada uno con su propio
-// subtotal; RESULTADO alimenta el Resultado del período.
-enum TipoPartida {
+// El "rol" interno que el motor de informes necesita para saber en qué
+// bucket cae cada Tipo (ACTIVO/PASIVO/PATRIMONIO_NETO van al Balance,
+// RESULTADO al Estado de Resultados). Un Tipo sin rol (ej. "Cuenta de
+// Orden") queda afuera del Balance y del Resultado — ver exigeSaldoCero.
+enum RolTipoPartida {
   ACTIVO
   PASIVO
   PATRIMONIO_NETO
   RESULTADO
 }
 
+// Catálogo real (administrable en Configuración) de los "Tipo" que puede
+// tener una Partida Patrimonial. Además del rol interno, un Tipo puede
+// marcarse "exigeSaldoCero": son partidas que por diseño siempre deben
+// netear a cero (ej. Cuenta de Orden) — el motor de informes avisa al
+// operador si alguna vez no es así, en vez de dejarlo pasar en silencio.
+model TipoPartida {
+  codTipo        Int                  @id @default(autoincrement())
+  nomTipo        String               @unique @db.VarChar(40)
+  rol            RolTipoPartida?
+  exigeSaldoCero Boolean              @default(false)
+  partidas       PartidaPatrimonial[]
+}
+
 model PartidaPatrimonial {
   codPartida Int             @id @default(autoincrement())
   nomPartida String          @unique @db.VarChar(40)
-  tipo       TipoPartida?
+  tipoId     Int?
+  tipo       TipoPartida?    @relation(fields: [tipoId], references: [codTipo])
   planes     PlanDeCuentas[]
 }
 

@@ -15,6 +15,7 @@ const GRUPOS = [
     titulo: "Contabilidad",
     links: [
       { href: "/configuracion/partida-patrimonial", label: "Partida Patrimonial" },
+      { href: "/configuracion/tipo-partida", label: "Tipo de Partida" },
       { href: "/configuracion/rubro", label: "Rubro" },
       { href: "/configuracion/subrubro", label: "Subrubro" },
       { href: "/configuracion/subrubro-2", label: "Subrubro 2" },

@@ -9,7 +9,7 @@ export default async function CategoriaOyAPage() {
   const categorias = await listCategoriasOyAConClasificacion();
 
   return (
-    <main className="flex w-full max-w-3xl flex-col gap-8 p-8">
+    <main className="flex w-full flex-col gap-8 p-8">
       <h1 className="text-2xl font-semibold">Categoría OyA</h1>
 
       <p className="text-sm text-zinc-600">
