@@ -195,6 +195,10 @@ model Rubro {
   // cuenta puntual clasificada en Configuración → Categoría OyA sigue
   // ganando por sobre este default (ver computeInformeReport).
   bucketNOF    BucketNOF?
+  // Orden de exposición dentro del ESP (Activo/Pasivo/Patrimonio Neto se
+  // ordenan por este valor, de menor a mayor; null queda al final, en el
+  // orden en que se insertó el Rubro). No afecta a ninguna otra hoja.
+  orden        Int?
   planes       PlanDeCuentas[]
 }
 

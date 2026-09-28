@@ -25,6 +25,19 @@ export async function updateRubroBucketNOF(codRubro: number, value: string) {
   await prisma.rubro.update({ where: { codRubro }, data: { bucketNOF } });
 }
 
+// Orden de exposición dentro del ESP (Activo/Pasivo/Patrimonio Neto se
+// ordenan por este valor — ver computeInformeReport). Vacío = sin orden
+// asignado, va al final.
+export async function updateRubroOrden(codRubro: number, value: string) {
+  const trimmed = value.trim();
+  const orden = trimmed === "" ? null : Number(trimmed);
+  if (orden !== null && !Number.isInteger(orden)) {
+    throw new Error("El orden debe ser un número entero.");
+  }
+  await prisma.rubro.update({ where: { codRubro }, data: { orden } });
+  revalidatePath("/configuracion/rubro");
+}
+
 export async function updateRubroNombre(codRubro: number, nomRubro: string) {
   const value = nomRubro.trim();
   if (!value) throw new Error("El nombre es obligatorio");

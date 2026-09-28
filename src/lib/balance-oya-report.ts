@@ -103,6 +103,7 @@ type RubroAgg = {
   nomRubro: string;
   categoriaOyA: "ORIGEN" | "APLICACION" | "AJUSTE" | null;
   bucketNOF: "OPERATIVO" | "NO_OPERATIVO" | "FINANCIAMIENTO" | null;
+  orden: number | null;
   tipoPartida: "ACTIVO" | "PASIVO" | "PATRIMONIO_NETO" | "RESULTADO" | null;
   // Si la Partida tiene un Tipo asignado, aunque ese Tipo no tenga rol (p.
   // ej. Cuenta de Orden): distingue "sin clasificar todavía" (advertencia
@@ -179,12 +180,13 @@ function paraExposicionESP(
   }));
 }
 
-// La hoja de NOF mira el mismo movimiento desde el ángulo opuesto al OyAF:
-// positivo = aumentó la necesidad de fondos (aplicó fondos), negativo = la
-// disminuyó (liberó fondos) — literalmente el signo contrario al de
-// `origenAplicacionDe`. Por eso NO se reusa esa función acá.
+// La hoja de NOF es el mismo Estado de Origen y Aplicación de Fondos,
+// reagrupado por CTO/ONP/ARS en vez de por Origen/Aplicación/Ajuste — tiene
+// que respetar exactamente el mismo signo que la hoja 4 (positivo =
+// Origen, negativo = Aplicación) para que sea consistente y el Control
+// cierre en cero. Por eso usa la misma fórmula que `toLine`.
 function nofLine(r: NofAgg): RubroLine {
-  const origenAplicacion = r.saldoFinal - r.saldoInicio;
+  const origenAplicacion = origenAplicacionDe(r.saldoInicio, r.saldoFinal);
   return {
     codRubro: r.codRubro,
     nombre: r.nomRubro,
@@ -273,6 +275,7 @@ export async function computeInformeReport(informeId: string): Promise<InformeRe
           nomRubro: plan.rubro.nomRubro,
           categoriaOyA: plan.rubro.categoriaOyA,
           bucketNOF: plan.rubro.bucketNOF,
+          orden: plan.rubro.orden,
           tipoPartida: plan.partidaPatrimonial.tipo?.rol ?? null,
           tieneTipo: plan.partidaPatrimonial.tipo !== null,
           exigeSaldoCero: plan.partidaPatrimonial.tipo?.exigeSaldoCero ?? false,
@@ -286,8 +289,15 @@ export async function computeInformeReport(informeId: string): Promise<InformeRe
 
       // La clasificación fina por cuenta (Configuración → Categoría OyA)
       // gana si está seteada; si no, cae al default a nivel Rubro (atajo
-      // CTO/ONP/ARS cargado directo desde el ESP).
-      const bucketNOF = plan.categoriaOyA?.bucketNOF ?? plan.rubro.bucketNOF;
+      // CTO/ONP/ARS cargado directo desde el ESP). Los rubros AJUSTE quedan
+      // afuera de CTO/ONP/ARS: su aporte ya entra al NOF a través de
+      // "Resultados Acumulados S/Dif. Patrimonial" (la misma línea que en
+      // el OyAF) — sumarlos también acá los contaría dos veces y el
+      // Control dejaría de cerrar en cero.
+      const bucketNOF =
+        plan.rubro.categoriaOyA === "AJUSTE"
+          ? null
+          : (plan.categoriaOyA?.bucketNOF ?? plan.rubro.bucketNOF);
       if (bucketNOF) {
         const key = `${plan.rubroId}:${plan.categoriaOyAId}`;
         let nofAgg = nofMap.get(key);
@@ -334,40 +344,64 @@ export async function computeInformeReport(informeId: string): Promise<InformeRe
     }
   }
 
-  const activoRubros = rubros.filter((r) => r.tipoPartida === "ACTIVO");
-  const pasivoRubros = rubros.filter((r) => r.tipoPartida === "PASIVO");
-  const patrimonioNetoRubros = rubros.filter((r) => r.tipoPartida === "PATRIMONIO_NETO");
+  // Orden de exposición del ESP (Configuración → Rubro → Orden): de menor a
+  // mayor, con los rubros sin orden asignado al final en el orden en que se
+  // insertaron. Solo afecta el orden visual del Balance — el resto del
+  // informe no depende de esto.
+  function porOrdenDeExposicion(a: RubroAgg, b: RubroAgg): number {
+    if (a.orden !== null && b.orden !== null) return a.orden - b.orden;
+    if (a.orden !== null) return -1;
+    if (b.orden !== null) return 1;
+    return a.codRubro - b.codRubro;
+  }
+
+  const activoRubros = rubros.filter((r) => r.tipoPartida === "ACTIVO").sort(porOrdenDeExposicion);
+  const pasivoRubros = rubros.filter((r) => r.tipoPartida === "PASIVO").sort(porOrdenDeExposicion);
+  const patrimonioNetoRubros = rubros
+    .filter((r) => r.tipoPartida === "PATRIMONIO_NETO")
+    .sort(porOrdenDeExposicion);
   const resultadoRubros = rubros.filter((r) => r.tipoPartida === "RESULTADO");
   const balanceRubros = [...activoRubros, ...pasivoRubros, ...patrimonioNetoRubros];
 
-  // Crudo, sin convertir a "ganancia positiva": todo el resto de esta hoja
-  // (Pasivo, Patrimonio Neto) también se muestra en su signo de mayor tal
-  // cual, así que el Resultado del período tiene que seguir la misma
-  // convención para que el renglón "Control" cierre siempre en cero (es la
-  // identidad de partida doble: Activo + Pasivo + Patrimonio Neto + Resultado
-  // = 0, usando los saldos tal cual vienen, sin ningún signo dado vuelta).
-  const resultadoDelPeriodo = sum(resultadoRubros.map((r) => r.saldoFinal));
-  const resultadoDelPeriodoAnterior = sum(resultadoRubros.map((r) => r.saldoInicio));
-
-  // Si las cuentas de Resultado (Ingresos/Egresos) de este BSyS Acumulado no
-  // arrancan en cero — el "saldo inicio" del archivo no coincide con el
-  // comienzo real del ejercicio — esas cuentas ya traían una porción de
-  // resultado generada antes del período que cubre este informe. Sin esta
-  // línea, esa porción queda sin explicar en el Estado de Origen y Aplicación
-  // de Fondos y el total de Orígenes no cierra contra el de Aplicaciones. En
-  // una empresa donde el Acumulado sí arranca en cero, este valor da 0 y no
-  // se muestra ninguna línea.
-  const resultadoInicioNoDistribuido = -resultadoDelPeriodoAnterior;
+  // Crudo (Debe - Haber), sin convertir a exposición: se usa tal cual para
+  // armar la línea "Resultado del período" del Estado Patrimonial (hoja 2),
+  // que se expone junto con el resto de Patrimonio Neto vía
+  // paraExposicionESP más abajo.
+  const resultadoDelPeriodoRaw = sum(resultadoRubros.map((r) => r.saldoFinal));
+  const resultadoDelPeriodoAnteriorRaw = sum(resultadoRubros.map((r) => r.saldoInicio));
 
   const rdoPeriodoLine: RubroLine = {
     codRubro: -1,
     nombre: "Resultado del período",
-    saldoInicio: resultadoDelPeriodoAnterior,
-    saldoFinal: resultadoDelPeriodo,
-    variacion: resultadoDelPeriodo,
-    origenAplicacion: resultadoDelPeriodo,
+    saldoInicio: resultadoDelPeriodoAnteriorRaw,
+    saldoFinal: resultadoDelPeriodoRaw,
+    variacion: origenAplicacionDe(resultadoDelPeriodoAnteriorRaw, resultadoDelPeriodoRaw),
+    origenAplicacion: origenAplicacionDe(resultadoDelPeriodoAnteriorRaw, resultadoDelPeriodoRaw),
     bucketNOF: null,
   };
+
+  // Para el Estado de Origen y Aplicación de Fondos (hojas 4 y 5): el
+  // Resultado del período es una partida más, de saldo crédito-normal igual
+  // que Pasivo y Patrimonio Neto — es Origen cuando el saldo final (en
+  // exposición, no crudo) es mayor que el inicial, lo que suele darse porque
+  // el saldo inicial de Resultado debe ser cero por la refundición de
+  // cuenta. Mostrar el crudo tal cual (como se hacía antes) hace que una
+  // ganancia se lea negativa, exactamente al revés de lo que corresponde.
+  const resultadoDelPeriodo = -resultadoDelPeriodoRaw;
+
+  // Si las cuentas de Resultado (Ingresos/Egresos) de este BSyS Acumulado no
+  // arrancan en cero — el "saldo inicio" del archivo no coincide con el
+  // comienzo real del ejercicio — esas cuentas ya traían una porción de
+  // resultado generada antes del período que cubre este informe. Junto con
+  // la línea de arriba, esto explica el movimiento completo de Resultado
+  // (Ri - Rf, el mismo criterio mecánico que el resto de esta hoja) sin
+  // volver a contar esa porción dos veces. En una empresa donde el
+  // Acumulado sí arranca en cero, este valor da 0 y no se muestra ninguna
+  // línea.
+  const resultadoInicioNoDistribuido = resultadoDelPeriodoAnteriorRaw;
+  // No se usa para ninguna línea del informe (queda por simetría de tipo) —
+  // mismo signo invertido que `resultadoDelPeriodo`.
+  const resultadoDelPeriodoAnterior = -resultadoDelPeriodoAnteriorRaw;
 
   const activo = paraExposicionESP(activoRubros.map(toLine), "ACTIVO");
   const pasivo = paraExposicionESP(pasivoRubros.map(toLine), "PASIVO");

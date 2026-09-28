@@ -4,6 +4,7 @@ import { useState, useTransition } from "react";
 import {
   updateRubroCategoriaOyA,
   updateRubroNombre,
+  updateRubroOrden,
   checkDeleteRubro,
   deleteRubro,
 } from "@/lib/rubro-actions";
@@ -13,14 +14,17 @@ export function RubroClasificacionRow({
   codRubro,
   nomRubro,
   categoriaOyA,
+  orden,
 }: {
   codRubro: number;
   nomRubro: string;
   categoriaOyA: string | null;
+  orden: number | null;
 }) {
   const [pending, startTransition] = useTransition();
   const [editing, setEditing] = useState(false);
   const [nombreValue, setNombreValue] = useState(nomRubro);
+  const [ordenValue, setOrdenValue] = useState(orden === null ? "" : String(orden));
 
   function guardarNombre() {
     startTransition(async () => {
@@ -59,6 +63,19 @@ export function RubroClasificacionRow({
           <option value="APLICACION">Aplicación</option>
           <option value="AJUSTE">Ajuste Ejercicios Anteriores</option>
         </select>
+      </td>
+      <td className="py-2 pr-4">
+        <input
+          type="number"
+          value={ordenValue}
+          onChange={(e) => setOrdenValue(e.target.value)}
+          onBlur={() => {
+            if (ordenValue === (orden === null ? "" : String(orden))) return;
+            startTransition(() => updateRubroOrden(codRubro, ordenValue));
+          }}
+          disabled={pending}
+          className="w-20 rounded border px-2 py-1 text-lg"
+        />
       </td>
       <td className="py-2 pr-4">
         <div className="flex gap-2">

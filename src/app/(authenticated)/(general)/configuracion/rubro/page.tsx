@@ -41,6 +41,7 @@ export default async function RubroPage() {
               <th className="py-1 pr-4">Código</th>
               <th className="py-1 pr-4">Nombre</th>
               <th className="py-1 pr-4">Origen / Aplicación</th>
+              <th className="py-1 pr-4">Orden en el ESP</th>
               <th className="py-1 pr-4">Acciones</th>
             </tr>
           </thead>
@@ -51,6 +52,7 @@ export default async function RubroPage() {
                 codRubro={rubro.codRubro}
                 nomRubro={rubro.nomRubro}
                 categoriaOyA={rubro.categoriaOyA}
+                orden={rubro.orden}
               />
             ))}
           </tbody>
