@@ -2,7 +2,7 @@
 
 import { revalidatePath } from "next/cache";
 import { prisma } from "@/lib/prisma";
-import type { CategoriaOrigenAplicacion } from "@/generated/prisma/enums";
+import type { CategoriaOrigenAplicacion, BucketNOF } from "@/generated/prisma/enums";
 import type { DeleteCheckResult } from "@/components/ConfirmDeleteButton";
 
 export async function listRubrosConClasificacion() {
@@ -14,6 +14,15 @@ export async function updateRubroCategoriaOyA(codRubro: number, value: string) {
     value === "ORIGEN" || value === "APLICACION" || value === "AJUSTE" ? value : null;
   await prisma.rubro.update({ where: { codRubro }, data: { categoriaOyA } });
   revalidatePath("/configuracion/rubro");
+}
+
+// Default de NOF a nivel Rubro — atajo "CTO/ONP/ARS" cargado directo desde
+// el ESP. Convive con la clasificación fina por cuenta (Configuración →
+// Categoría OyA), que sigue ganando si está seteada (ver computeInformeReport).
+export async function updateRubroBucketNOF(codRubro: number, value: string) {
+  const bucketNOF: BucketNOF | null =
+    value === "OPERATIVO" || value === "NO_OPERATIVO" || value === "FINANCIAMIENTO" ? value : null;
+  await prisma.rubro.update({ where: { codRubro }, data: { bucketNOF } });
 }
 
 export async function updateRubroNombre(codRubro: number, nomRubro: string) {

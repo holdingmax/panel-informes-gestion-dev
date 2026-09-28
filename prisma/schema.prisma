@@ -191,6 +191,10 @@ model Rubro {
   codRubro     Int                        @id @default(autoincrement())
   nomRubro     String                     @unique @db.VarChar(60)
   categoriaOyA CategoriaOrigenAplicacion?
+  // Default de NOF a nivel Rubro (atajo "CTO/ONP/ARS" desde el ESP) — una
+  // cuenta puntual clasificada en Configuración → Categoría OyA sigue
+  // ganando por sobre este default (ver computeInformeReport).
+  bucketNOF    BucketNOF?
   planes       PlanDeCuentas[]
 }
 
