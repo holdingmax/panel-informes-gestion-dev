@@ -3,12 +3,36 @@
 import { revalidatePath } from "next/cache";
 import { prisma } from "@/lib/prisma";
 import { computeResultadoNominalMes } from "@/lib/resultado-nominal";
+import type { DeleteCheckResult } from "@/components/ConfirmDeleteButton";
 
 export async function listInformes(unidadNegocioId: number) {
   return prisma.informe.findMany({
     where: { unidadNegocioId },
     orderBy: [{ periodoAnio: "desc" }, { periodoMes: "desc" }],
   });
+}
+
+// Editar/Eliminar un Informe solo tiene sentido mientras está "En proceso":
+// una vez que avanza a En Revisión (y sobre todo a Aprobado, que ya
+// completó Resultados Históricos) borrarlo dejaría ese dato histórico
+// huérfano de su informe de origen.
+export async function checkDeleteInforme(informeId: string): Promise<DeleteCheckResult> {
+  const informe = await prisma.informe.findUniqueOrThrow({ where: { id: informeId } });
+  if (informe.estado !== "PROCESO") {
+    return {
+      blocked: true,
+      reason: "Solo se puede eliminar un informe mientras está En proceso.",
+    };
+  }
+  return { blocked: false };
+}
+
+export async function deleteInforme(informeId: string) {
+  const check = await checkDeleteInforme(informeId);
+  if (check.blocked) throw new Error(check.reason);
+
+  const informe = await prisma.informe.delete({ where: { id: informeId } });
+  revalidatePath(`/empresa/${informe.unidadNegocioId}/historico`);
 }
 
 const SIGUIENTE_ESTADO = {

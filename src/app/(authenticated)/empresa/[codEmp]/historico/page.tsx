@@ -1,5 +1,6 @@
 import { listInformes } from "@/lib/informe-actions";
 import { HistoricoRowLinks } from "./HistoricoRowLinks";
+import { InformeAcciones } from "./InformeAcciones";
 
 export const dynamic = "force-dynamic";
 
@@ -42,26 +43,36 @@ export default async function HistoricoPage({
           Todavía no hay informes. Se crean automáticamente al cargar BSyS Mes o Acumulado.
         </p>
       ) : (
-        <table className="mt-4 w-full max-w-xl text-left text-sm">
+        <table className="mt-4 w-full max-w-3xl text-left text-sm">
           <thead>
             <tr>
               <th className="py-1">Período</th>
               <th className="py-1">Estado</th>
               <th className="py-1">Ver informe</th>
+              <th className="py-1">Acciones</th>
             </tr>
           </thead>
           <tbody>
-            {informes.map((informe) => (
-              <tr key={informe.id} className="border-t">
-                <td className="py-2">
-                  {MESES[informe.periodoMes - 1]} {informe.periodoAnio}
-                </td>
-                <td className="py-2">{ESTADO_LABEL[informe.estado] ?? informe.estado}</td>
-                <td className="py-2">
-                  <HistoricoRowLinks codEmp={codEmp} informeId={informe.id} />
-                </td>
-              </tr>
-            ))}
+            {informes.map((informe) => {
+              const periodoLabel = `${MESES[informe.periodoMes - 1]} ${informe.periodoAnio}`;
+              return (
+                <tr key={informe.id} className="border-t">
+                  <td className="py-2">{periodoLabel}</td>
+                  <td className="py-2">{ESTADO_LABEL[informe.estado] ?? informe.estado}</td>
+                  <td className="py-2">
+                    <HistoricoRowLinks codEmp={codEmp} informeId={informe.id} />
+                  </td>
+                  <td className="py-2">
+                    <InformeAcciones
+                      codEmp={codEmp}
+                      informeId={informe.id}
+                      estado={informe.estado}
+                      periodoLabel={periodoLabel}
+                    />
+                  </td>
+                </tr>
+              );
+            })}
           </tbody>
         </table>
       )}
