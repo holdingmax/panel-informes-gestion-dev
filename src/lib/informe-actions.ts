@@ -49,7 +49,8 @@ const SIGUIENTE_ESTADO = {
 export async function avanzarEstadoInforme(informeId: string) {
   await requireUser();
   const informe = await prisma.informe.findUniqueOrThrow({ where: { id: informeId } });
-  const siguiente = SIGUIENTE_ESTADO[informe.estado];
+  const estadoActual = informe.estado;
+  const siguiente = SIGUIENTE_ESTADO[estadoActual];
   if (!siguiente) return;
 
   // Solo ADMIN puede aprobar o dar por definitivo un informe — un USER
@@ -58,20 +59,37 @@ export async function avanzarEstadoInforme(informeId: string) {
     await requireAdmin();
   }
 
-  await prisma.informe.update({ where: { id: informeId }, data: { estado: siguiente } });
+  // Se calcula ANTES de la transacción (es una lectura pura) para no dejar
+  // la transacción abierta más tiempo del necesario.
+  const valores =
+    siguiente === "APROBADO"
+      ? (
+          await computeResultadoNominalMes(
+            informe.unidadNegocioId,
+            informe.periodoMes,
+            informe.periodoAnio
+          )
+        ).valores
+      : null;
 
-  // Al aprobar por primera vez, la tabla Resultados Históricos de la unidad
-  // de negocio se completa con el período de este informe. Nunca se pisa un
-  // período que ya tiene datos (ni de una aprobación anterior ni de una
-  // carga histórica manual) — create-only, no update.
-  if (siguiente === "APROBADO") {
-    const { valores } = await computeResultadoNominalMes(
-      informe.unidadNegocioId,
-      informe.periodoMes,
-      informe.periodoAnio
-    );
-    if (valores) {
-      await prisma.resultadosHistoricos.upsert({
+  await prisma.$transaction(async (tx) => {
+    // updateMany (no update) para que dos clics simultáneos no salteen un
+    // estado: si el estado ya cambió desde que se leyó arriba, count da 0 y
+    // se corta en vez de pisar un avance que ya hizo otra pestaña/usuario.
+    const resultado = await tx.informe.updateMany({
+      where: { id: informeId, estado: estadoActual },
+      data: { estado: siguiente },
+    });
+    if (resultado.count === 0) {
+      throw new Error("El informe cambió de estado. Recargá la página.");
+    }
+
+    // Al aprobar por primera vez, la tabla Resultados Históricos de la
+    // unidad de negocio se completa con el período de este informe. Nunca
+    // se pisa un período que ya tiene datos (ni de una aprobación anterior
+    // ni de una carga histórica manual) — create-only, no update.
+    if (siguiente === "APROBADO" && valores) {
+      await tx.resultadosHistoricos.upsert({
         where: {
           unidadNegocioId_periodoMes_periodoAnio: {
             unidadNegocioId: informe.unidadNegocioId,
@@ -92,7 +110,7 @@ export async function avanzarEstadoInforme(informeId: string) {
         },
       });
     }
-  }
+  });
 
   revalidatePath(`/empresa/${informe.unidadNegocioId}/informe/${informeId}`);
   revalidatePath(`/empresa/${informe.unidadNegocioId}/historico`);

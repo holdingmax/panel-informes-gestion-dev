@@ -18,13 +18,20 @@ enum Role {
 }
 
 model User {
-  id                 String   @id @default(cuid())
-  username           String   @unique
+  id                 String    @id @default(cuid())
+  username           String    @unique
   passwordHash       String
-  role               Role     @default(USER)
+  role               Role      @default(USER)
   securityQuestion   String
   securityAnswerHash String
-  active             Boolean  @default(true)
+  active             Boolean   @default(true)
+  // Límite de intentos del recupero de contraseña por pregunta de
+  // seguridad: a los 5 intentos fallidos seguidos se bloquea 30 minutos.
+  failedResetAttempts Int      @default(0)
+  resetLockedUntil    DateTime?
+  // Mismo esquema para el login.
+  failedLoginAttempts Int      @default(0)
+  loginLockedUntil    DateTime?
   createdAt          DateTime @default(now())
   updatedAt          DateTime @updatedAt
 }

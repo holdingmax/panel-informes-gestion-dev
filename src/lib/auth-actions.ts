@@ -5,6 +5,8 @@ import { prisma } from "@/lib/prisma";
 import { requireAdmin } from "@/lib/authz";
 
 const SALT_ROUNDS = 12;
+const MAX_INTENTOS_RESET = 5;
+const BLOQUEO_RESET_MINUTOS = 30;
 
 export async function listUsers() {
   await requireAdmin();
@@ -94,14 +96,40 @@ export async function resetPasswordViaSecurityQuestion(input: {
 
   if (!user || !user.active) return genericError;
 
+  // Mismo error genérico para no revelar si el usuario está bloqueado o si
+  // directamente no existe.
+  if (user.resetLockedUntil && user.resetLockedUntil > new Date()) {
+    return genericError;
+  }
+
   const answerMatches = await bcrypt.compare(
     input.answer.trim().toLowerCase(),
     user.securityAnswerHash
   );
-  if (!answerMatches) return genericError;
+  if (!answerMatches) {
+    const intentos = user.failedResetAttempts + 1;
+    if (intentos >= MAX_INTENTOS_RESET) {
+      await prisma.user.update({
+        where: { id: user.id },
+        data: {
+          failedResetAttempts: 0,
+          resetLockedUntil: new Date(Date.now() + BLOQUEO_RESET_MINUTOS * 60 * 1000),
+        },
+      });
+    } else {
+      await prisma.user.update({
+        where: { id: user.id },
+        data: { failedResetAttempts: intentos },
+      });
+    }
+    return genericError;
+  }
 
   const passwordHash = await bcrypt.hash(input.newPassword, SALT_ROUNDS);
-  await prisma.user.update({ where: { id: user.id }, data: { passwordHash } });
+  await prisma.user.update({
+    where: { id: user.id },
+    data: { passwordHash, failedResetAttempts: 0, resetLockedUntil: null },
+  });
 
   return { success: true as const };
 }

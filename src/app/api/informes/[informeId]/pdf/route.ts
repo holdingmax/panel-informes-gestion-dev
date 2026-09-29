@@ -1,4 +1,5 @@
 import { renderToBuffer } from "@react-pdf/renderer";
+import { auth } from "@/auth";
 import { prisma } from "@/lib/prisma";
 import { computeInformeReport } from "@/lib/balance-oya-report";
 import { InformePDF } from "@/lib/informe-pdf";
@@ -7,6 +8,9 @@ export async function GET(
   _request: Request,
   { params }: { params: Promise<{ informeId: string }> }
 ) {
+  const session = await auth();
+  if (!session?.user) return new Response(null, { status: 401 });
+
   const { informeId } = await params;
 
   const informe = await prisma.informe.findUnique({ where: { id: informeId } });
