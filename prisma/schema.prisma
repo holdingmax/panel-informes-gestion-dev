@@ -128,6 +128,12 @@ model BalanceSumasYSaldos {
   empresa          Empresa    @relation(fields: [empresaId], references: [codEmp])
   empresaId        Int
   tipo             TipoBSyS
+  // Período que cubre esta carga (no el período en que se subió el
+  // archivo): el motor de informes filtra por esto, no solo por
+  // fechaCarga más reciente, para que aprobar un período nuevo no
+  // cambie los números de uno ya cerrado.
+  periodoMes       Int
+  periodoAnio      Int
   fechaCarga       DateTime
   cuenta           String     @db.VarChar(90)
   saldoIniDebe     Decimal    @db.Decimal(18, 2)
@@ -138,6 +144,8 @@ model BalanceSumasYSaldos {
   saldoCierreHaber Decimal    @db.Decimal(18, 2)
   estado           EstadoBSyS @default(PROVISORIO)
   createdAt        DateTime   @default(now())
+
+  @@index([empresaId, tipo, periodoAnio, periodoMes, fechaCarga])
 }
 
 // El "rol" interno que el motor de informes necesita para saber en qué

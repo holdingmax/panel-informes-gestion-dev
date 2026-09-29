@@ -83,6 +83,18 @@ export async function importBsysCombinado(formData: FormData): Promise<ImportBsy
 
   const unidad = await prisma.unidadNegocio.findUniqueOrThrow({ where: { codUnidad: unidadNegocioId } });
 
+  // Si el informe de este período ya avanzó de estado, recargar el BSyS
+  // cambiaría números que ya se dieron por cerrados (y, si ya está
+  // Aprobado, Resultados Históricos quedaría desincronizado). Un informe
+  // que todavía no existe para este período sí se puede cargar sin
+  // restricción — es la primera carga.
+  const informeExistente = await prisma.informe.findUnique({
+    where: { unidadNegocioId_periodoMes_periodoAnio: { unidadNegocioId, periodoMes, periodoAnio } },
+  });
+  if (informeExistente && informeExistente.estado !== "PROCESO") {
+    return { error: "El informe de este período ya no está En proceso. No se puede recargar el BSyS." };
+  }
+
   const empresas = await prisma.empresa.findMany({
     where: { codEmp: { in: empresaIds }, unidadNegocioId },
   });
@@ -216,6 +228,8 @@ export async function importBsysCombinado(formData: FormData): Promise<ImportBsy
     rows.map((r) => ({
       empresaId,
       tipo,
+      periodoMes,
+      periodoAnio,
       fechaCarga,
       cuenta: r.cuenta,
       saldoIniDebe: r.saldoIniDebe,
@@ -228,6 +242,17 @@ export async function importBsysCombinado(formData: FormData): Promise<ImportBsy
 
   const informeId = await prisma.$transaction(async (tx) => {
     for (const p of parsedPorEmpresa) {
+      // Reemplaza la carga anterior de este mismo período (si la había) en
+      // vez de apilarla — el informe siempre lee "la carga de este
+      // período", no "la más reciente entre todas", así que dejar filas
+      // viejas del mismo período no aporta nada y solo arriesga que un bug
+      // futuro las vuelva a sumar.
+      await tx.balanceSumasYSaldos.deleteMany({
+        where: { empresaId: p.empresaId, tipo: "MES", periodoMes, periodoAnio },
+      });
+      await tx.balanceSumasYSaldos.deleteMany({
+        where: { empresaId: p.empresaId, tipo: "ACUMULADO", periodoMes, periodoAnio },
+      });
       await tx.balanceSumasYSaldos.createMany({ data: toData(p.rowsMes, "MES", p.empresaId) });
       await tx.balanceSumasYSaldos.createMany({
         data: toData(p.rowsAcumulado, "ACUMULADO", p.empresaId),

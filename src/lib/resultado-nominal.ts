@@ -31,20 +31,29 @@ function vacio(): ResultadoNominal {
   };
 }
 
+function fmtPeriodo(mes: number, anio: number): string {
+  return `${String(mes).padStart(2, "0")}/${anio}`;
+}
+
 // El BSyS "Mes" trae, para cada cuenta, el saldo acumulado a fin del mes
 // anterior (saldo inicio) y a fin de este mes (saldo cierre) — el movimiento
 // propio del mes es la diferencia entre ambos, no el saldo de cierre solo.
 async function computeResultadoNominalMesDeEmpresa(
   empresaId: number,
-  empresaNombre: string
+  empresaNombre: string,
+  periodoMes: number,
+  periodoAnio: number
 ): Promise<{
   valores: ResultadoNominal | null;
   fechaCarga: Date | null;
   advertencias: string[];
 }> {
   const advertencias: string[] = [];
+  // fechaCarga desc solo desempata DENTRO del período (por si alguna vez
+  // hay más de una carga del mismo mes) — el filtro real es el período,
+  // no "la carga más reciente entre todas".
   const ultimoMes = await prisma.balanceSumasYSaldos.findFirst({
-    where: { empresaId, tipo: "MES" },
+    where: { empresaId, tipo: "MES", periodoMes, periodoAnio },
     orderBy: { fechaCarga: "desc" },
     select: { fechaCarga: true },
   });
@@ -52,12 +61,14 @@ async function computeResultadoNominalMesDeEmpresa(
     return {
       valores: null,
       fechaCarga: null,
-      advertencias: [`No hay ningún BSyS Mes cargado para "${empresaNombre}".`],
+      advertencias: [
+        `No hay BSyS Mes cargado para "${empresaNombre}" en el período ${fmtPeriodo(periodoMes, periodoAnio)}.`,
+      ],
     };
   }
 
   const balances = await prisma.balanceSumasYSaldos.findMany({
-    where: { empresaId, tipo: "MES", fechaCarga: ultimoMes.fechaCarga },
+    where: { empresaId, tipo: "MES", periodoMes, periodoAnio, fechaCarga: ultimoMes.fechaCarga },
   });
 
   const planDeCuentas = await prisma.planDeCuentas.findMany({
@@ -99,11 +110,15 @@ async function computeResultadoNominalMesDeEmpresa(
 }
 
 // Una Unidad de Negocio puede combinar el resultado de varias Empresas: se
-// consolida sumando el resultado nominal del mes más reciente de cada una.
-// Si alguna empresa vinculada todavía no tiene ningún BSyS Mes cargado, su
-// aporte queda en cero y se advierte, pero no bloquea el cálculo de las
-// demás.
-export async function computeResultadoNominalMes(unidadNegocioId: number): Promise<{
+// consolida sumando el resultado nominal del período pedido de cada una. Si
+// alguna empresa vinculada todavía no tiene BSyS Mes cargado para ese
+// período, su aporte queda en cero y se advierte, pero no bloquea el
+// cálculo de las demás.
+export async function computeResultadoNominalMes(
+  unidadNegocioId: number,
+  periodoMes: number,
+  periodoAnio: number
+): Promise<{
   valores: ResultadoNominal | null;
   fechaCarga: Date | null;
   advertencias: string[];
@@ -118,7 +133,7 @@ export async function computeResultadoNominalMes(unidadNegocioId: number): Promi
   }
 
   const porEmpresa = await Promise.all(
-    empresas.map((e) => computeResultadoNominalMesDeEmpresa(e.codEmp, e.nombreEmp))
+    empresas.map((e) => computeResultadoNominalMesDeEmpresa(e.codEmp, e.nombreEmp, periodoMes, periodoAnio))
   );
 
   const advertencias = porEmpresa.flatMap((r) => r.advertencias);

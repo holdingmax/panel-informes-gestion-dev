@@ -101,8 +101,12 @@ async function main() {
   console.log(`Acumulado: ${filasAcumulado.length} filas. Mes: ${filasMes.length} filas.`);
 
   await prisma.$transaction(async (tx) => {
-    await tx.balanceSumasYSaldos.createMany({ data: filasAcumulado });
-    await tx.balanceSumasYSaldos.createMany({ data: filasMes });
+    await tx.balanceSumasYSaldos.createMany({
+      data: filasAcumulado.map((f) => ({ ...f, periodoMes, periodoAnio })),
+    });
+    await tx.balanceSumasYSaldos.createMany({
+      data: filasMes.map((f) => ({ ...f, periodoMes, periodoAnio })),
+    });
     await tx.informe.upsert({
       where: { unidadNegocioId_periodoMes_periodoAnio: { unidadNegocioId, periodoMes, periodoAnio } },
       update: {},

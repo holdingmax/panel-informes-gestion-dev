@@ -54,7 +54,11 @@ export async function avanzarEstadoInforme(informeId: string) {
   // período que ya tiene datos (ni de una aprobación anterior ni de una
   // carga histórica manual) — create-only, no update.
   if (siguiente === "APROBADO") {
-    const { valores } = await computeResultadoNominalMes(informe.unidadNegocioId);
+    const { valores } = await computeResultadoNominalMes(
+      informe.unidadNegocioId,
+      informe.periodoMes,
+      informe.periodoAnio
+    );
     if (valores) {
       await prisma.resultadosHistoricos.upsert({
         where: {

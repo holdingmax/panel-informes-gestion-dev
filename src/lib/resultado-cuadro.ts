@@ -132,8 +132,11 @@ export async function computeResultadoCuadro(informeId: string): Promise<Resulta
   const tieneAjustePorInflacion = empresas.some((e) => e.actualiza);
   const tieneMonedaSecundaria = monedaSecundaria !== null;
 
-  const { valores: actualRaw, advertencias: advertenciasMes } =
-    await computeResultadoNominalMes(unidadNegocioId);
+  const { valores: actualRaw, advertencias: advertenciasMes } = await computeResultadoNominalMes(
+    unidadNegocioId,
+    periodoMes,
+    periodoAnio
+  );
   advertencias.push(...advertenciasMes);
   const actual = actualRaw ?? vacio();
 

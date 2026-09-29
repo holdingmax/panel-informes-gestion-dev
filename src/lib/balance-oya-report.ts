@@ -224,14 +224,25 @@ export async function computeInformeReport(informeId: string): Promise<InformeRe
   let fechaCargaAcumulado: Date | null = null;
 
   for (const empresa of empresas) {
+    // Filtrado por el período del informe, no por "la carga más reciente
+    // entre todas" — así el informe de un período ya cerrado no cambia si
+    // después se carga un período posterior. fechaCarga desc solo
+    // desempata dentro del propio período.
     const ultimoAcumulado = await prisma.balanceSumasYSaldos.findFirst({
-      where: { empresaId: empresa.codEmp, tipo: "ACUMULADO" },
+      where: {
+        empresaId: empresa.codEmp,
+        tipo: "ACUMULADO",
+        periodoMes: informe.periodoMes,
+        periodoAnio: informe.periodoAnio,
+      },
       orderBy: { fechaCarga: "desc" },
       select: { fechaCarga: true },
     });
 
     if (!ultimoAcumulado) {
-      advertencias.push(`Todavía no se cargó ningún BSyS Acumulado para "${empresa.nombreEmp}".`);
+      advertencias.push(
+        `No hay BSyS Acumulado cargado para "${empresa.nombreEmp}" en el período ${formatPeriodoAbrev(informe.periodoMes, informe.periodoAnio)}.`
+      );
       continue;
     }
     if (!fechaCargaAcumulado || ultimoAcumulado.fechaCarga > fechaCargaAcumulado) {
@@ -242,6 +253,8 @@ export async function computeInformeReport(informeId: string): Promise<InformeRe
       where: {
         empresaId: empresa.codEmp,
         tipo: "ACUMULADO",
+        periodoMes: informe.periodoMes,
+        periodoAnio: informe.periodoAnio,
         fechaCarga: ultimoAcumulado.fechaCarga,
       },
     });
@@ -550,7 +563,12 @@ export async function getDetalleRubro(informeId: string, codRubro: number): Prom
 
   for (const empresa of empresas) {
     const ultimoAcumulado = await prisma.balanceSumasYSaldos.findFirst({
-      where: { empresaId: empresa.codEmp, tipo: "ACUMULADO" },
+      where: {
+        empresaId: empresa.codEmp,
+        tipo: "ACUMULADO",
+        periodoMes: informe.periodoMes,
+        periodoAnio: informe.periodoAnio,
+      },
       orderBy: { fechaCarga: "desc" },
       select: { fechaCarga: true },
     });
@@ -564,7 +582,13 @@ export async function getDetalleRubro(informeId: string, codRubro: number): Prom
     const porCuenta = new Map(planDeCuentas.map((p) => [normalizeCuenta(p.cuenta), p]));
 
     const balances = await prisma.balanceSumasYSaldos.findMany({
-      where: { empresaId: empresa.codEmp, tipo: "ACUMULADO", fechaCarga: ultimoAcumulado.fechaCarga },
+      where: {
+        empresaId: empresa.codEmp,
+        tipo: "ACUMULADO",
+        periodoMes: informe.periodoMes,
+        periodoAnio: informe.periodoAnio,
+        fechaCarga: ultimoAcumulado.fechaCarga,
+      },
     });
 
     for (const b of balances) {
