@@ -54,3 +54,9 @@ Puntos específicos de Render (no aplican en Vercel, que es donde Next.js apunta
 
 - Auth.js necesita `trustHost: true` (ya configurado en `src/auth.ts`) porque Render no se detecta automáticamente como host confiable — sin esto, todo login en producción falla con `UntrustedHost`.
 - Render no soporta cron/edge functions especiales; `next start` corre como servidor Node.js normal, que es justamente lo que Next.js necesita como mínimo — no requiere adapters ni `output: "standalone"`.
+
+## Migraciones
+
+Todo cambio de schema pasa por `npm run db:migrate` (`prisma migrate dev`), que genera un archivo en `prisma/migrations/` y lo aplica en local. **`prisma db push` queda prohibido** — no deja rastro en `prisma/migrations/`, así que una base nueva (o el deploy de Render, que corre `prisma migrate deploy`) queda con un schema incompleto.
+
+En producción las migraciones se aplican solas en el build de Render (`prisma migrate deploy`, ver más arriba) — nunca a mano contra la base de producción salvo indicación explícita.
