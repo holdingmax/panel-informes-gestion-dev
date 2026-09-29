@@ -15,11 +15,13 @@ export function TipoPartidaRow({
   nomTipo,
   rol,
   exigeSaldoCero,
+  isAdmin,
 }: {
   codTipo: number;
   nomTipo: string;
   rol: string | null;
   exigeSaldoCero: boolean;
+  isAdmin: boolean;
 }) {
   const [pending, startTransition] = useTransition();
   const [editing, setEditing] = useState(false);
@@ -49,24 +51,28 @@ export function TipoPartidaRow({
         )}
       </td>
       <td className="py-2 pr-4">
-        <select
-          defaultValue={rol ?? ""}
-          disabled={pending}
-          onChange={(e) => startTransition(() => updateTipoPartidaRol(codTipo, e.target.value))}
-          className="rounded border px-2 py-1 text-lg"
-        >
-          <option value="">Sin rol (fuera del Balance/Resultado)</option>
-          <option value="ACTIVO">Activo (Balance)</option>
-          <option value="PASIVO">Pasivo (Balance)</option>
-          <option value="PATRIMONIO_NETO">Patrimonio Neto (Balance)</option>
-          <option value="RESULTADO">Resultado (Ingresos/Egresos)</option>
-        </select>
+        {isAdmin ? (
+          <select
+            defaultValue={rol ?? ""}
+            disabled={pending}
+            onChange={(e) => startTransition(() => updateTipoPartidaRol(codTipo, e.target.value))}
+            className="rounded border px-2 py-1 text-lg"
+          >
+            <option value="">Sin rol (fuera del Balance/Resultado)</option>
+            <option value="ACTIVO">Activo (Balance)</option>
+            <option value="PASIVO">Pasivo (Balance)</option>
+            <option value="PATRIMONIO_NETO">Patrimonio Neto (Balance)</option>
+            <option value="RESULTADO">Resultado (Ingresos/Egresos)</option>
+          </select>
+        ) : (
+          rol ?? "Sin rol"
+        )}
       </td>
       <td className="py-2 pr-4">
         <input
           type="checkbox"
           defaultChecked={exigeSaldoCero}
-          disabled={pending}
+          disabled={pending || !isAdmin}
           onChange={(e) =>
             startTransition(() => updateTipoPartidaExigeSaldoCero(codTipo, e.target.checked))
           }
@@ -74,46 +80,48 @@ export function TipoPartidaRow({
         />
       </td>
       <td className="py-2 pr-4">
-        <div className="flex gap-2">
-          {editing ? (
-            <>
-              <button
-                type="button"
-                onClick={guardarNombre}
-                disabled={pending}
-                className="rounded-md bg-accent px-2.5 py-1.5 text-sm text-white transition-colors hover:bg-accent-hover disabled:cursor-not-allowed disabled:opacity-50"
-              >
-                Guardar
-              </button>
-              <button
-                type="button"
-                onClick={() => {
-                  setNombreValue(nomTipo);
-                  setEditing(false);
-                }}
-                disabled={pending}
-                className="rounded-md border border-slate-300 px-2.5 py-1.5 text-sm text-slate-700 hover:bg-slate-50"
-              >
-                Cancelar
-              </button>
-            </>
-          ) : (
-            <>
-              <button
-                type="button"
-                onClick={() => setEditing(true)}
-                className="rounded-md border border-slate-300 px-2.5 py-1.5 text-sm text-slate-700 transition-colors hover:bg-slate-50 focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-accent focus-visible:ring-offset-2"
-              >
-                Editar
-              </button>
-              <ConfirmDeleteButton
-                itemLabel={`"${nomTipo}"`}
-                check={() => checkDeleteTipoPartida(codTipo)}
-                onConfirm={() => deleteTipoPartida(codTipo)}
-              />
-            </>
-          )}
-        </div>
+        {isAdmin && (
+          <div className="flex gap-2">
+            {editing ? (
+              <>
+                <button
+                  type="button"
+                  onClick={guardarNombre}
+                  disabled={pending}
+                  className="rounded-md bg-accent px-2.5 py-1.5 text-sm text-white transition-colors hover:bg-accent-hover disabled:cursor-not-allowed disabled:opacity-50"
+                >
+                  Guardar
+                </button>
+                <button
+                  type="button"
+                  onClick={() => {
+                    setNombreValue(nomTipo);
+                    setEditing(false);
+                  }}
+                  disabled={pending}
+                  className="rounded-md border border-slate-300 px-2.5 py-1.5 text-sm text-slate-700 hover:bg-slate-50"
+                >
+                  Cancelar
+                </button>
+              </>
+            ) : (
+              <>
+                <button
+                  type="button"
+                  onClick={() => setEditing(true)}
+                  className="rounded-md border border-slate-300 px-2.5 py-1.5 text-sm text-slate-700 transition-colors hover:bg-slate-50 focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-accent focus-visible:ring-offset-2"
+                >
+                  Editar
+                </button>
+                <ConfirmDeleteButton
+                  itemLabel={`"${nomTipo}"`}
+                  check={() => checkDeleteTipoPartida(codTipo)}
+                  onConfirm={() => deleteTipoPartida(codTipo)}
+                />
+              </>
+            )}
+          </div>
+        )}
       </td>
     </tr>
   );

@@ -3,8 +3,10 @@
 import { revalidatePath } from "next/cache";
 import { prisma } from "@/lib/prisma";
 import type { DeleteCheckResult } from "@/components/ConfirmDeleteButton";
+import { requireUser, requireAdmin } from "@/lib/authz";
 
 export async function listSeriesEIndicesTablas() {
+  await requireUser();
   const tablas = await prisma.seriesEIndicesTabla.findMany({
     orderBy: { codTabla: "asc" },
     include: {
@@ -15,10 +17,12 @@ export async function listSeriesEIndicesTablas() {
 }
 
 export async function getSeriesEIndicesTabla(codTabla: number) {
+  await requireUser();
   return prisma.seriesEIndicesTabla.findUnique({ where: { codTabla } });
 }
 
 export async function createSeriesEIndicesTabla(formData: FormData) {
+  await requireAdmin();
   const tipoTabla = String(formData.get("tipoTabla") ?? "").trim();
   if (!tipoTabla) throw new Error("El tipo de tabla es obligatorio");
   if (tipoTabla.length > 60) throw new Error("El tipo de tabla no puede superar 60 caracteres");
@@ -28,6 +32,7 @@ export async function createSeriesEIndicesTabla(formData: FormData) {
 }
 
 export async function updateSeriesEIndicesTabla(codTabla: number, tipoTabla: string) {
+  await requireAdmin();
   const value = tipoTabla.trim();
   if (!value) throw new Error("El tipo de tabla es obligatorio");
   if (value.length > 60) throw new Error("El tipo de tabla no puede superar 60 caracteres");
@@ -37,6 +42,7 @@ export async function updateSeriesEIndicesTabla(codTabla: number, tipoTabla: str
 }
 
 export async function checkDeleteSeriesEIndicesTabla(codTabla: number): Promise<DeleteCheckResult> {
+  await requireUser();
   const unidades = await prisma.unidadNegocio.findMany({
     where: { seriesTablaId: codTabla },
     select: { nombreUnidad: true },
@@ -49,6 +55,7 @@ export async function checkDeleteSeriesEIndicesTabla(codTabla: number): Promise<
 }
 
 export async function deleteSeriesEIndicesTabla(codTabla: number) {
+  await requireAdmin();
   const check = await checkDeleteSeriesEIndicesTabla(codTabla);
   if (check.blocked) throw new Error(check.reason);
 
@@ -61,6 +68,7 @@ export async function deleteSeriesEIndicesTabla(codTabla: number) {
 // Una unidad solo puede usar una tabla a la vez: si ya estaba vinculada a
 // otra, queda reasignada a esta.
 export async function vincularUnidadesATabla(formData: FormData) {
+  await requireAdmin();
   const codTabla = Number(formData.get("codTabla"));
   const unidadIds = formData.getAll("unidadIds").map(Number).filter(Number.isFinite);
 
@@ -79,6 +87,7 @@ export async function vincularUnidadesATabla(formData: FormData) {
 }
 
 export async function listUnidadesConSeriesTabla() {
+  await requireUser();
   return prisma.unidadNegocio.findMany({
     orderBy: { codUnidad: "asc" },
     select: { codUnidad: true, nombreUnidad: true, seriesTablaId: true },
@@ -86,6 +95,7 @@ export async function listUnidadesConSeriesTabla() {
 }
 
 export async function listSeriesEIndices(tablaId: number) {
+  await requireUser();
   return prisma.seriesEIndices.findMany({ where: { tablaId }, orderBy: { periodo: "asc" } });
 }
 
@@ -103,6 +113,7 @@ function parsePeriodoMM_AAAA(value: string): Date | null {
 }
 
 export async function createSeriesEIndices(formData: FormData) {
+  await requireAdmin();
   const tablaId = Number(formData.get("tablaId"));
   const periodoRaw = String(formData.get("periodo") ?? "");
   const indiceRaw = formData.get("indice");
@@ -142,6 +153,7 @@ export async function createSeriesEIndices(formData: FormData) {
 // (el período en sí no cambia) — a diferencia de borrar, se permite en
 // cualquier fila, no solo en la última.
 export async function updateSeriesEIndicesValores(id: string, indice: number, dolar: number) {
+  await requireAdmin();
   if (!Number.isFinite(indice) || indice <= 0) throw new Error("Índice inválido.");
   if (!Number.isFinite(dolar) || dolar <= 0) throw new Error("Dólar inválido.");
 
@@ -153,6 +165,7 @@ export async function updateSeriesEIndicesValores(id: string, indice: number, do
 // borrar una del medio, la próxima alta (que exige correlatividad contra la
 // última) quedaría con un hueco silencioso en la serie.
 export async function checkDeleteSeriesEIndices(id: string): Promise<DeleteCheckResult> {
+  await requireUser();
   const fila = await prisma.seriesEIndices.findUniqueOrThrow({ where: { id } });
   const ultimo = await prisma.seriesEIndices.findFirst({
     where: { tablaId: fila.tablaId },
@@ -167,6 +180,7 @@ export async function checkDeleteSeriesEIndices(id: string): Promise<DeleteCheck
 }
 
 export async function deleteSeriesEIndices(id: string) {
+  await requireAdmin();
   const check = await checkDeleteSeriesEIndices(id);
   if (check.blocked) throw new Error(check.reason);
 
@@ -180,6 +194,7 @@ export async function verificarSeriesCompletaHasta(
   tablaId: number | null,
   hasta: Date
 ): Promise<string | null> {
+  await requireUser();
   if (!tablaId) {
     return "Esta unidad de negocio no tiene una tabla de Series e Índices vinculada.";
   }

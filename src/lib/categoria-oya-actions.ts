@@ -4,12 +4,15 @@ import { revalidatePath } from "next/cache";
 import { prisma } from "@/lib/prisma";
 import type { BucketNOF } from "@/generated/prisma/enums";
 import type { DeleteCheckResult } from "@/components/ConfirmDeleteButton";
+import { requireUser, requireAdmin } from "@/lib/authz";
 
 export async function listCategoriasOyAConClasificacion() {
+  await requireUser();
   return prisma.categoriaOyA.findMany({ orderBy: { codOyA: "asc" } });
 }
 
 export async function updateCategoriaOyABucketNOF(codOyA: number, value: string) {
+  await requireAdmin();
   const bucketNOF: BucketNOF | null =
     value === "OPERATIVO" || value === "NO_OPERATIVO" || value === "FINANCIAMIENTO"
       ? value
@@ -19,6 +22,7 @@ export async function updateCategoriaOyABucketNOF(codOyA: number, value: string)
 }
 
 export async function updateCategoriaOyANombre(codOyA: number, nomOyA: string) {
+  await requireAdmin();
   const value = nomOyA.trim();
   if (!value) throw new Error("El nombre es obligatorio");
   if (value.length > 60) throw new Error("El nombre no puede superar 60 caracteres");
@@ -28,6 +32,7 @@ export async function updateCategoriaOyANombre(codOyA: number, nomOyA: string) {
 }
 
 export async function checkDeleteCategoriaOyA(codOyA: number): Promise<DeleteCheckResult> {
+  await requireUser();
   const cantidad = await prisma.planDeCuentas.count({ where: { categoriaOyAId: codOyA } });
   if (cantidad === 0) return { blocked: false };
   return {
@@ -37,6 +42,7 @@ export async function checkDeleteCategoriaOyA(codOyA: number): Promise<DeleteChe
 }
 
 export async function deleteCategoriaOyA(codOyA: number) {
+  await requireAdmin();
   const check = await checkDeleteCategoriaOyA(codOyA);
   if (check.blocked) throw new Error(check.reason);
 

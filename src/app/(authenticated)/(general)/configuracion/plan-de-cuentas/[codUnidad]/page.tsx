@@ -1,4 +1,5 @@
 import { notFound } from "next/navigation";
+import { auth } from "@/auth";
 import { getUnidadNegocio } from "@/lib/unidad-negocio-actions";
 import { listEmpresasDeUnidad } from "@/lib/empresa-actions";
 import { listCatalog } from "@/lib/catalog-actions";
@@ -18,6 +19,9 @@ export default async function PlanDeCuentasUnidadPage({
 
   const unidad = await getUnidadNegocio(codUnidad);
   if (!unidad) notFound();
+
+  const session = await auth();
+  const isAdmin = session?.user.role === "ADMIN";
 
   const [empresas, partidas, rubros, subrubros, subrubros2, subrubros3, categorias] =
     await Promise.all([
@@ -86,6 +90,7 @@ export default async function PlanDeCuentasUnidadPage({
         </p>
       ) : (
         <>
+          {isAdmin && (
           <CollapsibleAdd label="Agregar cuenta">
             <form action={createPlanDeCuentas} className="flex flex-col gap-3">
               <label className="flex flex-col gap-1">
@@ -185,6 +190,7 @@ export default async function PlanDeCuentasUnidadPage({
               </button>
             </form>
           </CollapsibleAdd>
+          )}
 
           <PlanDeCuentasTable
             filas={filas}
@@ -195,6 +201,7 @@ export default async function PlanDeCuentasUnidadPage({
             subrubros2={subrubros2Opc}
             subrubros3={subrubros3Opc}
             categorias={categoriasOpc}
+            isAdmin={isAdmin}
           />
         </>
       )}

@@ -1,3 +1,4 @@
+import { auth } from "@/auth";
 import { listUnidadesNegocioConEmpresas, createUnidadNegocio } from "@/lib/unidad-negocio-actions";
 import { listEmpresas } from "@/lib/empresa-actions";
 import { CollapsibleAdd } from "@/components/CollapsibleAdd";
@@ -10,6 +11,8 @@ export default async function UnidadesNegocioPage() {
     listUnidadesNegocioConEmpresas(),
     listEmpresas(),
   ]);
+  const session = await auth();
+  const isAdmin = session?.user.role === "ADMIN";
 
   return (
     <main className="flex w-full flex-col gap-8 p-8">
@@ -21,34 +24,36 @@ export default async function UnidadesNegocioPage() {
         con su propio BSyS, consolidadas en un solo informe.
       </p>
 
-      <CollapsibleAdd label="Crear unidad de negocio">
-        <form action={createUnidadNegocio} className="flex flex-col gap-3">
-          <label className="flex flex-col gap-1">
-            <span className="text-lg">Nombre (hasta 35 caracteres)</span>
-            <input
-              name="nombreUnidad"
-              required
-              maxLength={35}
-              className="rounded border px-3 py-2 text-lg"
-            />
-          </label>
-          <label className="flex flex-col gap-1">
-            <span className="text-lg">Logo (JPG, PNG, GIF, WebP o SVG)</span>
-            <input
-              name="imagen"
-              type="file"
-              accept="image/jpeg,image/png,image/gif,image/webp,image/svg+xml"
-              className="rounded border px-3 py-2 text-lg"
-            />
-          </label>
-          <button
-            type="submit"
-            className="w-fit rounded-md bg-accent px-4 py-2 text-sm text-white transition-colors hover:bg-accent-hover focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-accent focus-visible:ring-offset-2"
-          >
-            Crear unidad de negocio
-          </button>
-        </form>
-      </CollapsibleAdd>
+      {isAdmin && (
+        <CollapsibleAdd label="Crear unidad de negocio">
+          <form action={createUnidadNegocio} className="flex flex-col gap-3">
+            <label className="flex flex-col gap-1">
+              <span className="text-lg">Nombre (hasta 35 caracteres)</span>
+              <input
+                name="nombreUnidad"
+                required
+                maxLength={35}
+                className="rounded border px-3 py-2 text-lg"
+              />
+            </label>
+            <label className="flex flex-col gap-1">
+              <span className="text-lg">Logo (JPG, PNG, GIF, WebP o SVG)</span>
+              <input
+                name="imagen"
+                type="file"
+                accept="image/jpeg,image/png,image/gif,image/webp,image/svg+xml"
+                className="rounded border px-3 py-2 text-lg"
+              />
+            </label>
+            <button
+              type="submit"
+              className="w-fit rounded-md bg-accent px-4 py-2 text-sm text-white transition-colors hover:bg-accent-hover focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-accent focus-visible:ring-offset-2"
+            >
+              Crear unidad de negocio
+            </button>
+          </form>
+        </CollapsibleAdd>
+      )}
 
       <div className="overflow-x-auto rounded-lg bg-white p-4 shadow">
         <table className="w-full text-left text-lg">
@@ -70,6 +75,7 @@ export default async function UnidadesNegocioPage() {
                 imagenMime={unidad.imagenMime}
                 empresas={empresas}
                 vinculadasIds={unidad.empresas.map((e) => e.codEmp)}
+                isAdmin={isAdmin}
               />
             ))}
           </tbody>

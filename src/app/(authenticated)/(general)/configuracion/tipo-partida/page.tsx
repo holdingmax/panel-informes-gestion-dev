@@ -1,3 +1,4 @@
+import { auth } from "@/auth";
 import { listTiposPartida, createTipoPartida } from "@/lib/tipo-partida-actions";
 import { CollapsibleAdd } from "@/components/CollapsibleAdd";
 import { TipoPartidaRow } from "./TipoPartidaRow";
@@ -6,6 +7,8 @@ export const dynamic = "force-dynamic";
 
 export default async function TipoPartidaPage() {
   const tipos = await listTiposPartida();
+  const session = await auth();
+  const isAdmin = session?.user.role === "ADMIN";
 
   return (
     <main className="flex w-full flex-col gap-8 p-8">
@@ -21,34 +24,36 @@ export default async function TipoPartidaPage() {
         clasificación no netea a cero, en vez de dejarlo pasar en silencio.
       </p>
 
-      <CollapsibleAdd>
-        <form action={createTipoPartida} className="flex flex-col gap-3">
-          <label className="flex flex-col gap-1">
-            <span className="text-lg">Nombre (hasta 40 caracteres)</span>
-            <input name="nomTipo" required maxLength={40} className="rounded border px-3 py-2 text-lg" />
-          </label>
-          <label className="flex flex-col gap-1">
-            <span className="text-lg">Rol</span>
-            <select name="rol" className="rounded border px-3 py-2 text-lg">
-              <option value="">Sin rol (fuera del Balance/Resultado)</option>
-              <option value="ACTIVO">Activo (Balance)</option>
-              <option value="PASIVO">Pasivo (Balance)</option>
-              <option value="PATRIMONIO_NETO">Patrimonio Neto (Balance)</option>
-              <option value="RESULTADO">Resultado (Ingresos/Egresos)</option>
-            </select>
-          </label>
-          <label className="flex items-center gap-2 text-lg">
-            <input type="checkbox" name="exigeSaldoCero" className="h-5 w-5" />
-            <span>Exige saldo cero (ej. Cuenta de Orden)</span>
-          </label>
-          <button
-            type="submit"
-            className="w-fit rounded-md bg-accent px-4 py-2 text-sm text-white transition-colors hover:bg-accent-hover focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-accent focus-visible:ring-offset-2"
-          >
-            Agregar
-          </button>
-        </form>
-      </CollapsibleAdd>
+      {isAdmin && (
+        <CollapsibleAdd>
+          <form action={createTipoPartida} className="flex flex-col gap-3">
+            <label className="flex flex-col gap-1">
+              <span className="text-lg">Nombre (hasta 40 caracteres)</span>
+              <input name="nomTipo" required maxLength={40} className="rounded border px-3 py-2 text-lg" />
+            </label>
+            <label className="flex flex-col gap-1">
+              <span className="text-lg">Rol</span>
+              <select name="rol" className="rounded border px-3 py-2 text-lg">
+                <option value="">Sin rol (fuera del Balance/Resultado)</option>
+                <option value="ACTIVO">Activo (Balance)</option>
+                <option value="PASIVO">Pasivo (Balance)</option>
+                <option value="PATRIMONIO_NETO">Patrimonio Neto (Balance)</option>
+                <option value="RESULTADO">Resultado (Ingresos/Egresos)</option>
+              </select>
+            </label>
+            <label className="flex items-center gap-2 text-lg">
+              <input type="checkbox" name="exigeSaldoCero" className="h-5 w-5" />
+              <span>Exige saldo cero (ej. Cuenta de Orden)</span>
+            </label>
+            <button
+              type="submit"
+              className="w-fit rounded-md bg-accent px-4 py-2 text-sm text-white transition-colors hover:bg-accent-hover focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-accent focus-visible:ring-offset-2"
+            >
+              Agregar
+            </button>
+          </form>
+        </CollapsibleAdd>
+      )}
 
       <div className="overflow-x-auto rounded-lg bg-white p-4 shadow">
         <table className="w-full text-left text-lg">
@@ -69,6 +74,7 @@ export default async function TipoPartidaPage() {
                 nomTipo={tipo.nomTipo}
                 rol={tipo.rol}
                 exigeSaldoCero={tipo.exigeSaldoCero}
+                isAdmin={isAdmin}
               />
             ))}
           </tbody>

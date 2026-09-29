@@ -45,6 +45,7 @@ export function EmpresaRow({
   monedaSecundaria,
   actualiza,
   monedaActualiza,
+  isAdmin,
 }: {
   codEmp: number;
   nombreEmp: string;
@@ -55,6 +56,7 @@ export function EmpresaRow({
   monedaSecundaria: MonedaRef;
   actualiza: boolean;
   monedaActualiza: MonedaRef;
+  isAdmin: boolean;
 }) {
   const [editing, setEditing] = useState(false);
   const [nombreValue, setNombreValue] = useState(nombreEmp);
@@ -68,7 +70,7 @@ export function EmpresaRow({
     });
   }
 
-  if (editing) {
+  if (editing && isAdmin) {
     return (
       <tr className="border-t align-top">
         <td className="py-2 pr-4">{codEmp}</td>
@@ -168,20 +170,22 @@ export function EmpresaRow({
           : "No"}
       </td>
       <td className="py-2 pr-4">
-        <div className="flex gap-2">
-          <button
-            type="button"
-            onClick={() => setEditing(true)}
-            className="rounded-md border border-slate-300 px-2.5 py-1.5 text-sm text-slate-700 transition-colors hover:bg-slate-50 focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-accent focus-visible:ring-offset-2"
-          >
-            Editar
-          </button>
-          <ConfirmDeleteButton
-            itemLabel={`"${nombreEmp}"`}
-            check={() => checkDeleteEmpresa(codEmp)}
-            onConfirm={() => deleteEmpresa(codEmp)}
-          />
-        </div>
+        {isAdmin && (
+          <div className="flex gap-2">
+            <button
+              type="button"
+              onClick={() => setEditing(true)}
+              className="rounded-md border border-slate-300 px-2.5 py-1.5 text-sm text-slate-700 transition-colors hover:bg-slate-50 focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-accent focus-visible:ring-offset-2"
+            >
+              Editar
+            </button>
+            <ConfirmDeleteButton
+              itemLabel={`"${nombreEmp}"`}
+              check={() => checkDeleteEmpresa(codEmp)}
+              onConfirm={() => deleteEmpresa(codEmp)}
+            />
+          </div>
+        )}
       </td>
     </tr>
   );

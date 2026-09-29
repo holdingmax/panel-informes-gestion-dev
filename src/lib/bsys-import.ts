@@ -6,6 +6,7 @@ import { parseBsysRawFile, type BsysRawRow } from "@/lib/bsys-raw-parser";
 import { normalizeCuenta } from "@/lib/cuenta-normalize";
 import { verificarSeriesCompletaHasta } from "@/lib/series-e-indices-actions";
 import { aplicarRefundicion } from "@/lib/refundicion";
+import { requireUser } from "@/lib/authz";
 
 function primerDiaDelMes(mes: number, anio: number): Date {
   return new Date(Date.UTC(anio, mes - 1, 1));
@@ -62,6 +63,7 @@ type ImportBsysResult =
 // Informe. Los archivos llegan con nombres de campo "archivoMes_<codEmp>" y
 // "archivoAcumulado_<codEmp>" por cada empresa vinculada.
 export async function importBsysCombinado(formData: FormData): Promise<ImportBsysResult> {
+  await requireUser();
   const unidadNegocioId = Number(formData.get("unidadNegocioId"));
   const periodoMes = Number(formData.get("periodoMes"));
   const periodoAnio = Number(formData.get("periodoAnio"));

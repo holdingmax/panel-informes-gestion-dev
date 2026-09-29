@@ -4,8 +4,10 @@ import { revalidatePath } from "next/cache";
 import { prisma } from "@/lib/prisma";
 import { computeResultadoNominalMes } from "@/lib/resultado-nominal";
 import type { DeleteCheckResult } from "@/components/ConfirmDeleteButton";
+import { requireUser, requireAdmin } from "@/lib/authz";
 
 export async function listInformes(unidadNegocioId: number) {
+  await requireUser();
   return prisma.informe.findMany({
     where: { unidadNegocioId },
     orderBy: [{ periodoAnio: "desc" }, { periodoMes: "desc" }],
@@ -17,6 +19,7 @@ export async function listInformes(unidadNegocioId: number) {
 // completó Resultados Históricos) borrarlo dejaría ese dato histórico
 // huérfano de su informe de origen.
 export async function checkDeleteInforme(informeId: string): Promise<DeleteCheckResult> {
+  await requireUser();
   const informe = await prisma.informe.findUniqueOrThrow({ where: { id: informeId } });
   if (informe.estado !== "PROCESO") {
     return {
@@ -28,6 +31,7 @@ export async function checkDeleteInforme(informeId: string): Promise<DeleteCheck
 }
 
 export async function deleteInforme(informeId: string) {
+  await requireUser();
   const check = await checkDeleteInforme(informeId);
   if (check.blocked) throw new Error(check.reason);
 
@@ -43,9 +47,16 @@ const SIGUIENTE_ESTADO = {
 } as const;
 
 export async function avanzarEstadoInforme(informeId: string) {
+  await requireUser();
   const informe = await prisma.informe.findUniqueOrThrow({ where: { id: informeId } });
   const siguiente = SIGUIENTE_ESTADO[informe.estado];
   if (!siguiente) return;
+
+  // Solo ADMIN puede aprobar o dar por definitivo un informe — un USER
+  // puede como mucho mandarlo a En Revisión.
+  if (siguiente === "APROBADO" || siguiente === "DEFINITIVO") {
+    await requireAdmin();
+  }
 
   await prisma.informe.update({ where: { id: informeId }, data: { estado: siguiente } });
 

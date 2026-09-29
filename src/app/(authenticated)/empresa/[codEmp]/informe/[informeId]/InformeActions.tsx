@@ -12,18 +12,25 @@ const SIGUIENTE_LABEL: Record<string, string> = {
 export function InformeActions({
   informeId,
   estado,
+  isAdmin,
 }: {
   informeId: string;
   estado: string;
+  isAdmin: boolean;
 }) {
   const [pending, startTransition] = useTransition();
   const label = SIGUIENTE_LABEL[estado];
+
+  // PROCESO -> EN_REVISION lo puede hacer cualquier usuario autenticado;
+  // EN_REVISION -> APROBADO y APROBADO -> DEFINITIVO requieren ADMIN
+  // (ver avanzarEstadoInforme en informe-actions.ts).
+  const puedeAvanzar = estado === "PROCESO" || isAdmin;
 
   const puedeDescargarPdf = estado === "APROBADO" || estado === "DEFINITIVO";
 
   return (
     <div className="flex items-center gap-4">
-      {label && (
+      {label && puedeAvanzar && (
         <button
           disabled={pending}
           onClick={() => startTransition(() => avanzarEstadoInforme(informeId))}

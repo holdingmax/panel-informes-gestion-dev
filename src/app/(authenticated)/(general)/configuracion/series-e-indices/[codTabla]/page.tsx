@@ -1,4 +1,5 @@
 import { notFound } from "next/navigation";
+import { auth } from "@/auth";
 import {
   getSeriesEIndicesTabla,
   listSeriesEIndices,
@@ -30,6 +31,9 @@ export default async function SeriesEIndicesTablaPage({
   ]);
   if (!tabla) notFound();
 
+  const session = await auth();
+  const isAdmin = session?.user.role === "ADMIN";
+
   const ultimo = series[series.length - 1];
   const proximo = ultimo
     ? formatPeriodo(new Date(Date.UTC(ultimo.periodo.getUTCFullYear(), ultimo.periodo.getUTCMonth() + 1, 1)))
@@ -47,16 +51,27 @@ export default async function SeriesEIndicesTablaPage({
 
       <section className="flex flex-col gap-3 rounded-lg bg-white p-6 shadow">
         <h2 className="text-xl font-medium">Unidades de negocio que usan esta tabla</h2>
-        <VincularUnidadesForm
-          codTabla={codTabla}
-          unidades={unidades}
-          vinculadasIds={unidades.filter((u) => u.seriesTablaId === codTabla).map((u) => u.codUnidad)}
-        />
+        {isAdmin ? (
+          <VincularUnidadesForm
+            codTabla={codTabla}
+            unidades={unidades}
+            vinculadasIds={unidades.filter((u) => u.seriesTablaId === codTabla).map((u) => u.codUnidad)}
+          />
+        ) : (
+          <p className="text-sm">
+            {unidades
+              .filter((u) => u.seriesTablaId === codTabla)
+              .map((u) => u.nombreUnidad)
+              .join(", ") || "—"}
+          </p>
+        )}
       </section>
 
-      <CollapsibleAdd label={ultimo ? `Agregar período (siguiente: ${proximo})` : "Agregar primer período"}>
-        <SeriesEIndicesForm tablaId={codTabla} proximoPeriodo={proximo} />
-      </CollapsibleAdd>
+      {isAdmin && (
+        <CollapsibleAdd label={ultimo ? `Agregar período (siguiente: ${proximo})` : "Agregar primer período"}>
+          <SeriesEIndicesForm tablaId={codTabla} proximoPeriodo={proximo} />
+        </CollapsibleAdd>
+      )}
 
       <div className="max-h-96 overflow-auto rounded-lg bg-white p-4 shadow">
         <table className="w-full text-left text-lg">
@@ -76,6 +91,7 @@ export default async function SeriesEIndicesTablaPage({
                 periodo={s.periodo}
                 indice={Number(s.indice)}
                 dolar={Number(s.dolar)}
+                isAdmin={isAdmin}
               />
             ))}
           </tbody>

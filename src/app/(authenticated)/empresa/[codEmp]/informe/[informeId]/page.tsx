@@ -1,3 +1,4 @@
+import { auth } from "@/auth";
 import { computeInformeReport, type RubroLine } from "@/lib/balance-oya-report";
 import { InformeActions } from "./InformeActions";
 import { RubroRowActions } from "./RubroRowActions";
@@ -33,10 +34,12 @@ function BalanceRows({
   rows,
   codEmp,
   informeId,
+  isAdmin,
 }: {
   rows: RubroLine[];
   codEmp: string;
   informeId: string;
+  isAdmin: boolean;
 }) {
   return (
     <>
@@ -51,6 +54,7 @@ function BalanceRows({
                   informeId={informeId}
                   codRubro={r.codRubro}
                   bucketNOF={r.bucketNOF}
+                  isAdmin={isAdmin}
                 />
               )}
             </span>
@@ -111,6 +115,8 @@ export default async function InformeDetallePage({
 }) {
   const { codEmp, informeId } = await params;
   const report = await computeInformeReport(informeId);
+  const session = await auth();
+  const isAdmin = session?.user.role === "ADMIN";
   const {
     balance,
     origenAplicacion,
@@ -127,7 +133,7 @@ export default async function InformeDetallePage({
         <h2 className="text-lg font-medium">
           Informe {MESES[report.periodoMes - 1]} {report.periodoAnio} — {report.unidadNegocioNombre}
         </h2>
-        <InformeActions informeId={report.informeId} estado={report.estado} />
+        <InformeActions informeId={report.informeId} estado={report.estado} isAdmin={isAdmin} />
       </div>
 
       {report.advertencias.length > 0 && (
@@ -156,21 +162,21 @@ export default async function InformeDetallePage({
             </tr>
           </thead>
           <tbody>
-            <BalanceRows rows={balance.activo} codEmp={codEmp} informeId={informeId} />
+            <BalanceRows rows={balance.activo} codEmp={codEmp} informeId={informeId} isAdmin={isAdmin} />
             <TotalRow
               label="Total Activo"
               final={balance.totalActivo}
               inicio={balance.totalActivoAnterior}
             />
             <Spacer />
-            <BalanceRows rows={balance.pasivo} codEmp={codEmp} informeId={informeId} />
+            <BalanceRows rows={balance.pasivo} codEmp={codEmp} informeId={informeId} isAdmin={isAdmin} />
             <TotalRow
               label="Total Pasivo"
               final={balance.totalPasivo}
               inicio={balance.totalPasivoAnterior}
             />
             <Spacer />
-            <BalanceRows rows={balance.patrimonioNeto} codEmp={codEmp} informeId={informeId} />
+            <BalanceRows rows={balance.patrimonioNeto} codEmp={codEmp} informeId={informeId} isAdmin={isAdmin} />
             <TotalRow
               label="Total Patrimonio Neto"
               final={balance.totalPatrimonioNeto}

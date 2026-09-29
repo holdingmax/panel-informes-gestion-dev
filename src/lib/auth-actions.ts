@@ -1,17 +1,10 @@
 "use server";
 
 import bcrypt from "bcryptjs";
-import { auth } from "@/auth";
 import { prisma } from "@/lib/prisma";
+import { requireAdmin } from "@/lib/authz";
 
 const SALT_ROUNDS = 12;
-
-async function requireAdmin() {
-  const session = await auth();
-  if (session?.user.role !== "ADMIN") {
-    throw new Error("No autorizado");
-  }
-}
 
 export async function listUsers() {
   await requireAdmin();

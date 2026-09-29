@@ -3,8 +3,10 @@
 import { revalidatePath } from "next/cache";
 import { prisma } from "@/lib/prisma";
 import type { DeleteCheckResult } from "@/components/ConfirmDeleteButton";
+import { requireUser, requireAdmin } from "@/lib/authz";
 
 export async function listPartidasConClasificacion() {
+  await requireUser();
   return prisma.partidaPatrimonial.findMany({
     orderBy: { codPartida: "asc" },
     include: { tipo: true },
@@ -12,6 +14,7 @@ export async function listPartidasConClasificacion() {
 }
 
 export async function updatePartidaTipoId(codPartida: number, value: string) {
+  await requireAdmin();
   const tipoId = value ? Number(value) : null;
   await prisma.partidaPatrimonial.update({
     where: { codPartida },
@@ -21,6 +24,7 @@ export async function updatePartidaTipoId(codPartida: number, value: string) {
 }
 
 export async function updatePartidaNombre(codPartida: number, nomPartida: string) {
+  await requireAdmin();
   const value = nomPartida.trim();
   if (!value) throw new Error("El nombre es obligatorio");
   if (value.length > 40) throw new Error("El nombre no puede superar 40 caracteres");
@@ -30,6 +34,7 @@ export async function updatePartidaNombre(codPartida: number, nomPartida: string
 }
 
 export async function checkDeletePartida(codPartida: number): Promise<DeleteCheckResult> {
+  await requireUser();
   const cantidad = await prisma.planDeCuentas.count({ where: { partidaPatrimonialId: codPartida } });
   if (cantidad === 0) return { blocked: false };
   return {
@@ -39,6 +44,7 @@ export async function checkDeletePartida(codPartida: number): Promise<DeleteChec
 }
 
 export async function deletePartida(codPartida: number) {
+  await requireAdmin();
   const check = await checkDeletePartida(codPartida);
   if (check.blocked) throw new Error(check.reason);
 

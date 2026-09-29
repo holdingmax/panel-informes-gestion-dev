@@ -8,10 +8,12 @@ export function MonedaRow({
   codMoneda,
   nomMoneda,
   simbolo,
+  isAdmin,
 }: {
   codMoneda: number;
   nomMoneda: string;
   simbolo: string;
+  isAdmin: boolean;
 }) {
   const [editing, setEditing] = useState(false);
   const [nombreValue, setNombreValue] = useState(nomMoneda);
@@ -55,47 +57,49 @@ export function MonedaRow({
         )}
       </td>
       <td className="py-2">
-        <div className="flex gap-2">
-          {editing ? (
-            <>
-              <button
-                type="button"
-                onClick={guardar}
-                disabled={pending}
-                className="rounded-md bg-accent px-2.5 py-1.5 text-sm text-white transition-colors hover:bg-accent-hover disabled:cursor-not-allowed disabled:opacity-50"
-              >
-                Guardar
-              </button>
-              <button
-                type="button"
-                onClick={() => {
-                  setNombreValue(nomMoneda);
-                  setSimboloValue(simbolo);
-                  setEditing(false);
-                }}
-                disabled={pending}
-                className="rounded-md border border-slate-300 px-2.5 py-1.5 text-sm text-slate-700 hover:bg-slate-50"
-              >
-                Cancelar
-              </button>
-            </>
-          ) : (
-            <>
-              <button
-                type="button"
-                onClick={() => setEditing(true)}
-                className="rounded-md border border-slate-300 px-2.5 py-1.5 text-sm text-slate-700 transition-colors hover:bg-slate-50 focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-accent focus-visible:ring-offset-2"
-              >
-                Editar
-              </button>
-              <ConfirmDeleteButton
-                itemLabel={`la moneda "${nomMoneda}"`}
-                check={() => checkDeleteMoneda(codMoneda)}
-                onConfirm={() => deleteMoneda(codMoneda)}
-              />
-            </>
-          )}
-        </div>
+        {isAdmin && (
+          <div className="flex gap-2">
+            {editing ? (
+              <>
+                <button
+                  type="button"
+                  onClick={guardar}
+                  disabled={pending}
+                  className="rounded-md bg-accent px-2.5 py-1.5 text-sm text-white transition-colors hover:bg-accent-hover disabled:cursor-not-allowed disabled:opacity-50"
+                >
+                  Guardar
+                </button>
+                <button
+                  type="button"
+                  onClick={() => {
+                    setNombreValue(nomMoneda);
+                    setSimboloValue(simbolo);
+                    setEditing(false);
+                  }}
+                  disabled={pending}
+                  className="rounded-md border border-slate-300 px-2.5 py-1.5 text-sm text-slate-700 hover:bg-slate-50"
+                >
+                  Cancelar
+                </button>
+              </>
+            ) : (
+              <>
+                <button
+                  type="button"
+                  onClick={() => setEditing(true)}
+                  className="rounded-md border border-slate-300 px-2.5 py-1.5 text-sm text-slate-700 transition-colors hover:bg-slate-50 focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-accent focus-visible:ring-offset-2"
+                >
+                  Editar
+                </button>
+                <ConfirmDeleteButton
+                  itemLabel={`la moneda "${nomMoneda}"`}
+                  check={() => checkDeleteMoneda(codMoneda)}
+                  onConfirm={() => deleteMoneda(codMoneda)}
+                />
+              </>
+            )}
+          </div>
+        )}
       </td>
     </tr>
   );

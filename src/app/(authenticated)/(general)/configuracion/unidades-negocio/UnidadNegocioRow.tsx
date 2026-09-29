@@ -18,12 +18,14 @@ export function UnidadNegocioRow({
   imagenMime,
   empresas,
   vinculadasIds,
+  isAdmin,
 }: {
   codUnidad: number;
   nombreUnidad: string;
   imagenMime: string | null;
   empresas: EmpresaOpcion[];
   vinculadasIds: number[];
+  isAdmin: boolean;
 }) {
   const [editing, setEditing] = useState(false);
   const [nombreValue, setNombreValue] = useState(nombreUnidad);
@@ -58,7 +60,7 @@ export function UnidadNegocioRow({
         ) : (
           "—"
         )}
-        {editing && (
+        {editing && isAdmin && (
           <input
             ref={fileInputRef}
             type="file"
@@ -69,7 +71,7 @@ export function UnidadNegocioRow({
         )}
       </td>
       <td className="py-2 pr-4">
-        {editing ? (
+        {editing && isAdmin ? (
           <input
             value={nombreValue}
             onChange={(e) => setNombreValue(e.target.value)}
@@ -82,49 +84,58 @@ export function UnidadNegocioRow({
         )}
       </td>
       <td className="py-2 text-sm">
-        <EmpresasVinculadasForm codUnidad={codUnidad} empresas={empresas} vinculadasIds={vinculadasIds} />
+        {isAdmin ? (
+          <EmpresasVinculadasForm codUnidad={codUnidad} empresas={empresas} vinculadasIds={vinculadasIds} />
+        ) : (
+          empresas
+            .filter((e) => vinculadasIds.includes(e.codEmp))
+            .map((e) => e.nombreEmp)
+            .join(", ") || "—"
+        )}
       </td>
       <td className="py-2 pr-4">
-        <div className="flex gap-2">
-          {editing ? (
-            <>
-              <button
-                type="button"
-                onClick={guardar}
-                disabled={pending}
-                className="rounded-md bg-accent px-2.5 py-1.5 text-sm text-white transition-colors hover:bg-accent-hover disabled:cursor-not-allowed disabled:opacity-50"
-              >
-                Guardar
-              </button>
-              <button
-                type="button"
-                onClick={() => {
-                  setNombreValue(nombreUnidad);
-                  setEditing(false);
-                }}
-                disabled={pending}
-                className="rounded-md border border-slate-300 px-2.5 py-1.5 text-sm text-slate-700 hover:bg-slate-50"
-              >
-                Cancelar
-              </button>
-            </>
-          ) : (
-            <>
-              <button
-                type="button"
-                onClick={() => setEditing(true)}
-                className="rounded-md border border-slate-300 px-2.5 py-1.5 text-sm text-slate-700 transition-colors hover:bg-slate-50 focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-accent focus-visible:ring-offset-2"
-              >
-                Editar
-              </button>
-              <ConfirmDeleteButton
-                itemLabel={`"${nombreUnidad}"`}
-                check={() => checkDeleteUnidadNegocio(codUnidad)}
-                onConfirm={() => deleteUnidadNegocio(codUnidad)}
-              />
-            </>
-          )}
-        </div>
+        {isAdmin && (
+          <div className="flex gap-2">
+            {editing ? (
+              <>
+                <button
+                  type="button"
+                  onClick={guardar}
+                  disabled={pending}
+                  className="rounded-md bg-accent px-2.5 py-1.5 text-sm text-white transition-colors hover:bg-accent-hover disabled:cursor-not-allowed disabled:opacity-50"
+                >
+                  Guardar
+                </button>
+                <button
+                  type="button"
+                  onClick={() => {
+                    setNombreValue(nombreUnidad);
+                    setEditing(false);
+                  }}
+                  disabled={pending}
+                  className="rounded-md border border-slate-300 px-2.5 py-1.5 text-sm text-slate-700 hover:bg-slate-50"
+                >
+                  Cancelar
+                </button>
+              </>
+            ) : (
+              <>
+                <button
+                  type="button"
+                  onClick={() => setEditing(true)}
+                  className="rounded-md border border-slate-300 px-2.5 py-1.5 text-sm text-slate-700 transition-colors hover:bg-slate-50 focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-accent focus-visible:ring-offset-2"
+                >
+                  Editar
+                </button>
+                <ConfirmDeleteButton
+                  itemLabel={`"${nombreUnidad}"`}
+                  check={() => checkDeleteUnidadNegocio(codUnidad)}
+                  onConfirm={() => deleteUnidadNegocio(codUnidad)}
+                />
+              </>
+            )}
+          </div>
+        )}
       </td>
     </tr>
   );

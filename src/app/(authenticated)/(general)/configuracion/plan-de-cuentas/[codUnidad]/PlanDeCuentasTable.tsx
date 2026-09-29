@@ -33,6 +33,7 @@ export function PlanDeCuentasTable({
   subrubros2,
   subrubros3,
   categorias,
+  isAdmin,
 }: {
   filas: Fila[];
   empresas: { codEmp: number; nombreEmp: string }[];
@@ -42,6 +43,7 @@ export function PlanDeCuentasTable({
   subrubros2: Opcion[];
   subrubros3: Opcion[];
   categorias: Opcion[];
+  isAdmin: boolean;
 }) {
   const [filtroEmpresa, setFiltroEmpresa] = useState("");
   const [filtroCuenta, setFiltroCuenta] = useState("");
@@ -222,6 +224,7 @@ export function PlanDeCuentasTable({
                 subrubros2={subrubros2}
                 subrubros3={subrubros3}
                 categorias={categorias}
+                isAdmin={isAdmin}
               />
             ))}
           </tbody>

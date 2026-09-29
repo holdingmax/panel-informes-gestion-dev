@@ -33,8 +33,9 @@ export function ResultadoHistoricoRow({
   id,
   periodoMes,
   periodoAnio,
+  isAdmin,
   ...valoresIniciales
-}: { id: string; periodoMes: number; periodoAnio: number } & Valores) {
+}: { id: string; periodoMes: number; periodoAnio: number; isAdmin: boolean } & Valores) {
   const [editing, setEditing] = useState(false);
   const [valores, setValores] = useState<Valores>(valoresIniciales);
   const [pending, startTransition] = useTransition();
@@ -62,7 +63,7 @@ export function ResultadoHistoricoRow({
       </td>
       {CAMPOS.map(({ key }) => (
         <td key={key} className="py-1.5 pr-4 text-right">
-          {editing ? (
+          {editing && isAdmin ? (
             <input
               type="number"
               step="0.01"
@@ -78,46 +79,48 @@ export function ResultadoHistoricoRow({
       ))}
       <td className="py-1.5 pr-4 text-right font-medium">{fmt(resultadoNeto)}</td>
       <td className="py-1.5 pr-4">
-        <div className="flex gap-2">
-          {editing ? (
-            <>
-              <button
-                type="button"
-                onClick={guardar}
-                disabled={pending}
-                className="rounded-md bg-accent px-2.5 py-1.5 text-sm text-white transition-colors hover:bg-accent-hover disabled:cursor-not-allowed disabled:opacity-50"
-              >
-                Guardar
-              </button>
-              <button
-                type="button"
-                onClick={() => {
-                  setValores(valoresIniciales);
-                  setEditing(false);
-                }}
-                disabled={pending}
-                className="rounded-md border border-slate-300 px-2.5 py-1.5 text-sm text-slate-700 hover:bg-slate-50"
-              >
-                Cancelar
-              </button>
-            </>
-          ) : (
-            <>
-              <button
-                type="button"
-                onClick={() => setEditing(true)}
-                className="rounded-md border border-slate-300 px-2.5 py-1.5 text-sm text-slate-700 transition-colors hover:bg-slate-50 focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-accent focus-visible:ring-offset-2"
-              >
-                Editar
-              </button>
-              <ConfirmDeleteButton
-                itemLabel={`el período "${String(periodoMes).padStart(2, "0")}-${periodoAnio}"`}
-                check={() => checkDeleteResultadoHistorico()}
-                onConfirm={() => deleteResultadoHistorico(id)}
-              />
-            </>
-          )}
-        </div>
+        {isAdmin && (
+          <div className="flex gap-2">
+            {editing ? (
+              <>
+                <button
+                  type="button"
+                  onClick={guardar}
+                  disabled={pending}
+                  className="rounded-md bg-accent px-2.5 py-1.5 text-sm text-white transition-colors hover:bg-accent-hover disabled:cursor-not-allowed disabled:opacity-50"
+                >
+                  Guardar
+                </button>
+                <button
+                  type="button"
+                  onClick={() => {
+                    setValores(valoresIniciales);
+                    setEditing(false);
+                  }}
+                  disabled={pending}
+                  className="rounded-md border border-slate-300 px-2.5 py-1.5 text-sm text-slate-700 hover:bg-slate-50"
+                >
+                  Cancelar
+                </button>
+              </>
+            ) : (
+              <>
+                <button
+                  type="button"
+                  onClick={() => setEditing(true)}
+                  className="rounded-md border border-slate-300 px-2.5 py-1.5 text-sm text-slate-700 transition-colors hover:bg-slate-50 focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-accent focus-visible:ring-offset-2"
+                >
+                  Editar
+                </button>
+                <ConfirmDeleteButton
+                  itemLabel={`el período "${String(periodoMes).padStart(2, "0")}-${periodoAnio}"`}
+                  check={() => checkDeleteResultadoHistorico()}
+                  onConfirm={() => deleteResultadoHistorico(id)}
+                />
+              </>
+            )}
+          </div>
+        )}
       </td>
     </tr>
   );

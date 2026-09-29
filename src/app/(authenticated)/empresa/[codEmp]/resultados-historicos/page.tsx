@@ -1,3 +1,4 @@
+import { auth } from "@/auth";
 import { listResultadosHistoricos, createResultadoHistorico } from "@/lib/resultados-historicos-actions";
 import { CollapsibleAdd } from "@/components/CollapsibleAdd";
 import { ResultadoHistoricoRow } from "./ResultadoHistoricoRow";
@@ -15,6 +16,8 @@ export default async function ResultadosHistoricosPage({
 
   const filas = await listResultadosHistoricos(unidadNegocioId);
   const now = new Date();
+  const session = await auth();
+  const isAdmin = session?.user.role === "ADMIN";
 
   return (
     <div className="flex flex-col gap-6">
@@ -28,59 +31,61 @@ export default async function ResultadosHistoricosPage({
         </p>
       </div>
 
-      <div className="flex flex-wrap gap-4">
-        <CollapsibleAdd label="Agregar período">
-          <form action={createResultadoHistorico} className="flex flex-wrap items-end gap-3">
-            <input type="hidden" name="unidadNegocioId" value={unidadNegocioId} />
-            <label className="flex flex-col gap-1">
-              <span className="text-sm">Período (MM-AAAA)</span>
-              <input
-                name="periodo"
-                required
-                pattern="\d{2}-\d{4}"
-                placeholder={`${String(now.getMonth() + 1).padStart(2, "0")}-${now.getFullYear()}`}
-                className="rounded border px-3 py-2"
-              />
-            </label>
-            <label className="flex flex-col gap-1">
-              <span className="text-sm">Ventas</span>
-              <input name="ventas" type="number" step="0.01" required className="w-32 rounded border px-3 py-2" />
-            </label>
-            <label className="flex flex-col gap-1">
-              <span className="text-sm">Costos Directos</span>
-              <input name="costosDirectos" type="number" step="0.01" required className="w-32 rounded border px-3 py-2" />
-            </label>
-            <label className="flex flex-col gap-1">
-              <span className="text-sm">Gastos Operativos</span>
-              <input name="gastosOperativos" type="number" step="0.01" required className="w-32 rounded border px-3 py-2" />
-            </label>
-            <label className="flex flex-col gap-1">
-              <span className="text-sm">Expensas</span>
-              <input name="expensas" type="number" step="0.01" required className="w-32 rounded border px-3 py-2" />
-            </label>
-            <label className="flex flex-col gap-1">
-              <span className="text-sm">Otras Ganancias y Pérdidas</span>
-              <input
-                name="otrasGananciasYPerdidas"
-                type="number"
-                step="0.01"
-                required
-                className="w-32 rounded border px-3 py-2"
-              />
-            </label>
-            <button
-              type="submit"
-              className="w-fit rounded-md bg-accent px-4 py-2 text-sm text-white transition-colors hover:bg-accent-hover focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-accent focus-visible:ring-offset-2"
-            >
-              Agregar
-            </button>
-          </form>
-        </CollapsibleAdd>
+      {isAdmin && (
+        <div className="flex flex-wrap gap-4">
+          <CollapsibleAdd label="Agregar período">
+            <form action={createResultadoHistorico} className="flex flex-wrap items-end gap-3">
+              <input type="hidden" name="unidadNegocioId" value={unidadNegocioId} />
+              <label className="flex flex-col gap-1">
+                <span className="text-sm">Período (MM-AAAA)</span>
+                <input
+                  name="periodo"
+                  required
+                  pattern="\d{2}-\d{4}"
+                  placeholder={`${String(now.getMonth() + 1).padStart(2, "0")}-${now.getFullYear()}`}
+                  className="rounded border px-3 py-2"
+                />
+              </label>
+              <label className="flex flex-col gap-1">
+                <span className="text-sm">Ventas</span>
+                <input name="ventas" type="number" step="0.01" required className="w-32 rounded border px-3 py-2" />
+              </label>
+              <label className="flex flex-col gap-1">
+                <span className="text-sm">Costos Directos</span>
+                <input name="costosDirectos" type="number" step="0.01" required className="w-32 rounded border px-3 py-2" />
+              </label>
+              <label className="flex flex-col gap-1">
+                <span className="text-sm">Gastos Operativos</span>
+                <input name="gastosOperativos" type="number" step="0.01" required className="w-32 rounded border px-3 py-2" />
+              </label>
+              <label className="flex flex-col gap-1">
+                <span className="text-sm">Expensas</span>
+                <input name="expensas" type="number" step="0.01" required className="w-32 rounded border px-3 py-2" />
+              </label>
+              <label className="flex flex-col gap-1">
+                <span className="text-sm">Otras Ganancias y Pérdidas</span>
+                <input
+                  name="otrasGananciasYPerdidas"
+                  type="number"
+                  step="0.01"
+                  required
+                  className="w-32 rounded border px-3 py-2"
+                />
+              </label>
+              <button
+                type="submit"
+                className="w-fit rounded-md bg-accent px-4 py-2 text-sm text-white transition-colors hover:bg-accent-hover focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-accent focus-visible:ring-offset-2"
+              >
+                Agregar
+              </button>
+            </form>
+          </CollapsibleAdd>
 
-        <CollapsibleAdd label="Cargar por Excel">
-          <ImportarExcelForm unidadNegocioId={unidadNegocioId} />
-        </CollapsibleAdd>
-      </div>
+          <CollapsibleAdd label="Cargar por Excel">
+            <ImportarExcelForm unidadNegocioId={unidadNegocioId} />
+          </CollapsibleAdd>
+        </div>
+      )}
 
       {filas.length === 0 ? (
         <p className="text-sm text-zinc-600">Todavía no hay períodos cargados.</p>
@@ -111,6 +116,7 @@ export default async function ResultadosHistoricosPage({
                   gastosOperativos={Number(f.gastosOperativos)}
                   expensas={Number(f.expensas)}
                   otrasGananciasYPerdidas={Number(f.otrasGananciasYPerdidas)}
+                  isAdmin={isAdmin}
                 />
               ))}
             </tbody>

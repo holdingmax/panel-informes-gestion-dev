@@ -3,6 +3,7 @@
 import { revalidatePath } from "next/cache";
 import { prisma } from "@/lib/prisma";
 import type { DeleteCheckResult } from "@/components/ConfirmDeleteButton";
+import { requireUser, requireAdmin } from "@/lib/authz";
 
 const INCLUDE = {
   empresa: true,
@@ -15,6 +16,7 @@ const INCLUDE = {
 } as const;
 
 export async function listPlanDeCuentasPorEmpresas(empresaIds: number[]) {
+  await requireUser();
   return prisma.planDeCuentas.findMany({
     where: { empresaId: { in: empresaIds } },
     include: INCLUDE,
@@ -54,6 +56,7 @@ function readCampos(formData: FormData) {
 }
 
 export async function createPlanDeCuentas(formData: FormData) {
+  await requireAdmin();
   const empresaId = Number(formData.get("empresaId"));
   if (!Number.isInteger(empresaId)) throw new Error("Completá la Empresa");
 
@@ -65,6 +68,7 @@ export async function createPlanDeCuentas(formData: FormData) {
 }
 
 export async function updatePlanDeCuentas(id: string, formData: FormData) {
+  await requireAdmin();
   const campos = readCampos(formData);
 
   await prisma.planDeCuentas.update({ where: { id }, data: campos });
@@ -75,10 +79,12 @@ export async function updatePlanDeCuentas(id: string, formData: FormData) {
 // Nada más hace referencia a una fila de PlanDeCuentas por su id (el BSyS
 // solo guarda el texto de la cuenta, no un FK) — siempre se puede borrar.
 export async function checkDeletePlanDeCuentas(): Promise<DeleteCheckResult> {
+  await requireUser();
   return { blocked: false };
 }
 
 export async function deletePlanDeCuentas(id: string) {
+  await requireAdmin();
   await prisma.planDeCuentas.delete({ where: { id } });
   revalidatePath("/configuracion/plan-de-cuentas");
 }

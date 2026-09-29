@@ -4,8 +4,10 @@ import { revalidatePath } from "next/cache";
 import ExcelJS from "exceljs";
 import { prisma } from "@/lib/prisma";
 import type { DeleteCheckResult } from "@/components/ConfirmDeleteButton";
+import { requireUser, requireAdmin } from "@/lib/authz";
 
 export async function listResultadosHistoricos(unidadNegocioId: number) {
+  await requireUser();
   return prisma.resultadosHistoricos.findMany({
     where: { unidadNegocioId },
     orderBy: [{ periodoAnio: "desc" }, { periodoMes: "desc" }],
@@ -36,6 +38,7 @@ function parseCampos(formData: FormData) {
 }
 
 export async function createResultadoHistorico(formData: FormData) {
+  await requireAdmin();
   const unidadNegocioId = Number(formData.get("unidadNegocioId"));
   const periodo = parsePeriodoMM_AAAA(String(formData.get("periodo") ?? ""));
   if (!periodo) throw new Error('Período inválido. Usá el formato MM-AAAA (ej. "06-2026").');
@@ -63,17 +66,20 @@ export async function createResultadoHistorico(formData: FormData) {
 }
 
 export async function updateResultadoHistorico(id: string, formData: FormData) {
+  await requireAdmin();
   const campos = parseCampos(formData);
   const fila = await prisma.resultadosHistoricos.update({ where: { id }, data: campos });
   revalidatePath(`/empresa/${fila.unidadNegocioId}/resultados-historicos`);
 }
 
 export async function checkDeleteResultadoHistorico(): Promise<DeleteCheckResult> {
+  await requireUser();
   // Nada más referencia esta fila por id — siempre se puede borrar.
   return { blocked: false };
 }
 
 export async function deleteResultadoHistorico(id: string) {
+  await requireAdmin();
   const fila = await prisma.resultadosHistoricos.delete({ where: { id } });
   revalidatePath(`/empresa/${fila.unidadNegocioId}/resultados-historicos`);
 }
@@ -132,6 +138,7 @@ type ImportarResultado = {
 export async function importarResultadosHistoricosExcel(
   formData: FormData
 ): Promise<ImportarResultado | { error: string }> {
+  await requireAdmin();
   const unidadNegocioId = Number(formData.get("unidadNegocioId"));
   const archivo = formData.get("archivo");
   if (!(archivo instanceof File) || archivo.size === 0) {

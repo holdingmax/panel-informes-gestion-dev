@@ -1,3 +1,4 @@
+import { auth } from "@/auth";
 import { listCategoriasOyAConClasificacion } from "@/lib/categoria-oya-actions";
 import { createCatalogItem } from "@/lib/catalog-actions";
 import { CollapsibleAdd } from "@/components/CollapsibleAdd";
@@ -7,6 +8,8 @@ export const dynamic = "force-dynamic";
 
 export default async function CategoriaOyAPage() {
   const categorias = await listCategoriasOyAConClasificacion();
+  const session = await auth();
+  const isAdmin = session?.user.role === "ADMIN";
 
   return (
     <main className="flex w-full flex-col gap-8 p-8">
@@ -18,21 +21,23 @@ export default async function CategoriaOyAPage() {
         Necesidades Operativas de Fondos del informe.
       </p>
 
-      <CollapsibleAdd>
-        <form action={createCatalogItem} className="flex flex-col gap-3">
-          <input type="hidden" name="tabla" value="categoria-oya" />
-          <label className="flex flex-col gap-1">
-            <span className="text-lg">Nombre de categoría OyA</span>
-            <input name="nombre" required maxLength={60} className="rounded border px-3 py-2 text-lg" />
-          </label>
-          <button
-            type="submit"
-            className="w-fit rounded-md bg-accent px-4 py-2 text-sm text-white transition-colors hover:bg-accent-hover focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-accent focus-visible:ring-offset-2"
-          >
-            Agregar
-          </button>
-        </form>
-      </CollapsibleAdd>
+      {isAdmin && (
+        <CollapsibleAdd>
+          <form action={createCatalogItem} className="flex flex-col gap-3">
+            <input type="hidden" name="tabla" value="categoria-oya" />
+            <label className="flex flex-col gap-1">
+              <span className="text-lg">Nombre de categoría OyA</span>
+              <input name="nombre" required maxLength={60} className="rounded border px-3 py-2 text-lg" />
+            </label>
+            <button
+              type="submit"
+              className="w-fit rounded-md bg-accent px-4 py-2 text-sm text-white transition-colors hover:bg-accent-hover focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-accent focus-visible:ring-offset-2"
+            >
+              Agregar
+            </button>
+          </form>
+        </CollapsibleAdd>
+      )}
 
       <div className="overflow-x-auto rounded-lg bg-white p-4 shadow">
         <table className="w-full text-left text-lg">
@@ -51,6 +56,7 @@ export default async function CategoriaOyAPage() {
                 codOyA={categoria.codOyA}
                 nomOyA={categoria.nomOyA}
                 bucketNOF={categoria.bucketNOF}
+                isAdmin={isAdmin}
               />
             ))}
           </tbody>

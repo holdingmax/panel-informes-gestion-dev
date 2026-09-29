@@ -3,12 +3,15 @@
 import { revalidatePath } from "next/cache";
 import { prisma } from "@/lib/prisma";
 import type { DeleteCheckResult } from "@/components/ConfirmDeleteButton";
+import { requireUser, requireAdmin } from "@/lib/authz";
 
 export async function listMonedas() {
+  await requireUser();
   return prisma.moneda.findMany({ orderBy: { codMoneda: "asc" } });
 }
 
 export async function createMoneda(formData: FormData) {
+  await requireAdmin();
   const nomMoneda = String(formData.get("nomMoneda") ?? "").trim();
   const simbolo = String(formData.get("simbolo") ?? "").trim();
 
@@ -23,6 +26,7 @@ export async function createMoneda(formData: FormData) {
 }
 
 export async function updateMoneda(codMoneda: number, nomMoneda: string, simbolo: string) {
+  await requireAdmin();
   const nombre = nomMoneda.trim();
   const simb = simbolo.trim();
 
@@ -40,6 +44,7 @@ export async function updateMoneda(codMoneda: number, nomMoneda: string, simbolo
 }
 
 export async function checkDeleteMoneda(codMoneda: number): Promise<DeleteCheckResult> {
+  await requireUser();
   const cantidad = await prisma.empresa.count({
     where: {
       OR: [
@@ -57,6 +62,7 @@ export async function checkDeleteMoneda(codMoneda: number): Promise<DeleteCheckR
 }
 
 export async function deleteMoneda(codMoneda: number) {
+  await requireAdmin();
   const check = await checkDeleteMoneda(codMoneda);
   if (check.blocked) throw new Error(check.reason);
 

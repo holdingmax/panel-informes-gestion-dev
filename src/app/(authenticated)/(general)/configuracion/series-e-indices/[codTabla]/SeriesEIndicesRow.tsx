@@ -17,11 +17,13 @@ export function SeriesEIndicesRow({
   periodo,
   indice,
   dolar,
+  isAdmin,
 }: {
   id: string;
   periodo: Date;
   indice: number;
   dolar: number;
+  isAdmin: boolean;
 }) {
   const [editing, setEditing] = useState(false);
   const [indiceValue, setIndiceValue] = useState(String(indice));
@@ -67,47 +69,49 @@ export function SeriesEIndicesRow({
         )}
       </td>
       <td className="py-1.5 pr-4">
-        <div className="flex gap-2">
-          {editing ? (
-            <>
-              <button
-                type="button"
-                onClick={guardar}
-                disabled={pending}
-                className="rounded-md bg-accent px-2.5 py-1.5 text-sm text-white transition-colors hover:bg-accent-hover disabled:cursor-not-allowed disabled:opacity-50"
-              >
-                Guardar
-              </button>
-              <button
-                type="button"
-                onClick={() => {
-                  setIndiceValue(String(indice));
-                  setDolarValue(String(dolar));
-                  setEditing(false);
-                }}
-                disabled={pending}
-                className="rounded-md border border-slate-300 px-2.5 py-1.5 text-sm text-slate-700 hover:bg-slate-50"
-              >
-                Cancelar
-              </button>
-            </>
-          ) : (
-            <>
-              <button
-                type="button"
-                onClick={() => setEditing(true)}
-                className="rounded-md border border-slate-300 px-2.5 py-1.5 text-sm text-slate-700 transition-colors hover:bg-slate-50 focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-accent focus-visible:ring-offset-2"
-              >
-                Editar
-              </button>
-              <ConfirmDeleteButton
-                itemLabel={`el período ${formatPeriodo(periodo)}`}
-                check={() => checkDeleteSeriesEIndices(id)}
-                onConfirm={() => deleteSeriesEIndices(id)}
-              />
-            </>
-          )}
-        </div>
+        {isAdmin && (
+          <div className="flex gap-2">
+            {editing ? (
+              <>
+                <button
+                  type="button"
+                  onClick={guardar}
+                  disabled={pending}
+                  className="rounded-md bg-accent px-2.5 py-1.5 text-sm text-white transition-colors hover:bg-accent-hover disabled:cursor-not-allowed disabled:opacity-50"
+                >
+                  Guardar
+                </button>
+                <button
+                  type="button"
+                  onClick={() => {
+                    setIndiceValue(String(indice));
+                    setDolarValue(String(dolar));
+                    setEditing(false);
+                  }}
+                  disabled={pending}
+                  className="rounded-md border border-slate-300 px-2.5 py-1.5 text-sm text-slate-700 hover:bg-slate-50"
+                >
+                  Cancelar
+                </button>
+              </>
+            ) : (
+              <>
+                <button
+                  type="button"
+                  onClick={() => setEditing(true)}
+                  className="rounded-md border border-slate-300 px-2.5 py-1.5 text-sm text-slate-700 transition-colors hover:bg-slate-50 focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-accent focus-visible:ring-offset-2"
+                >
+                  Editar
+                </button>
+                <ConfirmDeleteButton
+                  itemLabel={`el período ${formatPeriodo(periodo)}`}
+                  check={() => checkDeleteSeriesEIndices(id)}
+                  onConfirm={() => deleteSeriesEIndices(id)}
+                />
+              </>
+            )}
+          </div>
+        )}
       </td>
     </tr>
   );

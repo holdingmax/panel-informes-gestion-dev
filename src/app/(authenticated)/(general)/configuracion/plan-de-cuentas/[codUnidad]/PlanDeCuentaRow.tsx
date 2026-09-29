@@ -32,6 +32,7 @@ export function PlanDeCuentaRow({
   subrubros2,
   subrubros3,
   categorias,
+  isAdmin,
 }: {
   id: string;
   nombreEmpresa: string;
@@ -54,6 +55,7 @@ export function PlanDeCuentaRow({
   subrubros2: Opcion[];
   subrubros3: Opcion[];
   categorias: Opcion[];
+  isAdmin: boolean;
 }) {
   const [editing, setEditing] = useState(false);
   const [cuentaValue, setCuentaValue] = useState(cuenta);
@@ -67,7 +69,7 @@ export function PlanDeCuentaRow({
     });
   }
 
-  if (editing) {
+  if (editing && isAdmin) {
     return (
       <tr className="border-t align-top">
         <td className="py-1.5 pr-4">{nombreEmpresa}</td>
@@ -213,20 +215,22 @@ export function PlanDeCuentaRow({
       <td className="py-1.5 pr-4">{nombreSubrubro3 ?? "—"}</td>
       <td className="py-1.5 pr-4">{nombreCategoriaOyA ?? "—"}</td>
       <td className="py-1.5 pr-4">
-        <div className="flex gap-2">
-          <button
-            type="button"
-            onClick={() => setEditing(true)}
-            className="rounded-md border border-slate-300 px-2.5 py-1.5 text-sm text-slate-700 transition-colors hover:bg-slate-50 focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-accent focus-visible:ring-offset-2"
-          >
-            Editar
-          </button>
-          <ConfirmDeleteButton
-            itemLabel={`la cuenta "${cuenta}"`}
-            check={() => checkDeletePlanDeCuentas()}
-            onConfirm={() => deletePlanDeCuentas(id)}
-          />
-        </div>
+        {isAdmin && (
+          <div className="flex gap-2">
+            <button
+              type="button"
+              onClick={() => setEditing(true)}
+              className="rounded-md border border-slate-300 px-2.5 py-1.5 text-sm text-slate-700 transition-colors hover:bg-slate-50 focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-accent focus-visible:ring-offset-2"
+            >
+              Editar
+            </button>
+            <ConfirmDeleteButton
+              itemLabel={`la cuenta "${cuenta}"`}
+              check={() => checkDeletePlanDeCuentas()}
+              onConfirm={() => deletePlanDeCuentas(id)}
+            />
+          </div>
+        )}
       </td>
     </tr>
   );

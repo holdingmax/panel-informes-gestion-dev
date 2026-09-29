@@ -3,8 +3,10 @@
 import { revalidatePath } from "next/cache";
 import { prisma } from "@/lib/prisma";
 import type { DeleteCheckResult } from "@/components/ConfirmDeleteButton";
+import { requireUser, requireAdmin } from "@/lib/authz";
 
 export async function listEmpresas() {
+  await requireUser();
   return prisma.empresa.findMany({
     orderBy: { codEmp: "asc" },
     include: {
@@ -17,6 +19,7 @@ export async function listEmpresas() {
 }
 
 export async function listEmpresasDeUnidad(unidadNegocioId: number) {
+  await requireUser();
   return prisma.empresa.findMany({
     where: { unidadNegocioId },
     orderBy: { nombreEmp: "asc" },
@@ -24,6 +27,7 @@ export async function listEmpresasDeUnidad(unidadNegocioId: number) {
 }
 
 export async function getEmpresa(codEmp: number) {
+  await requireUser();
   return prisma.empresa.findUnique({ where: { codEmp } });
 }
 
@@ -35,6 +39,7 @@ function optionalMonedaId(formData: FormData, field: string): number | null {
 }
 
 export async function createEmpresa(formData: FormData) {
+  await requireAdmin();
   const nombreEmp = String(formData.get("nombreEmp") ?? "").trim();
   if (!nombreEmp) throw new Error("El nombre es obligatorio");
   if (nombreEmp.length > 60) throw new Error("El nombre no puede superar 60 caracteres");
@@ -54,6 +59,7 @@ export async function createEmpresa(formData: FormData) {
 }
 
 export async function updateEmpresa(codEmp: number, formData: FormData) {
+  await requireAdmin();
   const nombreEmp = String(formData.get("nombreEmp") ?? "").trim();
   if (!nombreEmp) throw new Error("El nombre es obligatorio");
   if (nombreEmp.length > 60) throw new Error("El nombre no puede superar 60 caracteres");
@@ -74,6 +80,7 @@ export async function updateEmpresa(codEmp: number, formData: FormData) {
 }
 
 export async function checkDeleteEmpresa(codEmp: number): Promise<DeleteCheckResult> {
+  await requireUser();
   const [planes, balances] = await Promise.all([
     prisma.planDeCuentas.count({ where: { empresaId: codEmp } }),
     prisma.balanceSumasYSaldos.count({ where: { empresaId: codEmp } }),
@@ -88,6 +95,7 @@ export async function checkDeleteEmpresa(codEmp: number): Promise<DeleteCheckRes
 }
 
 export async function deleteEmpresa(codEmp: number) {
+  await requireAdmin();
   const check = await checkDeleteEmpresa(codEmp);
   if (check.blocked) throw new Error(check.reason);
 

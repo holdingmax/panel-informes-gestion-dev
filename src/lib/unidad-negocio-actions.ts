@@ -3,6 +3,7 @@
 import { revalidatePath } from "next/cache";
 import { prisma } from "@/lib/prisma";
 import type { DeleteCheckResult } from "@/components/ConfirmDeleteButton";
+import { requireUser, requireAdmin } from "@/lib/authz";
 
 const ALLOWED_MIME = [
   "image/jpeg",
@@ -14,6 +15,7 @@ const ALLOWED_MIME = [
 const MAX_IMAGE_BYTES = 2 * 1024 * 1024;
 
 export async function listUnidadesNegocio() {
+  await requireUser();
   return prisma.unidadNegocio.findMany({
     orderBy: { codUnidad: "asc" },
     select: { codUnidad: true, nombreUnidad: true, imagenMime: true },
@@ -21,6 +23,7 @@ export async function listUnidadesNegocio() {
 }
 
 export async function listUnidadesNegocioConEmpresas() {
+  await requireUser();
   return prisma.unidadNegocio.findMany({
     orderBy: { codUnidad: "asc" },
     include: { empresas: { orderBy: { nombreEmp: "asc" } } },
@@ -28,10 +31,12 @@ export async function listUnidadesNegocioConEmpresas() {
 }
 
 export async function getUnidadNegocio(codUnidad: number) {
+  await requireUser();
   return prisma.unidadNegocio.findUnique({ where: { codUnidad } });
 }
 
 export async function createUnidadNegocio(formData: FormData) {
+  await requireAdmin();
   const nombreUnidad = String(formData.get("nombreUnidad") ?? "").trim();
   if (!nombreUnidad) throw new Error("El nombre es obligatorio");
   if (nombreUnidad.length > 35) throw new Error("El nombre no puede superar 35 caracteres");
@@ -62,6 +67,7 @@ export async function createUnidadNegocio(formData: FormData) {
 }
 
 export async function updateUnidadNegocioNombre(codUnidad: number, nombreUnidad: string) {
+  await requireAdmin();
   const value = nombreUnidad.trim();
   if (!value) throw new Error("El nombre es obligatorio");
   if (value.length > 35) throw new Error("El nombre no puede superar 35 caracteres");
@@ -72,6 +78,7 @@ export async function updateUnidadNegocioNombre(codUnidad: number, nombreUnidad:
 }
 
 export async function updateUnidadNegocioLogo(formData: FormData) {
+  await requireAdmin();
   const codUnidad = Number(formData.get("codUnidad"));
   const file = formData.get("imagen");
   if (!(file instanceof File) || file.size === 0) {
@@ -95,6 +102,7 @@ export async function updateUnidadNegocioLogo(formData: FormData) {
 }
 
 export async function checkDeleteUnidadNegocio(codUnidad: number): Promise<DeleteCheckResult> {
+  await requireUser();
   const [empresas, informes, historicos] = await Promise.all([
     prisma.empresa.count({ where: { unidadNegocioId: codUnidad } }),
     prisma.informe.count({ where: { unidadNegocioId: codUnidad } }),
@@ -111,6 +119,7 @@ export async function checkDeleteUnidadNegocio(codUnidad: number): Promise<Delet
 }
 
 export async function deleteUnidadNegocio(codUnidad: number) {
+  await requireAdmin();
   const check = await checkDeleteUnidadNegocio(codUnidad);
   if (check.blocked) throw new Error(check.reason);
 
@@ -124,6 +133,7 @@ export async function deleteUnidadNegocio(codUnidad: number) {
 // solo puede estar vinculada a una Unidad de Negocio a la vez, así que
 // elegirla acá se la saca de donde estuviera antes.
 export async function actualizarEmpresasVinculadas(formData: FormData) {
+  await requireAdmin();
   const codUnidad = Number(formData.get("codUnidad"));
   const empresaIds = formData.getAll("empresaIds").map(Number).filter(Number.isFinite);
 
