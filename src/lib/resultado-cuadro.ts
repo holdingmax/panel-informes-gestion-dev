@@ -34,7 +34,7 @@ function periodosDelRango(
 // desde julio del ejercicio correspondiente hasta el período del informe —
 // no es una ventana móvil de 12 meses. Al empezar un ejercicio nuevo en
 // julio, el acumulado es simplemente el mes de julio (un solo mes).
-function inicioEjercicio(mes: number, anio: number) {
+export function inicioEjercicio(mes: number, anio: number) {
   return mes >= 7 ? { mes: 7, anio } : { mes: 7, anio: anio - 1 };
 }
 

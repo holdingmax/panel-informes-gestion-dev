@@ -35,9 +35,63 @@ function fmtPeriodo(mes: number, anio: number): string {
   return `${String(mes).padStart(2, "0")}/${anio}`;
 }
 
+export type BalanceMesInput = {
+  cuenta: string;
+  saldoIniDebe: number;
+  saldoIniHaber: number;
+  saldoCierreDebe: number;
+  saldoCierreHaber: number;
+};
+
+export type PlanCuentaResultadoInput = {
+  cuenta: string;
+  nomRubro: string;
+  tipoRol: "ACTIVO" | "PASIVO" | "PATRIMONIO_NETO" | "RESULTADO" | null;
+};
+
+// Función pura: sin Prisma, para poder testearla con datos armados a mano.
 // El BSyS "Mes" trae, para cada cuenta, el saldo acumulado a fin del mes
 // anterior (saldo inicio) y a fin de este mes (saldo cierre) — el movimiento
 // propio del mes es la diferencia entre ambos, no el saldo de cierre solo.
+export function computeResultadoNominalDeEmpresaPure(
+  empresaNombre: string,
+  balances: BalanceMesInput[],
+  planDeCuentas: PlanCuentaResultadoInput[]
+): { valores: ResultadoNominal; advertencias: string[] } {
+  const advertencias: string[] = [];
+  const porCuenta = new Map(planDeCuentas.map((p) => [normalizeCuenta(p.cuenta), p]));
+  const valores = vacio();
+
+  for (const b of balances) {
+    const plan = porCuenta.get(normalizeCuenta(b.cuenta));
+    if (!plan) {
+      advertencias.push(
+        `La cuenta "${b.cuenta}" (${empresaNombre}) no está clasificada en el Plan de Cuentas actual.`
+      );
+      continue;
+    }
+    if (plan.tipoRol !== "RESULTADO") continue;
+
+    const campo = RUBRO_A_CAMPO[plan.nomRubro];
+    if (!campo) {
+      advertencias.push(
+        `El rubro "${plan.nomRubro}" (cuenta "${b.cuenta}", ${empresaNombre}) no corresponde a ninguno de los 5 campos de Resultado (Ventas, Costos directos/variables, Gastos Fijos Operativos, Expensas, Otras Ganancias y Perdidas).`
+      );
+      continue;
+    }
+
+    const inicio = b.saldoIniDebe - b.saldoIniHaber;
+    const cierre = b.saldoCierreDebe - b.saldoCierreHaber;
+    const movimientoRaw = cierre - inicio;
+    // Convención "positivo = favorable" (Ventas positiva, Costos/Gastos
+    // negativos): misma que ya usan los datos históricos pre-cargados en
+    // Resultados Históricos, es la inversa del signo crudo de mayor.
+    valores[campo] += -movimientoRaw;
+  }
+
+  return { valores, advertencias };
+}
+
 async function computeResultadoNominalMesDeEmpresa(
   empresaId: number,
   empresaNombre: string,
@@ -48,7 +102,6 @@ async function computeResultadoNominalMesDeEmpresa(
   fechaCarga: Date | null;
   advertencias: string[];
 }> {
-  const advertencias: string[] = [];
   // fechaCarga desc solo desempata DENTRO del período (por si alguna vez
   // hay más de una carga del mismo mes) — el filtro real es el período,
   // no "la carga más reciente entre todas".
@@ -75,36 +128,22 @@ async function computeResultadoNominalMesDeEmpresa(
     where: { empresaId },
     include: { rubro: true, partidaPatrimonial: { include: { tipo: true } } },
   });
-  const porCuenta = new Map(planDeCuentas.map((p) => [normalizeCuenta(p.cuenta), p]));
 
-  const valores = vacio();
-
-  for (const b of balances) {
-    const plan = porCuenta.get(normalizeCuenta(b.cuenta));
-    if (!plan) {
-      advertencias.push(
-        `La cuenta "${b.cuenta}" (${empresaNombre}) no está clasificada en el Plan de Cuentas actual.`
-      );
-      continue;
-    }
-    if (plan.partidaPatrimonial.tipo?.rol !== "RESULTADO") continue;
-
-    const campo = RUBRO_A_CAMPO[plan.rubro.nomRubro];
-    if (!campo) {
-      advertencias.push(
-        `El rubro "${plan.rubro.nomRubro}" (cuenta "${b.cuenta}", ${empresaNombre}) no corresponde a ninguno de los 5 campos de Resultado (Ventas, Costos directos/variables, Gastos Fijos Operativos, Expensas, Otras Ganancias y Perdidas).`
-      );
-      continue;
-    }
-
-    const inicio = Number(b.saldoIniDebe) - Number(b.saldoIniHaber);
-    const cierre = Number(b.saldoCierreDebe) - Number(b.saldoCierreHaber);
-    const movimientoRaw = cierre - inicio;
-    // Convención "positivo = favorable" (Ventas positiva, Costos/Gastos
-    // negativos): misma que ya usan los datos históricos pre-cargados en
-    // Resultados Históricos, es la inversa del signo crudo de mayor.
-    valores[campo] += -movimientoRaw;
-  }
+  const { valores, advertencias } = computeResultadoNominalDeEmpresaPure(
+    empresaNombre,
+    balances.map((b) => ({
+      cuenta: b.cuenta,
+      saldoIniDebe: Number(b.saldoIniDebe),
+      saldoIniHaber: Number(b.saldoIniHaber),
+      saldoCierreDebe: Number(b.saldoCierreDebe),
+      saldoCierreHaber: Number(b.saldoCierreHaber),
+    })),
+    planDeCuentas.map((p) => ({
+      cuenta: p.cuenta,
+      nomRubro: p.rubro.nomRubro,
+      tipoRol: p.partidaPatrimonial.tipo?.rol ?? null,
+    }))
+  );
 
   return { valores, fechaCarga: ultimoMes.fechaCarga, advertencias };
 }

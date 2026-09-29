@@ -198,19 +198,56 @@ function nofLine(r: NofAgg): RubroLine {
   };
 }
 
-export async function computeInformeReport(informeId: string): Promise<InformeReport> {
-  const informe = await prisma.informe.findUniqueOrThrow({
-    where: { id: informeId },
-    include: { unidadNegocio: true },
-  });
+export type CuentaSaldoInput = {
+  cuenta: string;
+  saldoIniDebe: number;
+  saldoIniHaber: number;
+  saldoCierreDebe: number;
+  saldoCierreHaber: number;
+};
 
+export type PlanCuentaInput = {
+  cuenta: string;
+  rubroId: number;
+  nomRubro: string;
+  rubroCategoriaOyA: "ORIGEN" | "APLICACION" | "AJUSTE" | null;
+  rubroBucketNOF: "OPERATIVO" | "NO_OPERATIVO" | "FINANCIAMIENTO" | null;
+  rubroOrden: number | null;
+  tipoRol: "ACTIVO" | "PASIVO" | "PATRIMONIO_NETO" | "RESULTADO" | null;
+  tieneTipo: boolean;
+  exigeSaldoCero: boolean;
+  categoriaOyAId: number | null;
+  categoriaOyABucketNOF: "OPERATIVO" | "NO_OPERATIVO" | "FINANCIAMIENTO" | null;
+};
+
+export type EmpresaBalanceInput = {
+  nombreEmp: string;
+  // false = no había ningún BSyS Acumulado cargado para el período pedido
+  // (distinto de "tenía Acumulado pero 0 cuentas", que no debería pasar en
+  // la práctica pero no genera la misma advertencia).
+  tieneAcumulado: boolean;
+  balances: CuentaSaldoInput[];
+  planDeCuentas: PlanCuentaInput[];
+};
+
+export type InformeReportCore = Omit<
+  InformeReport,
+  "informeId" | "unidadNegocioId" | "unidadNegocioNombre" | "estado" | "fechaCargaAcumulado"
+>;
+
+// Función pura: sin Prisma ni ninguna otra dependencia externa, para poder
+// testearla con datos armados a mano. computeInformeReport (más abajo) solo
+// se encarga de leer de la base y traducir esas filas a los tipos de acá.
+export function buildInformeReport(
+  periodo: { periodoMes: number; periodoAnio: number },
+  empresas: EmpresaBalanceInput[]
+): InformeReportCore {
   const advertencias: string[] = [];
 
   // Una Unidad de Negocio puede combinar el Plan de Cuentas y el BSyS de
   // varias Empresas: se consolida sumando, rubro por rubro, la carga
   // ACUMULADO más reciente de cada una — cada Empresa avanza a su propio
   // ritmo, así que no se exige que compartan la misma fechaCarga exacta.
-  const empresas = await prisma.empresa.findMany({ where: { unidadNegocioId: informe.unidadNegocioId } });
   if (empresas.length === 0) {
     advertencias.push("Esta unidad de negocio no tiene empresas vinculadas.");
   }
@@ -221,55 +258,17 @@ export async function computeInformeReport(informeId: string): Promise<InformeRe
   // combinación Rubro + Categoría OyA.
   const nofMap = new Map<string, NofAgg>();
 
-  let fechaCargaAcumulado: Date | null = null;
-
   for (const empresa of empresas) {
-    // Filtrado por el período del informe, no por "la carga más reciente
-    // entre todas" — así el informe de un período ya cerrado no cambia si
-    // después se carga un período posterior. fechaCarga desc solo
-    // desempata dentro del propio período.
-    const ultimoAcumulado = await prisma.balanceSumasYSaldos.findFirst({
-      where: {
-        empresaId: empresa.codEmp,
-        tipo: "ACUMULADO",
-        periodoMes: informe.periodoMes,
-        periodoAnio: informe.periodoAnio,
-      },
-      orderBy: { fechaCarga: "desc" },
-      select: { fechaCarga: true },
-    });
-
-    if (!ultimoAcumulado) {
+    if (!empresa.tieneAcumulado) {
       advertencias.push(
-        `No hay BSyS Acumulado cargado para "${empresa.nombreEmp}" en el período ${formatPeriodoAbrev(informe.periodoMes, informe.periodoAnio)}.`
+        `No hay BSyS Acumulado cargado para "${empresa.nombreEmp}" en el período ${formatPeriodoAbrev(periodo.periodoMes, periodo.periodoAnio)}.`
       );
       continue;
     }
-    if (!fechaCargaAcumulado || ultimoAcumulado.fechaCarga > fechaCargaAcumulado) {
-      fechaCargaAcumulado = ultimoAcumulado.fechaCarga;
-    }
 
-    const balances = await prisma.balanceSumasYSaldos.findMany({
-      where: {
-        empresaId: empresa.codEmp,
-        tipo: "ACUMULADO",
-        periodoMes: informe.periodoMes,
-        periodoAnio: informe.periodoAnio,
-        fechaCarga: ultimoAcumulado.fechaCarga,
-      },
-    });
+    const porCuenta = new Map(empresa.planDeCuentas.map((p) => [normalizeCuenta(p.cuenta), p]));
 
-    const planDeCuentas = await prisma.planDeCuentas.findMany({
-      where: { empresaId: empresa.codEmp },
-      include: {
-        rubro: true,
-        partidaPatrimonial: { include: { tipo: true } },
-        categoriaOyA: true,
-      },
-    });
-    const porCuenta = new Map(planDeCuentas.map((p) => [normalizeCuenta(p.cuenta), p]));
-
-    for (const b of balances) {
+    for (const b of empresa.balances) {
       const plan = porCuenta.get(normalizeCuenta(b.cuenta));
       if (!plan) {
         advertencias.push(
@@ -278,20 +277,20 @@ export async function computeInformeReport(informeId: string): Promise<InformeRe
         continue;
       }
 
-      const debeHaber = Number(b.saldoIniDebe) - Number(b.saldoIniHaber);
-      const debeHaberFinal = Number(b.saldoCierreDebe) - Number(b.saldoCierreHaber);
+      const debeHaber = b.saldoIniDebe - b.saldoIniHaber;
+      const debeHaberFinal = b.saldoCierreDebe - b.saldoCierreHaber;
 
       let agg = rubroMap.get(plan.rubroId);
       if (!agg) {
         agg = {
-          codRubro: plan.rubro.codRubro,
-          nomRubro: plan.rubro.nomRubro,
-          categoriaOyA: plan.rubro.categoriaOyA,
-          bucketNOF: plan.rubro.bucketNOF,
-          orden: plan.rubro.orden,
-          tipoPartida: plan.partidaPatrimonial.tipo?.rol ?? null,
-          tieneTipo: plan.partidaPatrimonial.tipo !== null,
-          exigeSaldoCero: plan.partidaPatrimonial.tipo?.exigeSaldoCero ?? false,
+          codRubro: plan.rubroId,
+          nomRubro: plan.nomRubro,
+          categoriaOyA: plan.rubroCategoriaOyA,
+          bucketNOF: plan.rubroBucketNOF,
+          orden: plan.rubroOrden,
+          tipoPartida: plan.tipoRol,
+          tieneTipo: plan.tieneTipo,
+          exigeSaldoCero: plan.exigeSaldoCero,
           saldoInicio: 0,
           saldoFinal: 0,
         };
@@ -308,16 +307,14 @@ export async function computeInformeReport(informeId: string): Promise<InformeRe
       // el OyAF) — sumarlos también acá los contaría dos veces y el
       // Control dejaría de cerrar en cero.
       const bucketNOF =
-        plan.rubro.categoriaOyA === "AJUSTE"
-          ? null
-          : (plan.categoriaOyA?.bucketNOF ?? plan.rubro.bucketNOF);
+        plan.rubroCategoriaOyA === "AJUSTE" ? null : (plan.categoriaOyABucketNOF ?? plan.rubroBucketNOF);
       if (bucketNOF) {
         const key = `${plan.rubroId}:${plan.categoriaOyAId}`;
         let nofAgg = nofMap.get(key);
         if (!nofAgg) {
           nofAgg = {
-            codRubro: plan.rubro.codRubro,
-            nomRubro: plan.rubro.nomRubro,
+            codRubro: plan.rubroId,
+            nomRubro: plan.nomRubro,
             bucketNOF,
             saldoInicio: 0,
             saldoFinal: 0,
@@ -492,15 +489,10 @@ export async function computeInformeReport(informeId: string): Promise<InformeRe
   const controlNOF = resultadoVsNOF + totalNoOperativo + totalFinanciamiento;
 
   return {
-    informeId: informe.id,
-    unidadNegocioId: informe.unidadNegocioId,
-    unidadNegocioNombre: informe.unidadNegocio.nombreUnidad,
-    periodoMes: informe.periodoMes,
-    periodoAnio: informe.periodoAnio,
-    periodoLabel: formatPeriodoAbrev(informe.periodoMes, informe.periodoAnio),
-    periodoAnteriorLabel: formatPeriodoAbrev(informe.periodoMes, informe.periodoAnio - 1),
-    estado: informe.estado,
-    fechaCargaAcumulado,
+    periodoMes: periodo.periodoMes,
+    periodoAnio: periodo.periodoAnio,
+    periodoLabel: formatPeriodoAbrev(periodo.periodoMes, periodo.periodoAnio),
+    periodoAnteriorLabel: formatPeriodoAbrev(periodo.periodoMes, periodo.periodoAnio - 1),
     balance: {
       activo,
       pasivo,
@@ -530,6 +522,109 @@ export async function computeInformeReport(informeId: string): Promise<InformeRe
       control: controlNOF,
     },
     advertencias,
+  };
+}
+
+// Lee de la base (empresas vinculadas → última carga ACUMULADO de cada una
+// dentro del período del informe → Plan de Cuentas) y traduce esas filas a
+// los tipos planos que espera buildInformeReport — ningún cálculo vive acá.
+export async function computeInformeReport(informeId: string): Promise<InformeReport> {
+  const informe = await prisma.informe.findUniqueOrThrow({
+    where: { id: informeId },
+    include: { unidadNegocio: true },
+  });
+
+  const empresasDb = await prisma.empresa.findMany({ where: { unidadNegocioId: informe.unidadNegocioId } });
+
+  let fechaCargaAcumulado: Date | null = null;
+  const empresasInput: EmpresaBalanceInput[] = [];
+
+  for (const empresa of empresasDb) {
+    // Filtrado por el período del informe, no por "la carga más reciente
+    // entre todas" — así el informe de un período ya cerrado no cambia si
+    // después se carga un período posterior. fechaCarga desc solo
+    // desempata dentro del propio período.
+    const ultimoAcumulado = await prisma.balanceSumasYSaldos.findFirst({
+      where: {
+        empresaId: empresa.codEmp,
+        tipo: "ACUMULADO",
+        periodoMes: informe.periodoMes,
+        periodoAnio: informe.periodoAnio,
+      },
+      orderBy: { fechaCarga: "desc" },
+      select: { fechaCarga: true },
+    });
+
+    if (!ultimoAcumulado) {
+      empresasInput.push({
+        nombreEmp: empresa.nombreEmp,
+        tieneAcumulado: false,
+        balances: [],
+        planDeCuentas: [],
+      });
+      continue;
+    }
+    if (!fechaCargaAcumulado || ultimoAcumulado.fechaCarga > fechaCargaAcumulado) {
+      fechaCargaAcumulado = ultimoAcumulado.fechaCarga;
+    }
+
+    const balances = await prisma.balanceSumasYSaldos.findMany({
+      where: {
+        empresaId: empresa.codEmp,
+        tipo: "ACUMULADO",
+        periodoMes: informe.periodoMes,
+        periodoAnio: informe.periodoAnio,
+        fechaCarga: ultimoAcumulado.fechaCarga,
+      },
+    });
+
+    const planDeCuentas = await prisma.planDeCuentas.findMany({
+      where: { empresaId: empresa.codEmp },
+      include: {
+        rubro: true,
+        partidaPatrimonial: { include: { tipo: true } },
+        categoriaOyA: true,
+      },
+    });
+
+    empresasInput.push({
+      nombreEmp: empresa.nombreEmp,
+      tieneAcumulado: true,
+      balances: balances.map((b) => ({
+        cuenta: b.cuenta,
+        saldoIniDebe: Number(b.saldoIniDebe),
+        saldoIniHaber: Number(b.saldoIniHaber),
+        saldoCierreDebe: Number(b.saldoCierreDebe),
+        saldoCierreHaber: Number(b.saldoCierreHaber),
+      })),
+      planDeCuentas: planDeCuentas.map((p) => ({
+        cuenta: p.cuenta,
+        rubroId: p.rubroId,
+        nomRubro: p.rubro.nomRubro,
+        rubroCategoriaOyA: p.rubro.categoriaOyA,
+        rubroBucketNOF: p.rubro.bucketNOF,
+        rubroOrden: p.rubro.orden,
+        tipoRol: p.partidaPatrimonial.tipo?.rol ?? null,
+        tieneTipo: p.partidaPatrimonial.tipo !== null,
+        exigeSaldoCero: p.partidaPatrimonial.tipo?.exigeSaldoCero ?? false,
+        categoriaOyAId: p.categoriaOyAId,
+        categoriaOyABucketNOF: p.categoriaOyA?.bucketNOF ?? null,
+      })),
+    });
+  }
+
+  const core = buildInformeReport(
+    { periodoMes: informe.periodoMes, periodoAnio: informe.periodoAnio },
+    empresasInput
+  );
+
+  return {
+    informeId: informe.id,
+    unidadNegocioId: informe.unidadNegocioId,
+    unidadNegocioNombre: informe.unidadNegocio.nombreUnidad,
+    estado: informe.estado,
+    fechaCargaAcumulado,
+    ...core,
   };
 }
 
