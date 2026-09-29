@@ -44,28 +44,143 @@ export function PlanDeCuentasTable({
   categorias: Opcion[];
 }) {
   const [filtroEmpresa, setFiltroEmpresa] = useState("");
+  const [filtroCuenta, setFiltroCuenta] = useState("");
+  const [filtroPartida, setFiltroPartida] = useState("");
+  const [filtroRubro, setFiltroRubro] = useState("");
+  const [filtroSubrubro, setFiltroSubrubro] = useState("");
+  const [filtroCategoria, setFiltroCategoria] = useState("");
 
-  const filasFiltradas = filtroEmpresa
-    ? filas.filter((f) => f.empresaId === Number(filtroEmpresa))
-    : filas;
+  const cuentaNormalizada = filtroCuenta.trim().toLowerCase();
+
+  const filasFiltradas = filas.filter((f) => {
+    if (filtroEmpresa && f.empresaId !== Number(filtroEmpresa)) return false;
+    if (cuentaNormalizada && !f.cuenta.toLowerCase().includes(cuentaNormalizada)) return false;
+    if (filtroPartida && f.partidaPatrimonialId !== Number(filtroPartida)) return false;
+    if (filtroRubro && f.rubroId !== Number(filtroRubro)) return false;
+    if (filtroSubrubro && f.subrubroId !== Number(filtroSubrubro)) return false;
+    if (filtroCategoria && f.categoriaOyAId !== Number(filtroCategoria)) return false;
+    return true;
+  });
+
+  const hayFiltrosActivos =
+    filtroEmpresa || filtroCuenta || filtroPartida || filtroRubro || filtroSubrubro || filtroCategoria;
+
+  function limpiarFiltros() {
+    setFiltroEmpresa("");
+    setFiltroCuenta("");
+    setFiltroPartida("");
+    setFiltroRubro("");
+    setFiltroSubrubro("");
+    setFiltroCategoria("");
+  }
 
   return (
     <div className="flex flex-col gap-3">
-      <label className="flex w-fit flex-col gap-1">
-        <span className="text-sm">Filtrar por empresa</span>
-        <select
-          value={filtroEmpresa}
-          onChange={(e) => setFiltroEmpresa(e.target.value)}
-          className="rounded border px-3 py-2 text-lg"
-        >
-          <option value="">Todas</option>
-          {empresas.map((e) => (
-            <option key={e.codEmp} value={e.codEmp}>
-              {e.nombreEmp}
-            </option>
-          ))}
-        </select>
-      </label>
+      <div className="flex flex-wrap items-end gap-4">
+        <label className="flex w-fit flex-col gap-1">
+          <span className="text-sm">Buscar cuenta</span>
+          <input
+            value={filtroCuenta}
+            onChange={(e) => setFiltroCuenta(e.target.value)}
+            placeholder="Código o nombre..."
+            className="rounded border px-3 py-2 text-lg"
+          />
+        </label>
+
+        <label className="flex w-fit flex-col gap-1">
+          <span className="text-sm">Filtrar por empresa</span>
+          <select
+            value={filtroEmpresa}
+            onChange={(e) => setFiltroEmpresa(e.target.value)}
+            className="rounded border px-3 py-2 text-lg"
+          >
+            <option value="">Todas</option>
+            {empresas.map((e) => (
+              <option key={e.codEmp} value={e.codEmp}>
+                {e.nombreEmp}
+              </option>
+            ))}
+          </select>
+        </label>
+
+        <label className="flex w-fit flex-col gap-1">
+          <span className="text-sm">Filtrar por partida</span>
+          <select
+            value={filtroPartida}
+            onChange={(e) => setFiltroPartida(e.target.value)}
+            className="rounded border px-3 py-2 text-lg"
+          >
+            <option value="">Todas</option>
+            {partidas.map((p) => (
+              <option key={p.id} value={p.id}>
+                {p.nombre}
+              </option>
+            ))}
+          </select>
+        </label>
+
+        <label className="flex w-fit flex-col gap-1">
+          <span className="text-sm">Filtrar por rubro</span>
+          <select
+            value={filtroRubro}
+            onChange={(e) => setFiltroRubro(e.target.value)}
+            className="rounded border px-3 py-2 text-lg"
+          >
+            <option value="">Todos</option>
+            {rubros.map((r) => (
+              <option key={r.id} value={r.id}>
+                {r.nombre}
+              </option>
+            ))}
+          </select>
+        </label>
+
+        <label className="flex w-fit flex-col gap-1">
+          <span className="text-sm">Filtrar por subrubro</span>
+          <select
+            value={filtroSubrubro}
+            onChange={(e) => setFiltroSubrubro(e.target.value)}
+            className="rounded border px-3 py-2 text-lg"
+          >
+            <option value="">Todos</option>
+            {subrubros.map((s) => (
+              <option key={s.id} value={s.id}>
+                {s.nombre}
+              </option>
+            ))}
+          </select>
+        </label>
+
+        <label className="flex w-fit flex-col gap-1">
+          <span className="text-sm">Filtrar por categoría OyA</span>
+          <select
+            value={filtroCategoria}
+            onChange={(e) => setFiltroCategoria(e.target.value)}
+            className="rounded border px-3 py-2 text-lg"
+          >
+            <option value="">Todas</option>
+            {categorias.map((c) => (
+              <option key={c.id} value={c.id}>
+                {c.nombre}
+              </option>
+            ))}
+          </select>
+        </label>
+
+        {hayFiltrosActivos && (
+          <button
+            type="button"
+            onClick={limpiarFiltros}
+            className="rounded-md border border-slate-300 px-3 py-2 text-sm text-slate-700 hover:bg-slate-50 focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-accent focus-visible:ring-offset-2"
+          >
+            Limpiar filtros
+          </button>
+        )}
+      </div>
+
+      <p className="text-sm text-zinc-600">
+        {filasFiltradas.length} de {filas.length} cuenta(s)
+      </p>
 
       <div className="overflow-x-auto rounded-lg bg-white p-4 shadow">
         <table className="w-full whitespace-nowrap text-left text-sm">
