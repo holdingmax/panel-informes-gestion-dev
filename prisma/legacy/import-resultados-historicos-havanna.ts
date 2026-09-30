@@ -1,6 +1,6 @@
 import "dotenv/config";
 import ExcelJS from "exceljs";
-import { PrismaClient } from "../src/generated/prisma/client";
+import { PrismaClient } from "../../src/generated/prisma/client";
 import { PrismaPg } from "@prisma/adapter-pg";
 
 const adapter = new PrismaPg({ connectionString: process.env.DATABASE_URL! });
@@ -27,7 +27,7 @@ function toDate(value: unknown): Date | null {
 const CAMPOS: Record<string, "ventas" | "costosDirectos" | "gastosOperativos" | "expensas" | "otrasGananciasYPerdidas"> = {
   Ventas: "ventas",
   "Costos directo de ventas": "costosDirectos",
-  "Costos Fijos": "gastosOperativos",
+  "Gastos Operativos": "gastosOperativos",
   Expensas: "expensas",
   "Otras Ganancias y perdidas": "otrasGananciasYPerdidas",
 };
@@ -36,10 +36,10 @@ async function main() {
   const [filePath, hastaPeriodoRaw] = process.argv.slice(2);
   if (!filePath) {
     throw new Error(
-      'Uso: npx tsx prisma/import-resultados-historicos-lv12.ts "<ruta al xlsx>" [hastaAAAA-MM]'
+      'Uso: npx tsx prisma/import-resultados-historicos-havanna.ts "<ruta al xlsx>" [hastaAAAA-MM]'
     );
   }
-  const unidadNegocioId = 4; // Grupo LV12
+  const unidadNegocioId = 3; // Havanna Argentina
   const hastaPeriodo = hastaPeriodoRaw ? new Date(`${hastaPeriodoRaw}-01T00:00:00Z`) : null;
 
   const wb = new ExcelJS.Workbook();
@@ -47,9 +47,9 @@ async function main() {
   const sheet = wb.worksheets[0];
   if (!sheet) throw new Error("El archivo no tiene hojas.");
 
-  // A diferencia de prisma/import-resultados-historicos.ts (que tiene una
-  // columna/fila de margen extra), este archivo de LV12 arranca directo: fila
-  // 1 = períodos (desde columna 2), columna 1 = etiqueta de cada fila.
+  // Igual que LV12: fila 1 = períodos (desde columna 2), columna 1 = etiqueta
+  // de cada fila (a diferencia de import-resultados-historicos.ts, que tiene
+  // una columna extra de "empresa"/margen y arranca en fila 2/columna 3).
   const filaPeriodos = sheet.getRow(1);
   const periodos = new Map<number, Date>();
   for (let c = 2; c <= sheet.columnCount; c++) {
@@ -79,12 +79,16 @@ async function main() {
     const periodo = new Date(key);
     if (hastaPeriodo && periodo > hastaPeriodo) continue;
 
+    // A diferencia de LV12, el archivo de Havanna nunca completa la fila
+    // "Otras Ganancias y perdidas" (queda vacía en todos los períodos —
+    // consistente con que el Plan de Cuentas de Havanna tampoco clasifica
+    // ninguna cuenta de Resultado bajo ese bucket). Se trata como 0 en vez de
+    // exigir que esté presente, para no descartar todos los períodos.
     const completo =
       valores.ventas !== undefined &&
       valores.costosDirectos !== undefined &&
       valores.gastosOperativos !== undefined &&
-      valores.expensas !== undefined &&
-      valores.otrasGananciasYPerdidas !== undefined;
+      valores.expensas !== undefined;
     if (!completo) {
       console.warn(
         `Aviso: período ${periodo.toISOString().slice(0, 7)} tiene campos faltantes, se omite.`
@@ -107,13 +111,13 @@ async function main() {
         costosDirectos: valores.costosDirectos!,
         gastosOperativos: valores.gastosOperativos!,
         expensas: valores.expensas!,
-        otrasGananciasYPerdidas: valores.otrasGananciasYPerdidas!,
+        otrasGananciasYPerdidas: valores.otrasGananciasYPerdidas ?? 0,
       },
     });
     count++;
   }
 
-  console.log(`Listo: ${count} períodos de Resultados Históricos importados (Grupo LV12).`);
+  console.log(`Listo: ${count} períodos de Resultados Históricos importados (Havanna Argentina).`);
   if (omitidos > 0) console.log(`${omitidos} período(s) omitido(s) por datos incompletos.`);
 }
 

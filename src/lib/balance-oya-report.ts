@@ -1,5 +1,20 @@
 import { prisma } from "@/lib/prisma";
+import { Prisma } from "@/generated/prisma/client";
 import { normalizeCuenta } from "@/lib/cuenta-normalize";
+
+// La acumulación cuenta por cuenta (rubroMap/nofMap, potencialmente cientos
+// de filas de BSyS por rubro) se hace con Prisma.Decimal en vez de number,
+// para no arrastrar el error de redondeo binario de sumar/restar muchos
+// Decimal(18,2). Se convierte a number (redondeado a 2 decimales) recién al
+// armar cada RubroLine — el resto del informe (totales, ESP, OyAF, NOF) ya
+// opera sobre esas líneas "de presentación".
+function round2(d: Prisma.Decimal): number {
+  return d.toDecimalPlaces(2).toNumber();
+}
+
+function sumDecimal(values: Prisma.Decimal[]): Prisma.Decimal {
+  return values.reduce((a, b) => a.plus(b), new Prisma.Decimal(0));
+}
 
 const MESES_ABREV = [
   "ene",
@@ -110,16 +125,16 @@ type RubroAgg = {
   // de siempre) de "clasificado a propósito como fuera del Balance".
   tieneTipo: boolean;
   exigeSaldoCero: boolean;
-  saldoInicio: number;
-  saldoFinal: number;
+  saldoInicio: Prisma.Decimal;
+  saldoFinal: Prisma.Decimal;
 };
 
 type NofAgg = {
   codRubro: number;
   nomRubro: string;
   bucketNOF: "OPERATIVO" | "NO_OPERATIVO" | "FINANCIAMIENTO";
-  saldoInicio: number;
-  saldoFinal: number;
+  saldoInicio: Prisma.Decimal;
+  saldoFinal: Prisma.Decimal;
 };
 
 function sum(values: number[]) {
@@ -138,17 +153,17 @@ function sum(values: number[]) {
 // qué LISTA entra cada rubro (ver el loop que arma
 // origenes/aplicaciones/ajustes más abajo) — lo único que cambia acá es el
 // signo mostrado.
-function origenAplicacionDe(saldoInicio: number, saldoFinal: number): number {
-  return saldoInicio - saldoFinal;
+function origenAplicacionDe(saldoInicio: Prisma.Decimal, saldoFinal: Prisma.Decimal): Prisma.Decimal {
+  return saldoInicio.minus(saldoFinal);
 }
 
 function toLine(r: RubroAgg): RubroLine {
-  const origenAplicacion = origenAplicacionDe(r.saldoInicio, r.saldoFinal);
+  const origenAplicacion = round2(origenAplicacionDe(r.saldoInicio, r.saldoFinal));
   return {
     codRubro: r.codRubro,
     nombre: r.nomRubro,
-    saldoInicio: r.saldoInicio,
-    saldoFinal: r.saldoFinal,
+    saldoInicio: round2(r.saldoInicio),
+    saldoFinal: round2(r.saldoFinal),
     variacion: origenAplicacion,
     origenAplicacion,
     bucketNOF: r.bucketNOF,
@@ -186,12 +201,12 @@ function paraExposicionESP(
 // Origen, negativo = Aplicación) para que sea consistente y el Control
 // cierre en cero. Por eso usa la misma fórmula que `toLine`.
 function nofLine(r: NofAgg): RubroLine {
-  const origenAplicacion = origenAplicacionDe(r.saldoInicio, r.saldoFinal);
+  const origenAplicacion = round2(origenAplicacionDe(r.saldoInicio, r.saldoFinal));
   return {
     codRubro: r.codRubro,
     nombre: r.nomRubro,
-    saldoInicio: r.saldoInicio,
-    saldoFinal: r.saldoFinal,
+    saldoInicio: round2(r.saldoInicio),
+    saldoFinal: round2(r.saldoFinal),
     variacion: origenAplicacion,
     origenAplicacion,
     bucketNOF: r.bucketNOF,
@@ -277,8 +292,11 @@ export function buildInformeReport(
         continue;
       }
 
-      const debeHaber = b.saldoIniDebe - b.saldoIniHaber;
-      const debeHaberFinal = b.saldoCierreDebe - b.saldoCierreHaber;
+      // Decimal (no number) desde el primer momento: esta suma corre sobre
+      // potencialmente cientos de cuentas por rubro, es donde más importa
+      // no arrastrar error de redondeo binario.
+      const debeHaber = new Prisma.Decimal(b.saldoIniDebe).minus(b.saldoIniHaber);
+      const debeHaberFinal = new Prisma.Decimal(b.saldoCierreDebe).minus(b.saldoCierreHaber);
 
       let agg = rubroMap.get(plan.rubroId);
       if (!agg) {
@@ -291,13 +309,13 @@ export function buildInformeReport(
           tipoPartida: plan.tipoRol,
           tieneTipo: plan.tieneTipo,
           exigeSaldoCero: plan.exigeSaldoCero,
-          saldoInicio: 0,
-          saldoFinal: 0,
+          saldoInicio: new Prisma.Decimal(0),
+          saldoFinal: new Prisma.Decimal(0),
         };
         rubroMap.set(plan.rubroId, agg);
       }
-      agg.saldoInicio += debeHaber;
-      agg.saldoFinal += debeHaberFinal;
+      agg.saldoInicio = agg.saldoInicio.plus(debeHaber);
+      agg.saldoFinal = agg.saldoFinal.plus(debeHaberFinal);
 
       // La clasificación fina por cuenta (Configuración → Categoría OyA)
       // gana si está seteada; si no, cae al default a nivel Rubro (atajo
@@ -316,20 +334,20 @@ export function buildInformeReport(
             codRubro: plan.rubroId,
             nomRubro: plan.nomRubro,
             bucketNOF,
-            saldoInicio: 0,
-            saldoFinal: 0,
+            saldoInicio: new Prisma.Decimal(0),
+            saldoFinal: new Prisma.Decimal(0),
           };
           nofMap.set(key, nofAgg);
         }
-        nofAgg.saldoInicio += debeHaber;
-        nofAgg.saldoFinal += debeHaberFinal;
+        nofAgg.saldoInicio = nofAgg.saldoInicio.plus(debeHaber);
+        nofAgg.saldoFinal = nofAgg.saldoFinal.plus(debeHaberFinal);
       }
     }
   }
 
   const rubros = [...rubroMap.values()];
 
-  const EPSILON_SALDO_CERO = 0.01;
+  const EPSILON_SALDO_CERO = new Prisma.Decimal(0.01);
   for (const r of rubros) {
     if (r.tipoPartida) continue;
 
@@ -341,14 +359,14 @@ export function buildInformeReport(
       // Partidas como "Cuenta de Orden" quedan fuera del Balance a propósito
       // porque siempre deben netear a cero — si no es así, es una señal real
       // de que algo quedó mal cargado, no un caso a ignorar en silencio.
-      if (Math.abs(r.saldoFinal) > EPSILON_SALDO_CERO) {
+      if (r.saldoFinal.abs().greaterThan(EPSILON_SALDO_CERO)) {
         advertencias.push(
-          `El rubro "${r.nomRubro}" es de un Tipo que exige saldo cero (ej. Cuenta de Orden) pero tiene un saldo final de ${r.saldoFinal.toLocaleString("es-AR")} — revisar la carga.`
+          `El rubro "${r.nomRubro}" es de un Tipo que exige saldo cero (ej. Cuenta de Orden) pero tiene un saldo final de ${round2(r.saldoFinal).toLocaleString("es-AR")} — revisar la carga.`
         );
       }
-      if (Math.abs(r.saldoInicio) > EPSILON_SALDO_CERO) {
+      if (r.saldoInicio.abs().greaterThan(EPSILON_SALDO_CERO)) {
         advertencias.push(
-          `El rubro "${r.nomRubro}" es de un Tipo que exige saldo cero (ej. Cuenta de Orden) pero tiene un saldo de inicio de ${r.saldoInicio.toLocaleString("es-AR")} — revisar la carga.`
+          `El rubro "${r.nomRubro}" es de un Tipo que exige saldo cero (ej. Cuenta de Orden) pero tiene un saldo de inicio de ${round2(r.saldoInicio).toLocaleString("es-AR")} — revisar la carga.`
         );
       }
     }
@@ -377,16 +395,18 @@ export function buildInformeReport(
   // armar la línea "Resultado del período" del Estado Patrimonial (hoja 2),
   // que se expone junto con el resto de Patrimonio Neto vía
   // paraExposicionESP más abajo.
-  const resultadoDelPeriodoRaw = sum(resultadoRubros.map((r) => r.saldoFinal));
-  const resultadoDelPeriodoAnteriorRaw = sum(resultadoRubros.map((r) => r.saldoInicio));
+  const resultadoDelPeriodoRawDec = sumDecimal(resultadoRubros.map((r) => r.saldoFinal));
+  const resultadoDelPeriodoAnteriorRawDec = sumDecimal(resultadoRubros.map((r) => r.saldoInicio));
 
   const rdoPeriodoLine: RubroLine = {
     codRubro: -1,
     nombre: "Resultado del período",
-    saldoInicio: resultadoDelPeriodoAnteriorRaw,
-    saldoFinal: resultadoDelPeriodoRaw,
-    variacion: origenAplicacionDe(resultadoDelPeriodoAnteriorRaw, resultadoDelPeriodoRaw),
-    origenAplicacion: origenAplicacionDe(resultadoDelPeriodoAnteriorRaw, resultadoDelPeriodoRaw),
+    saldoInicio: round2(resultadoDelPeriodoAnteriorRawDec),
+    saldoFinal: round2(resultadoDelPeriodoRawDec),
+    variacion: round2(origenAplicacionDe(resultadoDelPeriodoAnteriorRawDec, resultadoDelPeriodoRawDec)),
+    origenAplicacion: round2(
+      origenAplicacionDe(resultadoDelPeriodoAnteriorRawDec, resultadoDelPeriodoRawDec)
+    ),
     bucketNOF: null,
   };
 
@@ -397,7 +417,7 @@ export function buildInformeReport(
   // el saldo inicial de Resultado debe ser cero por la refundición de
   // cuenta. Mostrar el crudo tal cual (como se hacía antes) hace que una
   // ganancia se lea negativa, exactamente al revés de lo que corresponde.
-  const resultadoDelPeriodo = -resultadoDelPeriodoRaw;
+  const resultadoDelPeriodo = round2(resultadoDelPeriodoRawDec.negated());
 
   // Si las cuentas de Resultado (Ingresos/Egresos) de este BSyS Acumulado no
   // arrancan en cero — el "saldo inicio" del archivo no coincide con el
@@ -408,10 +428,10 @@ export function buildInformeReport(
   // volver a contar esa porción dos veces. En una empresa donde el
   // Acumulado sí arranca en cero, este valor da 0 y no se muestra ninguna
   // línea.
-  const resultadoInicioNoDistribuido = resultadoDelPeriodoAnteriorRaw;
+  const resultadoInicioNoDistribuido = round2(resultadoDelPeriodoAnteriorRawDec);
   // No se usa para ninguna línea del informe (queda por simetría de tipo) —
   // mismo signo invertido que `resultadoDelPeriodo`.
-  const resultadoDelPeriodoAnterior = -resultadoDelPeriodoAnteriorRaw;
+  const resultadoDelPeriodoAnterior = round2(resultadoDelPeriodoAnteriorRawDec.negated());
 
   const activo = paraExposicionESP(activoRubros.map(toLine), "ACTIVO");
   const pasivo = paraExposicionESP(pasivoRubros.map(toLine), "PASIVO");
@@ -694,8 +714,8 @@ export async function getDetalleRubro(informeId: string, codRubro: number): Prom
       cuentas.push({
         empresaNombre: empresa.nombreEmp,
         cuenta: b.cuenta,
-        saldoInicio: Number(b.saldoIniDebe) - Number(b.saldoIniHaber),
-        saldoFinal: Number(b.saldoCierreDebe) - Number(b.saldoCierreHaber),
+        saldoInicio: round2(new Prisma.Decimal(b.saldoIniDebe).minus(b.saldoIniHaber)),
+        saldoFinal: round2(new Prisma.Decimal(b.saldoCierreDebe).minus(b.saldoCierreHaber)),
       });
     }
   }

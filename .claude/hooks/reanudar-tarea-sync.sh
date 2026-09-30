@@ -6,7 +6,7 @@
 # dropping local commits.
 set -uo pipefail
 
-PROJECT_DIR="c:/Users/Fvigo/Documents/PANEL INFORMES DE GESTION/panel-informes-gestion-dev"
+PROJECT_DIR="$CLAUDE_PROJECT_DIR"
 
 INPUT="$(cat)"
 

@@ -11,7 +11,7 @@
           {
             "type": "command",
             "shell": "bash",
-            "command": "bash \"c:/Users/Fvigo/Documents/PANEL INFORMES DE GESTION/panel-informes-gestion-dev/.claude/hooks/reanudar-tarea-sync.sh\"",
+            "command": "bash \"$CLAUDE_PROJECT_DIR/.claude/hooks/reanudar-tarea-sync.sh\"",
             "timeout": 30,
             "statusMessage": "Sincronizando con GitHub (REANUDAMOS TAREA)..."
           }

@@ -1,7 +1,7 @@
 import "dotenv/config";
 import ExcelJS from "exceljs";
-import { PrismaClient } from "../src/generated/prisma/client";
-import type { CategoriaOrigenAplicacion, RolTipoPartida } from "../src/generated/prisma/enums";
+import { PrismaClient } from "../../src/generated/prisma/client";
+import type { CategoriaOrigenAplicacion, RolTipoPartida } from "../../src/generated/prisma/enums";
 import { PrismaPg } from "@prisma/adapter-pg";
 
 const adapter = new PrismaPg({ connectionString: process.env.DATABASE_URL! });

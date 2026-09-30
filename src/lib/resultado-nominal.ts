@@ -1,5 +1,10 @@
 import { prisma } from "@/lib/prisma";
+import { Prisma } from "@/generated/prisma/client";
 import { normalizeCuenta } from "@/lib/cuenta-normalize";
+
+function round2(d: Prisma.Decimal): number {
+  return d.toDecimalPlaces(2).toNumber();
+}
 
 export type ResultadoNominal = {
   ventas: number;
@@ -60,7 +65,15 @@ export function computeResultadoNominalDeEmpresaPure(
 ): { valores: ResultadoNominal; advertencias: string[] } {
   const advertencias: string[] = [];
   const porCuenta = new Map(planDeCuentas.map((p) => [normalizeCuenta(p.cuenta), p]));
-  const valores = vacio();
+  // Decimal mientras se acumulan las cuentas (pueden ser muchas por campo);
+  // se convierte a number recién al final, redondeado a 2 decimales.
+  const acumulado: Record<keyof ResultadoNominal, Prisma.Decimal> = {
+    ventas: new Prisma.Decimal(0),
+    costosDirectos: new Prisma.Decimal(0),
+    gastosOperativos: new Prisma.Decimal(0),
+    expensas: new Prisma.Decimal(0),
+    otrasGananciasYPerdidas: new Prisma.Decimal(0),
+  };
 
   for (const b of balances) {
     const plan = porCuenta.get(normalizeCuenta(b.cuenta));
@@ -80,13 +93,18 @@ export function computeResultadoNominalDeEmpresaPure(
       continue;
     }
 
-    const inicio = b.saldoIniDebe - b.saldoIniHaber;
-    const cierre = b.saldoCierreDebe - b.saldoCierreHaber;
-    const movimientoRaw = cierre - inicio;
+    const inicio = new Prisma.Decimal(b.saldoIniDebe).minus(b.saldoIniHaber);
+    const cierre = new Prisma.Decimal(b.saldoCierreDebe).minus(b.saldoCierreHaber);
+    const movimientoRaw = cierre.minus(inicio);
     // Convención "positivo = favorable" (Ventas positiva, Costos/Gastos
     // negativos): misma que ya usan los datos históricos pre-cargados en
     // Resultados Históricos, es la inversa del signo crudo de mayor.
-    valores[campo] += -movimientoRaw;
+    acumulado[campo] = acumulado[campo].minus(movimientoRaw);
+  }
+
+  const valores = vacio();
+  for (const campo of Object.keys(valores) as (keyof ResultadoNominal)[]) {
+    valores[campo] = round2(acumulado[campo]);
   }
 
   return { valores, advertencias };
