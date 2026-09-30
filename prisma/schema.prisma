@@ -18,22 +18,22 @@ enum Role {
 }
 
 model User {
-  id                 String    @id @default(cuid())
-  username           String    @unique
-  passwordHash       String
-  role               Role      @default(USER)
-  securityQuestion   String
-  securityAnswerHash String
-  active             Boolean   @default(true)
+  id                  String    @id @default(cuid())
+  username            String    @unique
+  passwordHash        String
+  role                Role      @default(USER)
+  securityQuestion    String
+  securityAnswerHash  String
+  active              Boolean   @default(true)
   // Límite de intentos del recupero de contraseña por pregunta de
   // seguridad: a los 5 intentos fallidos seguidos se bloquea 30 minutos.
-  failedResetAttempts Int      @default(0)
+  failedResetAttempts Int       @default(0)
   resetLockedUntil    DateTime?
   // Mismo esquema para el login.
-  failedLoginAttempts Int      @default(0)
+  failedLoginAttempts Int       @default(0)
   loginLockedUntil    DateTime?
-  createdAt          DateTime @default(now())
-  updatedAt          DateTime @updatedAt
+  createdAt           DateTime  @default(now())
+  updatedAt           DateTime  @updatedAt
 }
 
 // El "grupo" que se ve en la pantalla principal y con el que se confecciona
@@ -202,19 +202,34 @@ enum BucketNOF {
   FINANCIAMIENTO
 }
 
+// Los 5 campos del cuadro de Resultado Nominal (ver resultado-nominal.ts) —
+// antes se buscaban por nomRubro exacto, así que renombrar un Rubro de
+// Resultado rompía el cálculo en silencio. Con este campo explícito el
+// nombre del Rubro puede cambiar libremente.
+enum CampoResultado {
+  VENTAS
+  COSTOS_DIRECTOS
+  GASTOS_OPERATIVOS
+  EXPENSAS
+  OTRAS_GANANCIAS_PERDIDAS
+}
+
 model Rubro {
-  codRubro     Int                        @id @default(autoincrement())
-  nomRubro     String                     @unique @db.VarChar(60)
-  categoriaOyA CategoriaOrigenAplicacion?
+  codRubro       Int                        @id @default(autoincrement())
+  nomRubro       String                     @unique @db.VarChar(60)
+  categoriaOyA   CategoriaOrigenAplicacion?
   // Default de NOF a nivel Rubro (atajo "CTO/ONP/ARS" desde el ESP) — una
   // cuenta puntual clasificada en Configuración → Categoría OyA sigue
   // ganando por sobre este default (ver computeInformeReport).
-  bucketNOF    BucketNOF?
+  bucketNOF      BucketNOF?
   // Orden de exposición dentro del ESP (Activo/Pasivo/Patrimonio Neto se
   // ordenan por este valor, de menor a mayor; null queda al final, en el
   // orden en que se insertó el Rubro). No afecta a ninguna otra hoja.
-  orden        Int?
-  planes       PlanDeCuentas[]
+  orden          Int?
+  // Solo se usa en Rubros de Resultado (Partida con rol RESULTADO) — ver
+  // CampoResultado arriba.
+  campoResultado CampoResultado?
+  planes         PlanDeCuentas[]
 }
 
 model Subrubro {
