@@ -202,12 +202,6 @@ export default async function InformeDetallePage({
               <td className="py-1 pl-2 font-medium">Resultados Acumulados S/Indicadores</td>
               <td className="py-1 pr-2 text-right font-medium">{fmtParen(resultadoDelPeriodo)}</td>
             </tr>
-            {origenAplicacion.ajustes.map((a) => (
-              <tr key={a.codRubro} className="bg-blue-50">
-                <td className="py-1 pl-2">Ajustes Ejercicios Anteriores ({a.nombre})</td>
-                <td className="py-1 pr-2 text-right">{fmtParen(a.origenAplicacion)}</td>
-              </tr>
-            ))}
             {resultadoInicioNoDistribuido !== 0 && (
               <tr className="bg-blue-50">
                 <td className="py-1 pl-2">Resultado no distribuido al inicio del ejercicio</td>
@@ -263,12 +257,6 @@ export default async function InformeDetallePage({
               <td className="py-1">Resultados Acumulados S/Indicadores</td>
               <td className="py-1 text-right">{fmtParen(resultadoDelPeriodo)}</td>
             </tr>
-            {origenAplicacion.ajustes.map((a) => (
-              <tr key={a.codRubro}>
-                <td className="py-1">Ajustes Ejercicios Anteriores ({a.nombre})</td>
-                <td className="py-1 text-right">{fmtParen(a.origenAplicacion)}</td>
-              </tr>
-            ))}
             {resultadoInicioNoDistribuido !== 0 && (
               <tr>
                 <td className="py-1">Resultado no distribuido al inicio del ejercicio</td>

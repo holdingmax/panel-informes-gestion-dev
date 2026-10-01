@@ -4,21 +4,21 @@ import { useState } from "react";
 import { PlanDeCuentaRow } from "./PlanDeCuentaRow";
 
 type Opcion = { id: number; nombre: string };
+type RubroOpcion = Opcion & { esResultado: boolean };
 
 type Fila = {
   id: string;
   empresaId: number;
   nombreEmpresa: string;
   cuenta: string;
-  partidaPatrimonialId: number;
   rubroId: number;
-  subrubroId: number;
+  subrubroId: number | null;
   subrubro2Id: number | null;
   subrubro3Id: number | null;
   categoriaOyAId: number | null;
-  nombrePartida: string;
+  nombrePartida: string | null;
   nombreRubro: string;
-  nombreSubrubro: string;
+  nombreSubrubro: string | null;
   nombreSubrubro2: string | null;
   nombreSubrubro3: string | null;
   nombreCategoriaOyA: string | null;
@@ -27,7 +27,6 @@ type Fila = {
 export function PlanDeCuentasTable({
   filas,
   empresas,
-  partidas,
   rubros,
   subrubros,
   subrubros2,
@@ -37,8 +36,7 @@ export function PlanDeCuentasTable({
 }: {
   filas: Fila[];
   empresas: { codEmp: number; nombreEmp: string }[];
-  partidas: Opcion[];
-  rubros: Opcion[];
+  rubros: RubroOpcion[];
   subrubros: Opcion[];
   subrubros2: Opcion[];
   subrubros3: Opcion[];
@@ -47,7 +45,6 @@ export function PlanDeCuentasTable({
 }) {
   const [filtroEmpresa, setFiltroEmpresa] = useState("");
   const [filtroCuenta, setFiltroCuenta] = useState("");
-  const [filtroPartida, setFiltroPartida] = useState("");
   const [filtroRubro, setFiltroRubro] = useState("");
   const [filtroSubrubro, setFiltroSubrubro] = useState("");
   const [filtroCategoria, setFiltroCategoria] = useState("");
@@ -57,7 +54,6 @@ export function PlanDeCuentasTable({
   const filasFiltradas = filas.filter((f) => {
     if (filtroEmpresa && f.empresaId !== Number(filtroEmpresa)) return false;
     if (cuentaNormalizada && !f.cuenta.toLowerCase().includes(cuentaNormalizada)) return false;
-    if (filtroPartida && f.partidaPatrimonialId !== Number(filtroPartida)) return false;
     if (filtroRubro && f.rubroId !== Number(filtroRubro)) return false;
     if (filtroSubrubro && f.subrubroId !== Number(filtroSubrubro)) return false;
     if (filtroCategoria && f.categoriaOyAId !== Number(filtroCategoria)) return false;
@@ -65,12 +61,11 @@ export function PlanDeCuentasTable({
   });
 
   const hayFiltrosActivos =
-    filtroEmpresa || filtroCuenta || filtroPartida || filtroRubro || filtroSubrubro || filtroCategoria;
+    filtroEmpresa || filtroCuenta || filtroRubro || filtroSubrubro || filtroCategoria;
 
   function limpiarFiltros() {
     setFiltroEmpresa("");
     setFiltroCuenta("");
-    setFiltroPartida("");
     setFiltroRubro("");
     setFiltroSubrubro("");
     setFiltroCategoria("");
@@ -100,22 +95,6 @@ export function PlanDeCuentasTable({
             {empresas.map((e) => (
               <option key={e.codEmp} value={e.codEmp}>
                 {e.nombreEmp}
-              </option>
-            ))}
-          </select>
-        </label>
-
-        <label className="flex w-fit flex-col gap-1">
-          <span className="text-sm">Filtrar por partida</span>
-          <select
-            value={filtroPartida}
-            onChange={(e) => setFiltroPartida(e.target.value)}
-            className="rounded border px-3 py-2 text-lg"
-          >
-            <option value="">Todas</option>
-            {partidas.map((p) => (
-              <option key={p.id} value={p.id}>
-                {p.nombre}
               </option>
             ))}
           </select>
@@ -206,7 +185,6 @@ export function PlanDeCuentasTable({
                 id={f.id}
                 nombreEmpresa={f.nombreEmpresa}
                 cuenta={f.cuenta}
-                partidaPatrimonialId={f.partidaPatrimonialId}
                 rubroId={f.rubroId}
                 subrubroId={f.subrubroId}
                 subrubro2Id={f.subrubro2Id}
@@ -218,7 +196,6 @@ export function PlanDeCuentasTable({
                 nombreSubrubro2={f.nombreSubrubro2}
                 nombreSubrubro3={f.nombreSubrubro3}
                 nombreCategoriaOyA={f.nombreCategoriaOyA}
-                partidas={partidas}
                 rubros={rubros}
                 subrubros={subrubros}
                 subrubros2={subrubros2}

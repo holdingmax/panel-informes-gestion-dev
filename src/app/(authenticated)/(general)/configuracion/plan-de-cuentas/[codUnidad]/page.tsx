@@ -3,9 +3,11 @@ import { auth } from "@/auth";
 import { getUnidadNegocio } from "@/lib/unidad-negocio-actions";
 import { listEmpresasDeUnidad } from "@/lib/empresa-actions";
 import { listCatalog } from "@/lib/catalog-actions";
-import { listPlanDeCuentasPorEmpresas, createPlanDeCuentas } from "@/lib/plan-de-cuentas-actions";
+import { listRubrosConClasificacion } from "@/lib/rubro-actions";
+import { listPlanDeCuentasPorEmpresas } from "@/lib/plan-de-cuentas-actions";
 import { CollapsibleAdd } from "@/components/CollapsibleAdd";
 import { PlanDeCuentasTable } from "./PlanDeCuentasTable";
+import { AgregarCuentaForm } from "./AgregarCuentaForm";
 
 export const dynamic = "force-dynamic";
 
@@ -23,11 +25,10 @@ export default async function PlanDeCuentasUnidadPage({
   const session = await auth();
   const isAdmin = session?.user.role === "ADMIN";
 
-  const [empresas, partidas, rubros, subrubros, subrubros2, subrubros3, categorias] =
+  const [empresas, rubros, subrubros, subrubros2, subrubros3, categorias] =
     await Promise.all([
       listEmpresasDeUnidad(codUnidad),
-      listCatalog("partidaPatrimonial"),
-      listCatalog("rubro"),
+      listRubrosConClasificacion(),
       listCatalog("subrubro"),
       listCatalog("subrubro2"),
       listCatalog("subrubro3"),
@@ -42,27 +43,25 @@ export default async function PlanDeCuentasUnidadPage({
     empresaId: p.empresaId,
     nombreEmpresa: p.empresa.nombreEmp,
     cuenta: p.cuenta,
-    partidaPatrimonialId: p.partidaPatrimonialId,
     rubroId: p.rubroId,
     subrubroId: p.subrubroId,
     subrubro2Id: p.subrubro2Id,
     subrubro3Id: p.subrubro3Id,
     categoriaOyAId: p.categoriaOyAId,
-    nombrePartida: p.partidaPatrimonial.nomPartida,
+    nombrePartida: p.rubro.partidaPatrimonial?.nomPartida ?? null,
     nombreRubro: p.rubro.nomRubro,
-    nombreSubrubro: p.subrubro.nomSubrubro,
+    nombreSubrubro: p.subrubro?.nomSubrubro ?? null,
     nombreSubrubro2: p.subrubro2?.nomSubrubro2 ?? null,
     nombreSubrubro3: p.subrubro3?.nomSubrubro3 ?? null,
     nombreCategoriaOyA: p.categoriaOyA?.nomOyA ?? null,
   }));
 
-  const partidasOpc = (partidas as { codPartida: number; nomPartida: string }[]).map((p) => ({
-    id: p.codPartida,
-    nombre: p.nomPartida,
-  }));
-  const rubrosOpc = (rubros as { codRubro: number; nomRubro: string }[]).map((r) => ({
+  // Subrubro es exclusivo de Rubros de Partida Resultado (Ingresos/Egresos)
+  // — el formulario usa esResultado para mostrar Subrubro o Subrubro2/3.
+  const rubrosOpc = rubros.map((r) => ({
     id: r.codRubro,
     nombre: r.nomRubro,
+    esResultado: r.partidaPatrimonial?.tipo?.rol === "RESULTADO",
   }));
   const subrubrosOpc = (subrubros as { codSubrubro: number; nomSubrubro: string }[]).map((s) => ({
     id: s.codSubrubro,
@@ -92,110 +91,20 @@ export default async function PlanDeCuentasUnidadPage({
         <>
           {isAdmin && (
           <CollapsibleAdd label="Agregar cuenta">
-            <form action={createPlanDeCuentas} className="flex flex-col gap-3">
-              <label className="flex flex-col gap-1">
-                <span className="text-lg">Empresa</span>
-                <select name="empresaId" required className="rounded border px-3 py-2 text-lg">
-                  <option value="">Seleccionar...</option>
-                  {empresas.map((empresa) => (
-                    <option key={empresa.codEmp} value={empresa.codEmp}>
-                      {empresa.nombreEmp}
-                    </option>
-                  ))}
-                </select>
-              </label>
-
-              <label className="flex flex-col gap-1">
-                <span className="text-lg">Cuenta (hasta 90 caracteres)</span>
-                <input name="cuenta" required maxLength={90} className="rounded border px-3 py-2 text-lg" />
-              </label>
-
-              <label className="flex flex-col gap-1">
-                <span className="text-lg">Partida Patrimonial</span>
-                <select name="partidaPatrimonialId" required className="rounded border px-3 py-2 text-lg">
-                  <option value="">Seleccionar...</option>
-                  {partidasOpc.map((p) => (
-                    <option key={p.id} value={p.id}>
-                      {p.nombre}
-                    </option>
-                  ))}
-                </select>
-              </label>
-
-              <label className="flex flex-col gap-1">
-                <span className="text-lg">Rubro</span>
-                <select name="rubroId" required className="rounded border px-3 py-2 text-lg">
-                  <option value="">Seleccionar...</option>
-                  {rubrosOpc.map((r) => (
-                    <option key={r.id} value={r.id}>
-                      {r.nombre}
-                    </option>
-                  ))}
-                </select>
-              </label>
-
-              <label className="flex flex-col gap-1">
-                <span className="text-lg">Subrubro</span>
-                <select name="subrubroId" required className="rounded border px-3 py-2 text-lg">
-                  <option value="">Seleccionar...</option>
-                  {subrubrosOpc.map((s) => (
-                    <option key={s.id} value={s.id}>
-                      {s.nombre}
-                    </option>
-                  ))}
-                </select>
-              </label>
-
-              <label className="flex flex-col gap-1">
-                <span className="text-lg">Subrubro 2 (opcional)</span>
-                <select name="subrubro2Id" className="rounded border px-3 py-2 text-lg">
-                  <option value="">Sin clasificar</option>
-                  {subrubros2Opc.map((s) => (
-                    <option key={s.id} value={s.id}>
-                      {s.nombre}
-                    </option>
-                  ))}
-                </select>
-              </label>
-
-              <label className="flex flex-col gap-1">
-                <span className="text-lg">Subrubro 3 (opcional)</span>
-                <select name="subrubro3Id" className="rounded border px-3 py-2 text-lg">
-                  <option value="">Sin clasificar</option>
-                  {subrubros3Opc.map((s) => (
-                    <option key={s.id} value={s.id}>
-                      {s.nombre}
-                    </option>
-                  ))}
-                </select>
-              </label>
-
-              <label className="flex flex-col gap-1">
-                <span className="text-lg">Categoría OyA (opcional)</span>
-                <select name="categoriaOyAId" className="rounded border px-3 py-2 text-lg">
-                  <option value="">Sin clasificar</option>
-                  {categoriasOpc.map((c) => (
-                    <option key={c.id} value={c.id}>
-                      {c.nombre}
-                    </option>
-                  ))}
-                </select>
-              </label>
-
-              <button
-                type="submit"
-                className="w-fit rounded-md bg-accent px-4 py-2 text-sm text-white transition-colors hover:bg-accent-hover focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-accent focus-visible:ring-offset-2"
-              >
-                Agregar cuenta
-              </button>
-            </form>
+            <AgregarCuentaForm
+              empresas={empresas}
+              rubros={rubrosOpc}
+              subrubros={subrubrosOpc}
+              subrubros2={subrubros2Opc}
+              subrubros3={subrubros3Opc}
+              categorias={categoriasOpc}
+            />
           </CollapsibleAdd>
           )}
 
           <PlanDeCuentasTable
             filas={filas}
             empresas={empresas}
-            partidas={partidasOpc}
             rubros={rubrosOpc}
             subrubros={subrubrosOpc}
             subrubros2={subrubros2Opc}

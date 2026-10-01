@@ -1,5 +1,7 @@
 import { computeResultadoCuadro, type ResultadoBloque, type ResultadoColumna } from "@/lib/resultado-cuadro";
 import { formatPeriodoAbrev } from "@/lib/balance-oya-report";
+import type { ResultadoNominal } from "@/lib/resultado-nominal";
+import { OjoCampoResultado } from "./OjoCampoResultado";
 
 export const dynamic = "force-dynamic";
 
@@ -20,18 +22,26 @@ function fmtPct(n: number) {
   return `${(n * 100).toFixed(0)}%`;
 }
 
-type Fila = { label: string; get: (c: ResultadoColumna) => number; pct?: boolean };
+type Fila = {
+  label: string;
+  get: (c: ResultadoColumna) => number;
+  pct?: boolean;
+  // Solo en las 5 filas de campo del ER (no en las derivadas, como Margen de
+  // Contribución) — habilita el 👁 de detalle por cuenta, únicamente en el
+  // cuadro Nominal y en la columna del período actual.
+  campo?: keyof ResultadoNominal;
+};
 
 const FILAS: Fila[] = [
-  { label: "Ventas", get: (c) => c.ventas },
-  { label: "Costos directos/variables", get: (c) => c.costosDirectos },
+  { label: "Ventas", get: (c) => c.ventas, campo: "ventas" },
+  { label: "Costos directos/variables", get: (c) => c.costosDirectos, campo: "costosDirectos" },
   { label: "Margen de Contribución", get: (c) => c.margenContribucion },
   { label: "% MC", get: (c) => c.pctMC, pct: true },
-  { label: "Gastos Fijos Operativos", get: (c) => c.gastosOperativos },
+  { label: "Gastos Fijos Operativos", get: (c) => c.gastosOperativos, campo: "gastosOperativos" },
   { label: "Resultado Operativo", get: (c) => c.resultadoOperativo },
   { label: "% rentabilidad Negocio", get: (c) => c.pctRentabilidadNegocio, pct: true },
-  { label: "Expensas", get: (c) => c.expensas },
-  { label: "Otras Ganancias y Perdidas", get: (c) => c.otrasGananciasYPerdidas },
+  { label: "Expensas", get: (c) => c.expensas, campo: "expensas" },
+  { label: "Otras Ganancias y Perdidas", get: (c) => c.otrasGananciasYPerdidas, campo: "otrasGananciasYPerdidas" },
   { label: "Rentabilidad Neta", get: (c) => c.rentabilidadNeta },
   { label: "% rentabilidad Neta", get: (c) => c.pctRentabilidadNeta, pct: true },
 ];
@@ -57,6 +67,9 @@ function CuadroResultado({
   periodoAnteriorLabel,
   periodoAnio,
   fmt,
+  codEmp,
+  informeId,
+  mostrarOjo,
 }: {
   titulo: string;
   bloque: ResultadoBloque;
@@ -64,6 +77,9 @@ function CuadroResultado({
   periodoAnteriorLabel: string;
   periodoAnio: number;
   fmt: (n: number) => string;
+  codEmp: string;
+  informeId: string;
+  mostrarOjo?: boolean;
 }) {
   const columnas: { label: string; datos: ResultadoColumna }[] = [
     { label: periodoLabel, datos: bloque.actual },
@@ -99,7 +115,14 @@ function CuadroResultado({
               key={fila.label}
               className={`border-t border-zinc-200 ${NEGRITA.has(fila.label) ? "font-semibold" : ""}`}
             >
-              <td className="py-1 pl-4">{fila.label}</td>
+              <td className="py-1 pl-4">
+                <span className="inline-flex items-center gap-2">
+                  {fila.label}
+                  {mostrarOjo && fila.campo && (
+                    <OjoCampoResultado codEmp={codEmp} informeId={informeId} campo={fila.campo} />
+                  )}
+                </span>
+              </td>
               {columnas.map((c) => (
                 <td key={c.label} className="py-1 pr-4 text-right">
                   {fila.pct ? fmtPct(fila.get(c.datos)) : fmt(fila.get(c.datos))}
@@ -121,7 +144,7 @@ export default async function ErYCuadrosPage({
 }: {
   params: Promise<{ codEmp: string; informeId: string }>;
 }) {
-  const { informeId } = await params;
+  const { codEmp, informeId } = await params;
   const report = await computeResultadoCuadro(informeId);
   const periodoLabel = formatPeriodoAbrev(report.periodoMes, report.periodoAnio);
   const periodoAnteriorLabel = formatPeriodoAbrev(report.periodoMes, report.periodoAnio - 1);
@@ -150,6 +173,9 @@ export default async function ErYCuadrosPage({
         periodoAnteriorLabel={periodoAnteriorLabel}
         periodoAnio={report.periodoAnio}
         fmt={(n) => fmtParen(n, report.presentaEnMiles)}
+        codEmp={codEmp}
+        informeId={informeId}
+        mostrarOjo
       />
 
       {report.tieneAjustePorInflacion &&
@@ -161,6 +187,8 @@ export default async function ErYCuadrosPage({
             periodoAnteriorLabel={periodoAnteriorLabel}
             periodoAnio={report.periodoAnio}
             fmt={(n) => fmtParen(n, report.presentaEnMiles)}
+            codEmp={codEmp}
+            informeId={informeId}
           />
         ) : (
           <p className="text-sm text-zinc-600">
@@ -178,6 +206,8 @@ export default async function ErYCuadrosPage({
             periodoAnteriorLabel={periodoAnteriorLabel}
             periodoAnio={report.periodoAnio}
             fmt={fmtUsd}
+            codEmp={codEmp}
+            informeId={informeId}
           />
         ) : (
           <p className="text-sm text-zinc-600">

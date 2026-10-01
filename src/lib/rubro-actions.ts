@@ -2,20 +2,29 @@
 
 import { revalidatePath } from "next/cache";
 import { prisma } from "@/lib/prisma";
-import type { CategoriaOrigenAplicacion, BucketNOF } from "@/generated/prisma/enums";
+import type { BucketNOF } from "@/generated/prisma/enums";
 import type { DeleteCheckResult } from "@/components/ConfirmDeleteButton";
 import { requireUser, requireAdmin } from "@/lib/authz";
 
 export async function listRubrosConClasificacion() {
   await requireUser();
-  return prisma.rubro.findMany({ orderBy: { codRubro: "asc" } });
+  return prisma.rubro.findMany({
+    orderBy: { codRubro: "asc" },
+    include: { partidaPatrimonial: { include: { tipo: true } } },
+  });
 }
 
-export async function updateRubroCategoriaOyA(codRubro: number, value: string) {
+// El Tipo de la Partida Patrimonial elegida decide dónde cae este Rubro en
+// el ESP (Activo/Pasivo/Patrimonio Neto) o si es de Resultado — uniforma la
+// clasificación para el operador y evita el bug de mezclar Partidas dentro
+// de un mismo Rubro (ver AGENTS.md / sesión del rediseño).
+export async function updateRubroPartida(codRubro: number, value: string) {
   await requireAdmin();
-  const categoriaOyA: CategoriaOrigenAplicacion | null =
-    value === "ORIGEN" || value === "APLICACION" || value === "AJUSTE" ? value : null;
-  await prisma.rubro.update({ where: { codRubro }, data: { categoriaOyA } });
+  const partidaPatrimonialId = value ? Number(value) : null;
+  await prisma.rubro.update({
+    where: { codRubro },
+    data: { partidaPatrimonialId: partidaPatrimonialId && Number.isInteger(partidaPatrimonialId) ? partidaPatrimonialId : null },
+  });
   revalidatePath("/configuracion/rubro");
 }
 

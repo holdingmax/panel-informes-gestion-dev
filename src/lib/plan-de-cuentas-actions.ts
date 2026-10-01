@@ -7,8 +7,7 @@ import { requireUser, requireAdmin } from "@/lib/authz";
 
 const INCLUDE = {
   empresa: true,
-  partidaPatrimonial: true,
-  rubro: true,
+  rubro: { include: { partidaPatrimonial: true } },
   subrubro: true,
   subrubro2: true,
   subrubro3: true,
@@ -29,12 +28,9 @@ function readCampos(formData: FormData) {
   if (!cuenta) throw new Error("La cuenta es obligatoria");
   if (cuenta.length > 90) throw new Error("La cuenta no puede superar 90 caracteres");
 
-  const partidaPatrimonialId = Number(formData.get("partidaPatrimonialId"));
   const rubroId = Number(formData.get("rubroId"));
-  const subrubroId = Number(formData.get("subrubroId"));
-
-  if ([partidaPatrimonialId, rubroId, subrubroId].some((value) => !Number.isInteger(value))) {
-    throw new Error("Completá Cuenta, Partida, Rubro y Subrubro");
+  if (!Number.isInteger(rubroId)) {
+    throw new Error("Completá Cuenta y Rubro");
   }
 
   const optionalId = (field: string) => {
@@ -46,9 +42,10 @@ function readCampos(formData: FormData) {
 
   return {
     cuenta,
-    partidaPatrimonialId,
     rubroId,
-    subrubroId,
+    // Subrubro es exclusivo de Rubros de Partida Resultado (ver UI, que lo
+    // oculta para el resto) — acá queda siempre opcional.
+    subrubroId: optionalId("subrubroId"),
     subrubro2Id: optionalId("subrubro2Id"),
     subrubro3Id: optionalId("subrubro3Id"),
     categoriaOyAId: optionalId("categoriaOyAId"),
@@ -73,6 +70,28 @@ export async function updatePlanDeCuentas(id: string, formData: FormData) {
 
   await prisma.planDeCuentas.update({ where: { id }, data: campos });
 
+  revalidatePath("/configuracion/plan-de-cuentas");
+}
+
+// Reclasificación rápida desde el "ojo" del ESP (drill-down por Rubro) —
+// mismo efecto que editar la cuenta en Configuración → Plan de Cuentas. La
+// pantalla que la llama ya oculta el botón Editar una vez que el informe
+// está congelado (ver DetalleRubro.congelado); no hace falta repetir ese
+// chequeo acá porque un informe ya aprobado lee de su snapshot y no se ve
+// afectado por este cambio.
+export async function updatePlanDeCuentaRubro(id: string, rubroId: number) {
+  await requireAdmin();
+  if (!Number.isInteger(rubroId)) throw new Error("Rubro inválido");
+  await prisma.planDeCuentas.update({ where: { id }, data: { rubroId } });
+  revalidatePath("/configuracion/plan-de-cuentas");
+}
+
+// Mismo propósito que updatePlanDeCuentaRubro, para el "ojo" del ER
+// (drill-down por Subrubro, cuadro Nominal).
+export async function updatePlanDeCuentaSubrubro(id: string, subrubroId: number) {
+  await requireAdmin();
+  if (!Number.isInteger(subrubroId)) throw new Error("Subrubro inválido");
+  await prisma.planDeCuentas.update({ where: { id }, data: { subrubroId } });
   revalidatePath("/configuracion/plan-de-cuentas");
 }
 

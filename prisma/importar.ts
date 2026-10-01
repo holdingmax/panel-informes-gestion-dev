@@ -17,7 +17,7 @@
 import "dotenv/config";
 import ExcelJS from "exceljs";
 import { PrismaClient } from "../src/generated/prisma/client";
-import type { CategoriaOrigenAplicacion, RolTipoPartida } from "../src/generated/prisma/enums";
+import type { RolTipoPartida } from "../src/generated/prisma/enums";
 import { PrismaPg } from "@prisma/adapter-pg";
 
 const adapter = new PrismaPg({ connectionString: process.env.DATABASE_URL! });
@@ -169,13 +169,6 @@ function defaultRolPartida(partidaNombre: string): RolTipoPartida | undefined {
   return undefined; // "CUENTA DE ORDEN" y similares quedan sin clasificar a propósito
 }
 
-function defaultCategoriaOyA(partidaNombre: string): CategoriaOrigenAplicacion | undefined {
-  const p = partidaNombre.toUpperCase();
-  if (p === "ACTIVO") return "APLICACION";
-  if (p === "PASIVO" || p === "REGULADORA DE PASIVO" || p === "PATRIMONIO NETO") return "ORIGEN";
-  return undefined; // INGRESOS/EGRESOS no participan del Origen y Aplicación de Fondos
-}
-
 // ---------- import-plan-de-cuentas.ts (genérico, sin colisión) ----------
 
 async function importarPlanGenerico(empresaNombre: string, filePath: string): Promise<void> {
@@ -217,12 +210,12 @@ async function importarPlanGenerico(empresaNombre: string, filePath: string): Pr
     return row.codPartida;
   }
 
-  async function getRubroId(nombre: string, partidaNombre: string) {
+  async function getRubroId(nombre: string, partidaPatrimonialId: number) {
     if (rubroCache.has(nombre)) return rubroCache.get(nombre)!;
     const row = await prisma.rubro.upsert({
       where: { nomRubro: nombre },
       update: {},
-      create: { nomRubro: nombre, categoriaOyA: defaultCategoriaOyA(partidaNombre) },
+      create: { nomRubro: nombre, partidaPatrimonialId },
     });
     rubroCache.set(nombre, row.codRubro);
     return row.codRubro;
@@ -282,9 +275,9 @@ async function importarPlanGenerico(empresaNombre: string, filePath: string): Pr
 
     if (!rubroPartidaSeen.has(rubroNombre)) rubroPartidaSeen.set(rubroNombre, partidaNombre);
 
-    const [partidaPatrimonialId, rubroId, subrubroId, subrubro2Id, subrubro3Id] = await Promise.all([
-      getPartidaId(partidaNombre),
-      getRubroId(rubroNombre, partidaNombre),
+    const partidaPatrimonialId = await getPartidaId(partidaNombre);
+    const [rubroId, subrubroId, subrubro2Id, subrubro3Id] = await Promise.all([
+      getRubroId(rubroNombre, partidaPatrimonialId),
       getSubrubroId(subrubroNombre),
       nivel2Nombre ? getSubrubro2Id(nivel2Nombre) : Promise.resolve(null),
       nivel3Nombre ? getSubrubro3Id(nivel3Nombre) : Promise.resolve(null),
@@ -292,8 +285,8 @@ async function importarPlanGenerico(empresaNombre: string, filePath: string): Pr
 
     await prisma.planDeCuentas.upsert({
       where: { empresaId_cuenta: { empresaId: empresa.codEmp, cuenta } },
-      update: { partidaPatrimonialId, rubroId, subrubroId, subrubro2Id, subrubro3Id },
-      create: { empresaId: empresa.codEmp, cuenta, partidaPatrimonialId, rubroId, subrubroId, subrubro2Id, subrubro3Id },
+      update: { rubroId, subrubroId, subrubro2Id, subrubro3Id },
+      create: { empresaId: empresa.codEmp, cuenta, rubroId, subrubroId, subrubro2Id, subrubro3Id },
     });
     count++;
   }
@@ -302,12 +295,10 @@ async function importarPlanGenerico(empresaNombre: string, filePath: string): Pr
   for (const [rubroNombre, partidaNombre] of rubroPartidaSeen) {
     const rubroId = rubroCache.get(rubroNombre)!;
     const actual = await prisma.rubro.findUnique({ where: { codRubro: rubroId } });
-    if (actual && actual.categoriaOyA === null) {
-      const categoriaOyA = defaultCategoriaOyA(partidaNombre);
-      if (categoriaOyA) {
-        await prisma.rubro.update({ where: { codRubro: rubroId }, data: { categoriaOyA } });
-        rubrosBackfilled++;
-      }
+    if (actual && actual.partidaPatrimonialId === null) {
+      const partidaPatrimonialId = await getPartidaId(partidaNombre);
+      await prisma.rubro.update({ where: { codRubro: rubroId }, data: { partidaPatrimonialId } });
+      rubrosBackfilled++;
     }
   }
 
@@ -326,7 +317,7 @@ async function importarPlanGenerico(empresaNombre: string, filePath: string): Pr
 
   console.log(`Listo: ${count} cuentas del Plan de Cuentas de "${empresaNombre}" importadas.`);
   if (rubrosBackfilled > 0) {
-    console.log(`Se clasificó Origen/Aplicación por defecto en ${rubrosBackfilled} rubro(s) existentes.`);
+    console.log(`Se clasificó Partida Patrimonial por defecto en ${rubrosBackfilled} rubro(s) existentes.`);
   }
   if (partidasBackfilled > 0) {
     console.log(`Se clasificó Tipo (Balance/Resultado) por defecto en ${partidasBackfilled} partida(s) existentes.`);
@@ -675,23 +666,16 @@ async function importarPlanColisionAware(config: PlanConfig, filePath: string): 
   for (const r of await prisma.rubro.findMany()) rubroCache.set(normalize(r.nomRubro), r.codRubro);
 
   // Precarga rubroGrupoAsignado con el grupo real de cada Rubro YA existente
-  // en la base (no solo el detectado dentro de este archivo), inferido de
-  // las cuentas que efectivamente lo usan hoy. Si un Rubro ya existente se
-  // usa con más de un rol distinto (dato previo ambiguo, ajeno a esta
-  // importación) se deja sin precargar.
+  // en la base (no solo el detectado dentro de este archivo) — la Partida
+  // Patrimonial vive directo en el Rubro, así que no hace falta inferirla de
+  // las cuentas que lo usan ni lidiar con un dato previo ambiguo.
   if (config.precargarRubroGrupoDesdeHistorial) {
-    const rubrosConUso = await prisma.rubro.findMany({
-      include: {
-        planes: {
-          distinct: ["partidaPatrimonialId"],
-          include: { partidaPatrimonial: { include: { tipo: true } } },
-        },
-      },
+    const rubrosExistentes = await prisma.rubro.findMany({
+      include: { partidaPatrimonial: { include: { tipo: true } } },
     });
-    for (const r of rubrosConUso) {
-      const roles = new Set<Grupo>();
-      for (const plan of r.planes) roles.add(plan.partidaPatrimonial.tipo?.rol ?? "OTRO");
-      if (roles.size === 1) rubroGrupoAsignado.set(normalize(r.nomRubro), Array.from(roles)[0]);
+    for (const r of rubrosExistentes) {
+      const grupo: Grupo = r.partidaPatrimonial?.tipo?.rol ?? "OTRO";
+      rubroGrupoAsignado.set(normalize(r.nomRubro), grupo);
     }
   }
 
@@ -719,7 +703,7 @@ async function importarPlanColisionAware(config: PlanConfig, filePath: string): 
   // representando, con un solo id, tanto un préstamo otorgado (Activo) como
   // uno recibido (Pasivo) en otra empresa. Si aparece de nuevo con un grupo
   // distinto, se crea un Rubro nuevo con un sufijo aclaratorio.
-  async function getRubro(nombreOriginal: string, partidaNombre: string, grupo: Grupo) {
+  async function getRubro(nombreOriginal: string, partidaPatrimonialId: number, grupo: Grupo) {
     let nombre = nombreOriginal;
     const grupoPrevio = rubroGrupoAsignado.get(normalize(nombre));
     if (grupoPrevio !== undefined && grupoPrevio !== grupo) {
@@ -732,7 +716,7 @@ async function importarPlanColisionAware(config: PlanConfig, filePath: string): 
     const cachedId = rubroCache.get(key);
     if (cachedId) return cachedId;
 
-    const row = await prisma.rubro.create({ data: { nomRubro: nombre, categoriaOyA: defaultCategoriaOyA(partidaNombre) } });
+    const row = await prisma.rubro.create({ data: { nomRubro: nombre, partidaPatrimonialId } });
     rubroCache.set(key, row.codRubro);
     return row.codRubro;
   }
@@ -795,15 +779,15 @@ async function importarPlanColisionAware(config: PlanConfig, filePath: string): 
     }
 
     const partida = await getPartida(clasif.partidaNombre);
-    const rubroId = await getRubro(clasif.rubroNombre, clasif.partidaNombre, clasif.grupo);
+    const rubroId = await getRubro(clasif.rubroNombre, partida.id, clasif.grupo);
     const subrubroId = await getSubrubro(clasif.subrubroNombre);
     const subrubro2Id = clasif.subrubro2Nombre ? await getSubrubro2(clasif.subrubro2Nombre) : null;
     const subrubro3Id = clasif.subrubro3Nombre ? await getSubrubro3(clasif.subrubro3Nombre) : null;
 
     await prisma.planDeCuentas.upsert({
       where: { empresaId_cuenta: { empresaId, cuenta } },
-      update: { partidaPatrimonialId: partida.id, rubroId, subrubroId, subrubro2Id, subrubro3Id },
-      create: { empresaId, cuenta, partidaPatrimonialId: partida.id, rubroId, subrubroId, subrubro2Id, subrubro3Id },
+      update: { rubroId, subrubroId, subrubro2Id, subrubro3Id },
+      create: { empresaId, cuenta, rubroId, subrubroId, subrubro2Id, subrubro3Id },
     });
     count++;
   }

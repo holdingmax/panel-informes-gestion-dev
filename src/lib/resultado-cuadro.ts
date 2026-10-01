@@ -1,5 +1,6 @@
 import { prisma } from "@/lib/prisma";
 import { computeResultadoNominalMes, type ResultadoNominal } from "@/lib/resultado-nominal";
+import type { InformeSnapshot } from "@/lib/balance-oya-report";
 
 const CAMPOS: (keyof ResultadoNominal)[] = [
   "ventas",
@@ -132,13 +133,23 @@ export async function computeResultadoCuadro(informeId: string): Promise<Resulta
   const tieneAjustePorInflacion = empresas.some((e) => e.actualiza);
   const tieneMonedaSecundaria = monedaSecundaria !== null;
 
-  const { valores: actualRaw, advertencias: advertenciasMes } = await computeResultadoNominalMes(
-    unidadNegocioId,
-    periodoMes,
-    periodoAnio
-  );
-  advertencias.push(...advertenciasMes);
-  const actual = actualRaw ?? vacio();
+  // Congelado (Aprobado/Definitivo): la columna del período actual sale del
+  // snapshot guardado al aprobar, no se recalcula contra el Plan de
+  // Cuentas/BSyS actuales — ver computeInformeReport (balance-oya-report.ts)
+  // para el mismo criterio aplicado al ESP.
+  let actual: ResultadoNominal;
+  if (informe.snapshot) {
+    const snapshot = informe.snapshot as unknown as InformeSnapshot;
+    actual = snapshot.erActual.valores;
+  } else {
+    const { valores: actualRaw, advertencias: advertenciasMes } = await computeResultadoNominalMes(
+      unidadNegocioId,
+      periodoMes,
+      periodoAnio
+    );
+    advertencias.push(...advertenciasMes);
+    actual = actualRaw ?? vacio();
+  }
 
   // Se trae todo de una sola vez (son tablas chicas) en vez de ir mes a mes.
   const historicos = await prisma.resultadosHistoricos.findMany({ where: { unidadNegocioId } });

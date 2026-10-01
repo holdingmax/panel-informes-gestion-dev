@@ -20,7 +20,6 @@ function saldo(
 
 function plan(overrides: Partial<PlanCuentaInput> & Pick<PlanCuentaInput, "cuenta" | "rubroId" | "nomRubro" | "tipoRol">): PlanCuentaInput {
   return {
-    rubroCategoriaOyA: null,
     rubroBucketNOF: null,
     rubroOrden: null,
     tieneTipo: true,
@@ -100,7 +99,7 @@ describe("buildInformeReport — Estado de Origen y Aplicación de Fondos", () =
     expect(report.origenAplicacion.aplicaciones).toHaveLength(0);
   });
 
-  it('Rubro con categoría AJUSTE: se expone en "Ajustes Ejercicios Anteriores"', () => {
+  it('"Ajustes Ejercicios Anteriores" ya no es un caso especial: entra a Orígenes/Aplicaciones como cualquier Rubro de Patrimonio Neto', () => {
     const empresas = [
       empresa(
         [saldo("RESULTADOS ACUMULADOS", 0, 100, 0, 400)],
@@ -110,7 +109,6 @@ describe("buildInformeReport — Estado de Origen y Aplicación de Fondos", () =
             rubroId: 3,
             nomRubro: "Resultados Acumulados",
             tipoRol: "PATRIMONIO_NETO",
-            rubroCategoriaOyA: "AJUSTE",
           }),
         ]
       ),
@@ -118,9 +116,8 @@ describe("buildInformeReport — Estado de Origen y Aplicación de Fondos", () =
 
     const report = buildInformeReport(PERIODO, empresas);
 
-    expect(report.origenAplicacion.ajustes).toHaveLength(1);
-    expect(report.origenAplicacion.ajustes[0].nombre).toBe("Resultados Acumulados");
-    expect(report.origenAplicacion.origenes).toHaveLength(0);
+    expect(report.origenAplicacion.origenes).toHaveLength(1);
+    expect(report.origenAplicacion.origenes[0].nombre).toBe("Resultados Acumulados");
     expect(report.origenAplicacion.aplicaciones).toHaveLength(0);
   });
 

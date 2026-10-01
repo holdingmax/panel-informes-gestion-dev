@@ -1,37 +1,32 @@
 import { auth } from "@/auth";
-import { listRubrosConClasificacion } from "@/lib/rubro-actions";
-import { listPartidasConClasificacion } from "@/lib/partida-actions";
+import { listSubrubrosConClasificacion } from "@/lib/subrubro-actions";
 import { createCatalogItem } from "@/lib/catalog-actions";
 import { CollapsibleAdd } from "@/components/CollapsibleAdd";
-import { RubroClasificacionRow } from "./RubroClasificacionRow";
+import { SubrubroCampoRow } from "./SubrubroCampoRow";
 
 export const dynamic = "force-dynamic";
 
-export default async function RubroPage() {
-  const [rubros, partidas] = await Promise.all([
-    listRubrosConClasificacion(),
-    listPartidasConClasificacion(),
-  ]);
+export default async function SubrubroPage() {
+  const subrubros = await listSubrubrosConClasificacion();
   const session = await auth();
   const isAdmin = session?.user.role === "ADMIN";
 
   return (
     <main className="flex w-full flex-col gap-8 p-8">
-      <h1 className="text-2xl font-semibold">Rubro</h1>
+      <h1 className="text-2xl font-semibold">Subrubro</h1>
 
       <p className="text-sm text-zinc-600">
-        La Partida Patrimonial decide dónde cae este Rubro en el Estado de Situación Patrimonial
-        (Activo/Pasivo/Patrimonio Neto) o si es de Resultado — uniforma la clasificación para
-        todas las cuentas que use este Rubro. La clasificación de Necesidades Operativas de
-        Fondos (NOF) se hace por cuenta en Configuración → Categoría OyA, no acá.
+        Exclusivo de cuentas de Rubros de Partida Resultado (Ingresos/Egresos) — el Campo del ER
+        decide a cuál de los 5 campos del cuadro Nominal del Estado de Resultados aporta cada
+        cuenta. Para el resto de los rubros, usá Subrubro 2 / Subrubro 3 como ayuda visual.
       </p>
 
       {isAdmin && (
         <CollapsibleAdd>
           <form action={createCatalogItem} className="flex flex-col gap-3">
-            <input type="hidden" name="tabla" value="rubro" />
+            <input type="hidden" name="tabla" value="subrubro" />
             <label className="flex flex-col gap-1">
-              <span className="text-lg">Nombre de rubro</span>
+              <span className="text-lg">Nombre de subrubro</span>
               <input name="nombre" required maxLength={60} className="rounded border px-3 py-2 text-lg" />
             </label>
             <button
@@ -50,20 +45,17 @@ export default async function RubroPage() {
             <tr>
               <th className="py-1 pr-4">Código</th>
               <th className="py-1 pr-4">Nombre</th>
-              <th className="py-1 pr-4">Partida Patrimonial</th>
-              <th className="py-1 pr-4">Orden en el ESP</th>
+              <th className="py-1 pr-4">Campo del ER</th>
               <th className="py-1 pr-4">Acciones</th>
             </tr>
           </thead>
           <tbody>
-            {rubros.map((rubro) => (
-              <RubroClasificacionRow
-                key={rubro.codRubro}
-                codRubro={rubro.codRubro}
-                nomRubro={rubro.nomRubro}
-                partidaPatrimonialId={rubro.partidaPatrimonialId}
-                partidas={partidas}
-                orden={rubro.orden}
+            {subrubros.map((subrubro) => (
+              <SubrubroCampoRow
+                key={subrubro.codSubrubro}
+                codSubrubro={subrubro.codSubrubro}
+                nomSubrubro={subrubro.nomSubrubro}
+                campoResultado={subrubro.campoResultado}
                 isAdmin={isAdmin}
               />
             ))}

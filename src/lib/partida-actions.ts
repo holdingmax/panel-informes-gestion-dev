@@ -35,11 +35,11 @@ export async function updatePartidaNombre(codPartida: number, nomPartida: string
 
 export async function checkDeletePartida(codPartida: number): Promise<DeleteCheckResult> {
   await requireUser();
-  const cantidad = await prisma.planDeCuentas.count({ where: { partidaPatrimonialId: codPartida } });
+  const cantidad = await prisma.rubro.count({ where: { partidaPatrimonialId: codPartida } });
   if (cantidad === 0) return { blocked: false };
   return {
     blocked: true,
-    reason: `No se puede eliminar: ${cantidad} cuenta(s) del Plan de Cuentas todavía la usan. Reclasificalas primero en Configuración → Plan de Cuentas.`,
+    reason: `No se puede eliminar: ${cantidad} rubro(s) todavía la usan. Reclasificalos primero en Configuración → Rubro.`,
   };
 }
 

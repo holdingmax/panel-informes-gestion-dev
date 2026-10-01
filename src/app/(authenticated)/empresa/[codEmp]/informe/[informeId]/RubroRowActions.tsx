@@ -38,7 +38,7 @@ export function RubroRowActions({
             `rubro-${codRubro}`
           )
         }
-        className="text-base leading-none hover:opacity-70"
+        className="text-2xl leading-none hover:opacity-70"
       >
         👁
       </button>

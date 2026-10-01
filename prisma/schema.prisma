@@ -114,6 +114,10 @@ model Informe {
   periodoMes      Int
   periodoAnio     Int
   estado          EstadoInforme @default(PROCESO)
+  // Se completa al pasar a APROBADO (ver avanzarEstadoInforme) y nunca se
+  // vuelve a tocar — null significa que el informe todavía se recalcula en
+  // vivo contra el Plan de Cuentas actual. Ver computeInformeReport.
+  snapshot        Json?
   createdAt       DateTime      @default(now())
   updatedAt       DateTime      @updatedAt
 
@@ -180,20 +184,11 @@ model TipoPartida {
 }
 
 model PartidaPatrimonial {
-  codPartida Int             @id @default(autoincrement())
-  nomPartida String          @unique @db.VarChar(40)
+  codPartida Int          @id @default(autoincrement())
+  nomPartida String       @unique @db.VarChar(40)
   tipoId     Int?
-  tipo       TipoPartida?    @relation(fields: [tipoId], references: [codTipo])
-  planes     PlanDeCuentas[]
-}
-
-// AJUSTE es para rubros como "Resultados Acumulados" cuya variación del
-// período se muestra aparte, como línea de "Ajustes Ejercicios Anteriores",
-// en vez de mezclarse en la lista general de Orígenes/Aplicaciones.
-enum CategoriaOrigenAplicacion {
-  ORIGEN
-  APLICACION
-  AJUSTE
+  tipo       TipoPartida? @relation(fields: [tipoId], references: [codTipo])
+  rubros     Rubro[]
 }
 
 enum BucketNOF {
@@ -203,9 +198,8 @@ enum BucketNOF {
 }
 
 // Los 5 campos del cuadro de Resultado Nominal (ver resultado-nominal.ts) —
-// antes se buscaban por nomRubro exacto, así que renombrar un Rubro de
-// Resultado rompía el cálculo en silencio. Con este campo explícito el
-// nombre del Rubro puede cambiar libremente.
+// se clasifican por Subrubro (ver modelo Subrubro), exclusivo de los
+// Rubros de Partida Resultado (Ingresos/Egresos).
 enum CampoResultado {
   VENTAS
   COSTOS_DIRECTOS
@@ -215,27 +209,35 @@ enum CampoResultado {
 }
 
 model Rubro {
-  codRubro       Int                        @id @default(autoincrement())
-  nomRubro       String                     @unique @db.VarChar(60)
-  categoriaOyA   CategoriaOrigenAplicacion?
+  codRubro             Int                 @id @default(autoincrement())
+  nomRubro             String              @unique @db.VarChar(60)
+  // El tipo (Activo/Pasivo/Patrimonio Neto/Resultado) de TODAS las cuentas
+  // de este Rubro sale de acá — ya no se clasifica cuenta por cuenta (ver
+  // PlanDeCuentas), para que una cuenta suelta mal cargada no pueda
+  // arrastrar mal a todo el rubro. Null solo en un Rubro que nunca se usó.
+  partidaPatrimonialId Int?
+  partidaPatrimonial   PartidaPatrimonial? @relation(fields: [partidaPatrimonialId], references: [codPartida])
   // Default de NOF a nivel Rubro (atajo "CTO/ONP/ARS" desde el ESP) — una
   // cuenta puntual clasificada en Configuración → Categoría OyA sigue
   // ganando por sobre este default (ver computeInformeReport).
-  bucketNOF      BucketNOF?
+  bucketNOF            BucketNOF?
   // Orden de exposición dentro del ESP (Activo/Pasivo/Patrimonio Neto se
   // ordenan por este valor, de menor a mayor; null queda al final, en el
   // orden en que se insertó el Rubro). No afecta a ninguna otra hoja.
-  orden          Int?
-  // Solo se usa en Rubros de Resultado (Partida con rol RESULTADO) — ver
-  // CampoResultado arriba.
-  campoResultado CampoResultado?
-  planes         PlanDeCuentas[]
+  orden                Int?
+  planes               PlanDeCuentas[]
 }
 
+// Exclusivo de los Rubros de Partida Resultado (Ingresos/Egresos): decide
+// a qué campo del Estado de Resultados va cada cuenta (campoResultado). En
+// cuentas de cualquier otro Rubro este campo no se usa — ahí se usan
+// Subrubro2/Subrubro3 en su lugar, solo como ayuda visual, sin ningún rol
+// en ningún cálculo.
 model Subrubro {
-  codSubrubro Int             @id @default(autoincrement())
-  nomSubrubro String          @unique @db.VarChar(60)
-  planes      PlanDeCuentas[]
+  codSubrubro    Int             @id @default(autoincrement())
+  nomSubrubro    String          @unique @db.VarChar(60)
+  campoResultado CampoResultado?
+  planes         PlanDeCuentas[]
 }
 
 model Subrubro2 {
@@ -304,22 +306,22 @@ model ResultadosHistoricos {
 }
 
 model PlanDeCuentas {
-  id                   String             @id @default(cuid())
-  empresa              Empresa            @relation(fields: [empresaId], references: [codEmp])
-  empresaId            Int
-  cuenta               String             @db.VarChar(90)
-  partidaPatrimonial   PartidaPatrimonial @relation(fields: [partidaPatrimonialId], references: [codPartida])
-  partidaPatrimonialId Int
-  rubro                Rubro              @relation(fields: [rubroId], references: [codRubro])
-  rubroId              Int
-  subrubro             Subrubro           @relation(fields: [subrubroId], references: [codSubrubro])
-  subrubroId           Int
-  subrubro2            Subrubro2?         @relation(fields: [subrubro2Id], references: [codSubrubro2])
-  subrubro2Id          Int?
-  subrubro3            Subrubro3?         @relation(fields: [subrubro3Id], references: [codSubrubro3])
-  subrubro3Id          Int?
-  categoriaOyA         CategoriaOyA?      @relation(fields: [categoriaOyAId], references: [codOyA])
-  categoriaOyAId       Int?
+  id             String        @id @default(cuid())
+  empresa        Empresa       @relation(fields: [empresaId], references: [codEmp])
+  empresaId      Int
+  cuenta         String        @db.VarChar(90)
+  rubro          Rubro         @relation(fields: [rubroId], references: [codRubro])
+  rubroId        Int
+  // Exclusivo de cuentas de Rubros de Resultado — ver Subrubro. Opcional:
+  // una cuenta de otro Rubro no lo carga.
+  subrubro       Subrubro?     @relation(fields: [subrubroId], references: [codSubrubro])
+  subrubroId     Int?
+  subrubro2      Subrubro2?    @relation(fields: [subrubro2Id], references: [codSubrubro2])
+  subrubro2Id    Int?
+  subrubro3      Subrubro3?    @relation(fields: [subrubro3Id], references: [codSubrubro3])
+  subrubro3Id    Int?
+  categoriaOyA   CategoriaOyA? @relation(fields: [categoriaOyAId], references: [codOyA])
+  categoriaOyAId Int?
 
   @@unique([empresaId, cuenta])
 }

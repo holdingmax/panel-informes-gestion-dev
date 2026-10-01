@@ -172,12 +172,6 @@ export function InformePDF({ report }: { report: InformeReport }) {
           <Text style={styles.rowLabel}>Resultados Acumulados S/Indicadores</Text>
           <Text style={styles.rowValue}>{fmtParen(resultadoDelPeriodo)}</Text>
         </View>
-        {origenAplicacion.ajustes.map((a) => (
-          <View key={a.codRubro} style={styles.ajusteRow}>
-            <Text style={styles.rowLabel}>Ajustes Ejercicios Anteriores ({a.nombre})</Text>
-            <Text style={styles.rowValue}>{fmtParen(a.origenAplicacion)}</Text>
-          </View>
-        ))}
         {resultadoInicioNoDistribuido !== 0 && (
           <View style={styles.ajusteRow}>
             <Text style={styles.rowLabel}>Resultado no distribuido al inicio del ejercicio</Text>
@@ -222,12 +216,6 @@ export function InformePDF({ report }: { report: InformeReport }) {
           <Text style={styles.rowLabel}>Resultados Acumulados S/Indicadores</Text>
           <Text style={styles.rowValue}>{fmtParen(resultadoDelPeriodo)}</Text>
         </View>
-        {origenAplicacion.ajustes.map((a) => (
-          <View key={a.codRubro} style={styles.row}>
-            <Text style={styles.rowLabel}>Ajustes Ejercicios Anteriores ({a.nombre})</Text>
-            <Text style={styles.rowValue}>{fmtParen(a.origenAplicacion)}</Text>
-          </View>
-        ))}
         {resultadoInicioNoDistribuido !== 0 && (
           <View style={styles.row}>
             <Text style={styles.rowLabel}>Resultado no distribuido al inicio del ejercicio</Text>

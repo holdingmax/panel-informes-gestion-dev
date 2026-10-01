@@ -2,7 +2,9 @@
 
 import { revalidatePath } from "next/cache";
 import { prisma } from "@/lib/prisma";
+import { Prisma } from "@/generated/prisma/client";
 import { computeResultadoNominalMes } from "@/lib/resultado-nominal";
+import { buildEmpresaBalanceInputs, type InformeSnapshot } from "@/lib/balance-oya-report";
 import type { DeleteCheckResult } from "@/components/ConfirmDeleteButton";
 import { requireUser, requireAdmin } from "@/lib/authz";
 
@@ -59,18 +61,39 @@ export async function avanzarEstadoInforme(informeId: string) {
     await requireAdmin();
   }
 
-  // Se calcula ANTES de la transacción (es una lectura pura) para no dejar
-  // la transacción abierta más tiempo del necesario.
-  const valores =
-    siguiente === "APROBADO"
-      ? (
-          await computeResultadoNominalMes(
-            informe.unidadNegocioId,
-            informe.periodoMes,
-            informe.periodoAnio
-          )
-        ).valores
-      : null;
+  // Se calcula ANTES de la transacción (son lecturas puras) para no dejar
+  // la transacción abierta más tiempo del necesario. El snapshot congela
+  // para siempre los datos y la clasificación que el informe tenía al
+  // aprobarse — ver InformeSnapshot (balance-oya-report.ts) y
+  // computeInformeReport/getDetalleRubro/getDetalleSubrubro, que lo leen en
+  // vez de recalcular contra el Plan de Cuentas/BSyS actuales una vez que
+  // existe.
+  let valores: Awaited<ReturnType<typeof computeResultadoNominalMes>>["valores"] = null;
+  let snapshot: InformeSnapshot | null = null;
+  if (siguiente === "APROBADO") {
+    const [esp, er] = await Promise.all([
+      buildEmpresaBalanceInputs(informe.unidadNegocioId, informe.periodoMes, informe.periodoAnio),
+      computeResultadoNominalMes(informe.unidadNegocioId, informe.periodoMes, informe.periodoAnio),
+    ]);
+    valores = er.valores;
+    snapshot = {
+      esp: {
+        periodo: { periodoMes: informe.periodoMes, periodoAnio: informe.periodoAnio },
+        fechaCargaAcumulado: esp.fechaCargaAcumulado ? esp.fechaCargaAcumulado.toISOString() : null,
+        empresas: esp.empresasInput,
+      },
+      erActual: {
+        valores: er.valores ?? {
+          ventas: 0,
+          costosDirectos: 0,
+          gastosOperativos: 0,
+          expensas: 0,
+          otrasGananciasYPerdidas: 0,
+        },
+        cuentas: er.cuentas,
+      },
+    };
+  }
 
   await prisma.$transaction(async (tx) => {
     // updateMany (no update) para que dos clics simultáneos no salteen un
@@ -78,7 +101,10 @@ export async function avanzarEstadoInforme(informeId: string) {
     // se corta en vez de pisar un avance que ya hizo otra pestaña/usuario.
     const resultado = await tx.informe.updateMany({
       where: { id: informeId, estado: estadoActual },
-      data: { estado: siguiente },
+      data: {
+        estado: siguiente,
+        ...(snapshot ? { snapshot: snapshot as unknown as Prisma.InputJsonValue } : {}),
+      },
     });
     if (resultado.count === 0) {
       throw new Error("El informe cambió de estado. Recargá la página.");

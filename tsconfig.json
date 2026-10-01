@@ -30,5 +30,11 @@
     ".next/dev/types/**/*.ts",
     "**/*.mts"
   ],
-  "exclude": ["node_modules"]
+  "exclude": [
+    "node_modules",
+    // Scripts de una sola corrida ya ejecutados, reemplazados por
+    // prisma/importar.ts y conservados solo como referencia histórica — ver
+    // README.md. No se mantienen al día con cambios de schema.
+    "prisma/legacy/**"
+  ]
 }

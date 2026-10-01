@@ -1,7 +1,8 @@
+import { notFound } from "next/navigation";
 import { auth } from "@/auth";
-import { getDetalleRubro } from "@/lib/balance-oya-report";
-import { listRubrosConClasificacion } from "@/lib/rubro-actions";
-import { DetalleRubroRow } from "./DetalleRubroRow";
+import { getDetalleCampoResultado, CAMPO_LABEL, type ResultadoNominal } from "@/lib/resultado-nominal";
+import { listCatalog } from "@/lib/catalog-actions";
+import { DetalleCampoRow } from "./DetalleCampoRow";
 
 export const dynamic = "force-dynamic";
 
@@ -10,25 +11,33 @@ function fmtParen(n: number) {
   return rounded < 0 ? `(${Math.abs(rounded).toLocaleString("es-AR")})` : rounded.toLocaleString("es-AR");
 }
 
-export default async function DetalleRubroPage({
+const CAMPOS_VALIDOS = Object.keys(CAMPO_LABEL) as (keyof ResultadoNominal)[];
+
+export default async function DetalleCampoResultadoPage({
   params,
 }: {
-  params: Promise<{ informeId: string; codRubro: string }>;
+  params: Promise<{ informeId: string; campo: string }>;
 }) {
-  const { informeId, codRubro } = await params;
-  const [detalle, session, rubros] = await Promise.all([
-    getDetalleRubro(informeId, Number(codRubro)),
+  const { informeId, campo: campoRaw } = await params;
+  if (!CAMPOS_VALIDOS.includes(campoRaw as keyof ResultadoNominal)) notFound();
+  const campo = campoRaw as keyof ResultadoNominal;
+
+  const [detalle, session, subrubros] = await Promise.all([
+    getDetalleCampoResultado(informeId, campo),
     auth(),
-    listRubrosConClasificacion(),
+    listCatalog("subrubro"),
   ]);
   // Solo mientras el informe no está congelado (Aprobado/Definitivo) — una
   // vez validado, reclasificar una cuenta ya no debe poder tocarlo.
   const puedeEditar = session?.user.role === "ADMIN" && !detalle.congelado;
-  const rubrosOpc = rubros.map((r) => ({ codRubro: r.codRubro, nomRubro: r.nomRubro }));
+  const subrubrosOpc = (subrubros as { codSubrubro: number; nomSubrubro: string }[]).map((s) => ({
+    codSubrubro: s.codSubrubro,
+    nomSubrubro: s.nomSubrubro,
+  }));
 
   return (
     <div className="p-6">
-      <h2 className="text-lg font-medium">{detalle.nomRubro} — detalle por cuenta</h2>
+      <h2 className="text-lg font-medium">{detalle.label} — detalle por cuenta</h2>
       {detalle.congelado && (
         <p className="mt-1 text-sm text-zinc-600">
           Este informe ya está validado — la clasificación quedó congelada y no se puede editar.
@@ -41,22 +50,22 @@ export default async function DetalleRubroPage({
             <th className="py-2 font-semibold">Cuenta</th>
             <th className="py-2 pr-3 text-right font-semibold">Saldo Final</th>
             <th className="py-2 pr-3 text-right font-semibold">Saldo Inicio</th>
-            <th className="py-2 pr-3 font-semibold">Rubro</th>
+            <th className="py-2 pr-3 font-semibold">Subrubro</th>
             {puedeEditar && <th className="py-2 pr-3 font-semibold">Acciones</th>}
           </tr>
         </thead>
         <tbody>
           {detalle.cuentas.map((c) => (
-            <DetalleRubroRow
+            <DetalleCampoRow
               key={`${c.empresaNombre}-${c.cuenta}`}
               planDeCuentaId={c.planDeCuentaId}
               empresaNombre={c.empresaNombre}
               cuenta={c.cuenta}
               saldoInicio={c.saldoInicio}
               saldoFinal={c.saldoFinal}
-              rubroId={c.rubroId}
-              nomRubro={c.nomRubro}
-              rubros={rubrosOpc}
+              subrubroId={c.subrubroId}
+              nomSubrubro={c.nomSubrubro}
+              subrubros={subrubrosOpc}
               puedeEditar={puedeEditar}
             />
           ))}

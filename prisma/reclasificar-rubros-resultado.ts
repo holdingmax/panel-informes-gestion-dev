@@ -52,7 +52,7 @@ async function main() {
 
   const planesEmpresa = await prisma.planDeCuentas.findMany({
     where: { empresaId: empresa.codEmp },
-    include: { partidaPatrimonial: { include: { tipo: true } } },
+    include: { rubro: { include: { partidaPatrimonial: { include: { tipo: true } } } } },
   });
   const porCuenta = new Map(planesEmpresa.map((p) => [normalizeCuenta(p.cuenta), p]));
 
@@ -76,7 +76,7 @@ async function main() {
       noEncontradas.push(cuenta);
       continue;
     }
-    if (plan.partidaPatrimonial.tipo?.rol !== "RESULTADO") {
+    if (plan.rubro.partidaPatrimonial?.tipo?.rol !== "RESULTADO") {
       // La cuenta existe pero en el Plan de Cuentas actual no está clasificada
       // como Resultado — no se toca para no mezclar con Balance por error.
       continue;

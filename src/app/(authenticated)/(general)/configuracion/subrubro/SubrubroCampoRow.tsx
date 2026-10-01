@@ -2,44 +2,46 @@
 
 import { useState, useTransition } from "react";
 import {
-  updateRubroPartida,
-  updateRubroNombre,
-  updateRubroOrden,
-  checkDeleteRubro,
-  deleteRubro,
-} from "@/lib/rubro-actions";
+  updateSubrubroCampoResultado,
+  updateSubrubroNombre,
+  checkDeleteSubrubro,
+  deleteSubrubro,
+} from "@/lib/subrubro-actions";
 import { ConfirmDeleteButton } from "@/components/ConfirmDeleteButton";
 
-export function RubroClasificacionRow({
-  codRubro,
-  nomRubro,
-  partidaPatrimonialId,
-  partidas,
-  orden,
+const CAMPO_LABEL: Record<string, string> = {
+  VENTAS: "Ventas",
+  COSTOS_DIRECTOS: "Costos directos/variables",
+  GASTOS_OPERATIVOS: "Gastos Fijos Operativos",
+  EXPENSAS: "Expensas",
+  OTRAS_GANANCIAS_PERDIDAS: "Otras Ganancias y Perdidas",
+};
+
+export function SubrubroCampoRow({
+  codSubrubro,
+  nomSubrubro,
+  campoResultado,
   isAdmin,
 }: {
-  codRubro: number;
-  nomRubro: string;
-  partidaPatrimonialId: number | null;
-  partidas: { codPartida: number; nomPartida: string }[];
-  orden: number | null;
+  codSubrubro: number;
+  nomSubrubro: string;
+  campoResultado: string | null;
   isAdmin: boolean;
 }) {
   const [pending, startTransition] = useTransition();
   const [editing, setEditing] = useState(false);
-  const [nombreValue, setNombreValue] = useState(nomRubro);
-  const [ordenValue, setOrdenValue] = useState(orden === null ? "" : String(orden));
+  const [nombreValue, setNombreValue] = useState(nomSubrubro);
 
   function guardarNombre() {
     startTransition(async () => {
-      await updateRubroNombre(codRubro, nombreValue);
+      await updateSubrubroNombre(codSubrubro, nombreValue);
       setEditing(false);
     });
   }
 
   return (
     <tr className="border-t">
-      <td className="py-2 pr-4">{codRubro}</td>
+      <td className="py-2 pr-4">{codSubrubro}</td>
       <td className="py-2 pr-4">
         {editing ? (
           <input
@@ -50,45 +52,28 @@ export function RubroClasificacionRow({
             className="rounded border px-2 py-1 text-lg"
           />
         ) : (
-          nomRubro
+          nomSubrubro
         )}
       </td>
       <td className="py-2 pr-4">
         {isAdmin ? (
           <select
-            defaultValue={partidaPatrimonialId === null ? "" : String(partidaPatrimonialId)}
+            defaultValue={campoResultado ?? ""}
             disabled={pending}
             onChange={(e) =>
-              startTransition(() => updateRubroPartida(codRubro, e.target.value))
+              startTransition(() => updateSubrubroCampoResultado(codSubrubro, e.target.value))
             }
             className="rounded border px-2 py-1 text-lg"
           >
             <option value="">Sin clasificar</option>
-            {partidas.map((p) => (
-              <option key={p.codPartida} value={p.codPartida}>
-                {p.nomPartida}
+            {Object.entries(CAMPO_LABEL).map(([value, label]) => (
+              <option key={value} value={value}>
+                {label}
               </option>
             ))}
           </select>
         ) : (
-          partidas.find((p) => p.codPartida === partidaPatrimonialId)?.nomPartida ?? "Sin clasificar"
-        )}
-      </td>
-      <td className="py-2 pr-4">
-        {isAdmin ? (
-          <input
-            type="number"
-            value={ordenValue}
-            onChange={(e) => setOrdenValue(e.target.value)}
-            onBlur={() => {
-              if (ordenValue === (orden === null ? "" : String(orden))) return;
-              startTransition(() => updateRubroOrden(codRubro, ordenValue));
-            }}
-            disabled={pending}
-            className="w-20 rounded border px-2 py-1 text-lg"
-          />
-        ) : (
-          ordenValue
+          (campoResultado ? CAMPO_LABEL[campoResultado] : "Sin clasificar")
         )}
       </td>
       <td className="py-2 pr-4">
@@ -107,7 +92,7 @@ export function RubroClasificacionRow({
                 <button
                   type="button"
                   onClick={() => {
-                    setNombreValue(nomRubro);
+                    setNombreValue(nomSubrubro);
                     setEditing(false);
                   }}
                   disabled={pending}
@@ -126,9 +111,9 @@ export function RubroClasificacionRow({
                   Editar
                 </button>
                 <ConfirmDeleteButton
-                  itemLabel={`"${nomRubro}"`}
-                  check={() => checkDeleteRubro(codRubro)}
-                  onConfirm={() => deleteRubro(codRubro)}
+                  itemLabel={`"${nomSubrubro}"`}
+                  check={() => checkDeleteSubrubro(codSubrubro)}
+                  onConfirm={() => deleteSubrubro(codSubrubro)}
                 />
               </>
             )}

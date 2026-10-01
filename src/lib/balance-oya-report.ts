@@ -1,6 +1,7 @@
 import { prisma } from "@/lib/prisma";
 import { Prisma } from "@/generated/prisma/client";
 import { normalizeCuenta } from "@/lib/cuenta-normalize";
+import type { ResultadoNominal, DetalleSubrubroCuenta } from "@/lib/resultado-nominal";
 
 // La acumulación cuenta por cuenta (rubroMap/nofMap, potencialmente cientos
 // de filas de BSyS por rubro) se hace con Prisma.Decimal en vez de number,
@@ -93,7 +94,6 @@ export type InformeReport = {
   origenAplicacion: {
     origenes: RubroLine[];
     aplicaciones: RubroLine[];
-    ajustes: RubroLine[];
     totalOrigenes: number;
     totalAplicaciones: number;
   };
@@ -116,7 +116,6 @@ export type InformeReport = {
 type RubroAgg = {
   codRubro: number;
   nomRubro: string;
-  categoriaOyA: "ORIGEN" | "APLICACION" | "AJUSTE" | null;
   bucketNOF: "OPERATIVO" | "NO_OPERATIVO" | "FINANCIAMIENTO" | null;
   orden: number | null;
   tipoPartida: "ACTIVO" | "PASIVO" | "PATRIMONIO_NETO" | "RESULTADO" | null;
@@ -225,7 +224,6 @@ export type PlanCuentaInput = {
   cuenta: string;
   rubroId: number;
   nomRubro: string;
-  rubroCategoriaOyA: "ORIGEN" | "APLICACION" | "AJUSTE" | null;
   rubroBucketNOF: "OPERATIVO" | "NO_OPERATIVO" | "FINANCIAMIENTO" | null;
   rubroOrden: number | null;
   tipoRol: "ACTIVO" | "PASIVO" | "PATRIMONIO_NETO" | "RESULTADO" | null;
@@ -249,6 +247,25 @@ export type InformeReportCore = Omit<
   InformeReport,
   "informeId" | "unidadNegocioId" | "unidadNegocioNombre" | "estado" | "fechaCargaAcumulado"
 >;
+
+// Lo que se congela al aprobar un informe (avanzarEstadoInforme) — una sola
+// vez, nunca más se vuelve a tocar. `esp` es literalmente el input de
+// buildInformeReport, así que releerlo después usa el mismo código de
+// cálculo sin duplicar lógica. `erActual` guarda el resultado nominal del
+// período ya calculado más el detalle por cuenta (para el "ojo" del ER) —
+// las columnas de comparación del ER siguen leyendo ResultadosHistoricos,
+// que ya es inmutable por diseño y no necesita congelarse de nuevo acá.
+export type InformeSnapshot = {
+  esp: {
+    periodo: { periodoMes: number; periodoAnio: number };
+    fechaCargaAcumulado: string | null;
+    empresas: EmpresaBalanceInput[];
+  };
+  erActual: {
+    valores: ResultadoNominal;
+    cuentas: DetalleSubrubroCuenta[];
+  };
+};
 
 // Función pura: sin Prisma ni ninguna otra dependencia externa, para poder
 // testearla con datos armados a mano. computeInformeReport (más abajo) solo
@@ -303,7 +320,6 @@ export function buildInformeReport(
         agg = {
           codRubro: plan.rubroId,
           nomRubro: plan.nomRubro,
-          categoriaOyA: plan.rubroCategoriaOyA,
           bucketNOF: plan.rubroBucketNOF,
           orden: plan.rubroOrden,
           tipoPartida: plan.tipoRol,
@@ -319,13 +335,8 @@ export function buildInformeReport(
 
       // La clasificación fina por cuenta (Configuración → Categoría OyA)
       // gana si está seteada; si no, cae al default a nivel Rubro (atajo
-      // CTO/ONP/ARS cargado directo desde el ESP). Los rubros AJUSTE quedan
-      // afuera de CTO/ONP/ARS: su aporte ya entra al NOF a través de
-      // "Resultados Acumulados S/Dif. Patrimonial" (la misma línea que en
-      // el OyAF) — sumarlos también acá los contaría dos veces y el
-      // Control dejaría de cerrar en cero.
-      const bucketNOF =
-        plan.rubroCategoriaOyA === "AJUSTE" ? null : (plan.categoriaOyABucketNOF ?? plan.rubroBucketNOF);
+      // CTO/ONP/ARS cargado directo desde el ESP).
+      const bucketNOF = plan.categoriaOyABucketNOF ?? plan.rubroBucketNOF;
       if (bucketNOF) {
         const key = `${plan.rubroId}:${plan.categoriaOyAId}`;
         let nofAgg = nofMap.get(key);
@@ -453,33 +464,24 @@ export function buildInformeReport(
   const control = totalActivo - (totalPasivo + totalPatrimonioNeto);
   const controlAnterior = totalActivoAnterior - (totalPasivoAnterior + totalPatrimonioNetoAnterior);
 
-  // La lista en la que entra cada rubro (Orígenes, Aplicaciones o Ajustes
-  // Ejercicios Anteriores) se determina por el signo mecánico de
-  // `origenAplicacion`, no por la clasificación fija del Rubro — así se
-  // cumple la regla del usuario de que todo lo que aparece en Orígenes sea
-  // siempre positivo y todo lo de Aplicaciones siempre negativo. Los rubros
-  // marcados AJUSTE (Resultados Acumulados) son la única excepción: se
-  // muestran aparte sea cual sea su signo, como ya se hacía antes.
+  // La lista en la que entra cada rubro (Orígenes o Aplicaciones) se
+  // determina por el signo mecánico de `origenAplicacion` — así se cumple
+  // la regla del usuario de que todo lo que aparece en Orígenes sea siempre
+  // positivo y todo lo de Aplicaciones siempre negativo.
   const origenes: RubroLine[] = [];
   const aplicaciones: RubroLine[] = [];
-  const ajustes: RubroLine[] = [];
   for (const r of balanceRubros) {
     const line = toLine(r);
-    if (r.categoriaOyA === "AJUSTE") ajustes.push(line);
-    else if (line.origenAplicacion >= 0) origenes.push(line);
+    if (line.origenAplicacion >= 0) origenes.push(line);
     else aplicaciones.push(line);
   }
 
-  // "Resultados Acumulados S/Indicadores" (el resultado del período) y los
-  // rubros marcados AJUSTE (p. ej. Resultados Acumulados) siempre entran al
-  // total de Orígenes, sea cual sea su signo — es la convención habitual de
-  // este estado: el resultado del ejercicio es la primera línea de Orígenes,
-  // ya sea una ganancia o una pérdida.
+  // "Resultados Acumulados S/Indicadores" (el resultado del período) siempre
+  // entra al total de Orígenes, sea cual sea su signo — es la convención
+  // habitual de este estado: el resultado del ejercicio es la primera línea
+  // de Orígenes, ya sea una ganancia o una pérdida.
   const totalOrigenes =
-    sum(origenes.map((l) => l.origenAplicacion)) +
-    sum(ajustes.map((l) => l.origenAplicacion)) +
-    resultadoDelPeriodo +
-    resultadoInicioNoDistribuido;
+    sum(origenes.map((l) => l.origenAplicacion)) + resultadoDelPeriodo + resultadoInicioNoDistribuido;
   const totalAplicaciones = sum(aplicaciones.map((l) => l.origenAplicacion));
 
   const operativo: RubroLine[] = [];
@@ -496,15 +498,13 @@ export function buildInformeReport(
   const totalNoOperativo = sum(noOperativo.map((l) => l.origenAplicacion));
   const totalFinanciamiento = sum(financiamiento.map((l) => l.origenAplicacion));
 
-  // "Resultados Acumulados S/Indicadores" y "Ajustes Ejercicios Anteriores"
-  // son la misma información de la hoja 4, mostrada de otro modo — no se
-  // recalculan acá. "Resultado vs NOF" = esos dos más el Aumento (Disminución)
-  // de NOF; el control de abajo (Resultado vs NOF + No operativas +
-  // Financiamiento) tiene que cerrar en 0, la misma identidad de partida doble
-  // que ya usa el Control de la hoja 2, sólo que reagrupada de otra forma.
-  const ajustesTotal = sum(ajustes.map((l) => l.origenAplicacion));
-  const resultadosAcumuladosSDifPatrimonial =
-    resultadoDelPeriodo + resultadoInicioNoDistribuido + ajustesTotal;
+  // "Resultados Acumulados S/Indicadores" es la misma información de la
+  // hoja 4, mostrada de otro modo — no se recalcula acá. "Resultado vs NOF" =
+  // eso más el Aumento (Disminución) de NOF; el control de abajo (Resultado
+  // vs NOF + No operativas + Financiamiento) tiene que cerrar en 0, la misma
+  // identidad de partida doble que ya usa el Control de la hoja 2, sólo que
+  // reagrupada de otra forma.
+  const resultadosAcumuladosSDifPatrimonial = resultadoDelPeriodo + resultadoInicioNoDistribuido;
   const resultadoVsNOF = resultadosAcumuladosSDifPatrimonial + totalOperativo;
   const controlNOF = resultadoVsNOF + totalNoOperativo + totalFinanciamiento;
 
@@ -530,7 +530,7 @@ export function buildInformeReport(
     resultadoDelPeriodoAnterior,
     resultadoInicioNoDistribuido,
     resultadosAcumuladosSDifPatrimonial,
-    origenAplicacion: { origenes, aplicaciones, ajustes, totalOrigenes, totalAplicaciones },
+    origenAplicacion: { origenes, aplicaciones, totalOrigenes, totalAplicaciones },
     nof: {
       operativo,
       noOperativo,
@@ -546,15 +546,16 @@ export function buildInformeReport(
 }
 
 // Lee de la base (empresas vinculadas → última carga ACUMULADO de cada una
-// dentro del período del informe → Plan de Cuentas) y traduce esas filas a
-// los tipos planos que espera buildInformeReport — ningún cálculo vive acá.
-export async function computeInformeReport(informeId: string): Promise<InformeReport> {
-  const informe = await prisma.informe.findUniqueOrThrow({
-    where: { id: informeId },
-    include: { unidadNegocio: true },
-  });
-
-  const empresasDb = await prisma.empresa.findMany({ where: { unidadNegocioId: informe.unidadNegocioId } });
+// dentro del período pedido → Plan de Cuentas) y arma el input exacto que
+// espera buildInformeReport — ningún cálculo vive acá. Se usa tanto para
+// leer un informe en vivo (computeInformeReport) como para armar el
+// snapshot al aprobarlo (avanzarEstadoInforme, en informe-actions.ts).
+export async function buildEmpresaBalanceInputs(
+  unidadNegocioId: number,
+  periodoMes: number,
+  periodoAnio: number
+): Promise<{ empresasInput: EmpresaBalanceInput[]; fechaCargaAcumulado: Date | null }> {
+  const empresasDb = await prisma.empresa.findMany({ where: { unidadNegocioId } });
 
   let fechaCargaAcumulado: Date | null = null;
   const empresasInput: EmpresaBalanceInput[] = [];
@@ -568,8 +569,8 @@ export async function computeInformeReport(informeId: string): Promise<InformeRe
       where: {
         empresaId: empresa.codEmp,
         tipo: "ACUMULADO",
-        periodoMes: informe.periodoMes,
-        periodoAnio: informe.periodoAnio,
+        periodoMes,
+        periodoAnio,
       },
       orderBy: { fechaCarga: "desc" },
       select: { fechaCarga: true },
@@ -592,8 +593,8 @@ export async function computeInformeReport(informeId: string): Promise<InformeRe
       where: {
         empresaId: empresa.codEmp,
         tipo: "ACUMULADO",
-        periodoMes: informe.periodoMes,
-        periodoAnio: informe.periodoAnio,
+        periodoMes,
+        periodoAnio,
         fechaCarga: ultimoAcumulado.fechaCarga,
       },
     });
@@ -601,8 +602,7 @@ export async function computeInformeReport(informeId: string): Promise<InformeRe
     const planDeCuentas = await prisma.planDeCuentas.findMany({
       where: { empresaId: empresa.codEmp },
       include: {
-        rubro: true,
-        partidaPatrimonial: { include: { tipo: true } },
+        rubro: { include: { partidaPatrimonial: { include: { tipo: true } } } },
         categoriaOyA: true,
       },
     });
@@ -621,17 +621,53 @@ export async function computeInformeReport(informeId: string): Promise<InformeRe
         cuenta: p.cuenta,
         rubroId: p.rubroId,
         nomRubro: p.rubro.nomRubro,
-        rubroCategoriaOyA: p.rubro.categoriaOyA,
         rubroBucketNOF: p.rubro.bucketNOF,
         rubroOrden: p.rubro.orden,
-        tipoRol: p.partidaPatrimonial.tipo?.rol ?? null,
-        tieneTipo: p.partidaPatrimonial.tipo !== null,
-        exigeSaldoCero: p.partidaPatrimonial.tipo?.exigeSaldoCero ?? false,
+        tipoRol: p.rubro.partidaPatrimonial?.tipo?.rol ?? null,
+        tieneTipo: p.rubro.partidaPatrimonial?.tipo != null,
+        exigeSaldoCero: p.rubro.partidaPatrimonial?.tipo?.exigeSaldoCero ?? false,
         categoriaOyAId: p.categoriaOyAId,
         categoriaOyABucketNOF: p.categoriaOyA?.bucketNOF ?? null,
       })),
     });
   }
+
+  return { empresasInput, fechaCargaAcumulado };
+}
+
+// Lee de la base (empresas vinculadas → última carga ACUMULADO de cada una
+// dentro del período del informe → Plan de Cuentas) y traduce esas filas a
+// los tipos planos que espera buildInformeReport — ningún cálculo vive acá.
+export async function computeInformeReport(informeId: string): Promise<InformeReport> {
+  const informe = await prisma.informe.findUniqueOrThrow({
+    where: { id: informeId },
+    include: { unidadNegocio: true },
+  });
+
+  // Congelado (Aprobado/Definitivo): se recalcula con el mismo motor pero a
+  // partir del snapshot guardado al aprobar, no contra el Plan de
+  // Cuentas/BSyS actuales — así reclasificar una cuenta después no cambia
+  // silenciosamente un informe ya cerrado.
+  if (informe.snapshot) {
+    const snapshot = informe.snapshot as unknown as InformeSnapshot;
+    const core = buildInformeReport(snapshot.esp.periodo, snapshot.esp.empresas);
+    return {
+      informeId: informe.id,
+      unidadNegocioId: informe.unidadNegocioId,
+      unidadNegocioNombre: informe.unidadNegocio.nombreUnidad,
+      estado: informe.estado,
+      fechaCargaAcumulado: snapshot.esp.fechaCargaAcumulado
+        ? new Date(snapshot.esp.fechaCargaAcumulado)
+        : null,
+      ...core,
+    };
+  }
+
+  const { empresasInput, fechaCargaAcumulado } = await buildEmpresaBalanceInputs(
+    informe.unidadNegocioId,
+    informe.periodoMes,
+    informe.periodoAnio
+  );
 
   const core = buildInformeReport(
     { periodoMes: informe.periodoMes, periodoAnio: informe.periodoAnio },
@@ -649,27 +685,89 @@ export async function computeInformeReport(informeId: string): Promise<InformeRe
 }
 
 export type DetalleRubroCuenta = {
+  // null cuando el detalle sale de un snapshot congelado — ahí no hay botón
+  // Editar, así que no hace falta el id real de PlanDeCuentas.
+  planDeCuentaId: string | null;
   empresaNombre: string;
   cuenta: string;
   saldoInicio: number;
   saldoFinal: number;
+  // Siempre igual al Rubro filtrado hoy (se muestra para habilitar el botón
+  // Editar, que puede reclasificar la cuenta a otro Rubro).
+  rubroId: number;
+  nomRubro: string;
 };
 
 export type DetalleRubro = {
   codRubro: number;
   nomRubro: string;
+  // El informe ya no se puede editar: no se muestra el botón Editar aunque
+  // el llamador se olvide de chequearlo.
+  congelado: boolean;
   cuentas: DetalleRubroCuenta[];
   totalSaldoInicio: number;
   totalSaldoFinal: number;
 };
 
+// Mismo cambio de signo por tipo que usa paraExposicionESP (no un valor
+// absoluto por cuenta) para que la suma de este detalle coincida siempre
+// con la fila resumen del ESP.
+function exponerSegunTipo(
+  tipoPartida: "ACTIVO" | "PASIVO" | "PATRIMONIO_NETO" | "RESULTADO" | null,
+  v: number
+): number {
+  return tipoPartida === "ACTIVO" ? v : -v;
+}
+
 // Repite la misma consolidación de computeInformeReport (empresas
 // vinculadas → última carga ACUMULADO de cada una), filtrada a un solo
 // Rubro, para el drill-down "ojo" del ESP — cada cuenta ya viene con el
-// mismo signo de exposición que su fila resumen, para que sumen igual.
+// mismo signo de exposición que su fila resumen, para que sumen igual. Si
+// el informe está congelado, lee del snapshot en vez del Plan de Cuentas
+// actual.
 export async function getDetalleRubro(informeId: string, codRubro: number): Promise<DetalleRubro> {
   const informe = await prisma.informe.findUniqueOrThrow({ where: { id: informeId } });
   const rubro = await prisma.rubro.findUniqueOrThrow({ where: { codRubro } });
+
+  if (informe.snapshot) {
+    const snapshot = informe.snapshot as unknown as InformeSnapshot;
+    let tipoPartida: "ACTIVO" | "PASIVO" | "PATRIMONIO_NETO" | "RESULTADO" | null = null;
+    const cuentas: DetalleRubroCuenta[] = [];
+
+    for (const empresa of snapshot.esp.empresas) {
+      const porCuenta = new Map(empresa.planDeCuentas.map((p) => [normalizeCuenta(p.cuenta), p]));
+      for (const b of empresa.balances) {
+        const plan = porCuenta.get(normalizeCuenta(b.cuenta));
+        if (!plan || plan.rubroId !== codRubro) continue;
+        if (!tipoPartida) tipoPartida = plan.tipoRol;
+
+        cuentas.push({
+          planDeCuentaId: null,
+          empresaNombre: empresa.nombreEmp,
+          cuenta: b.cuenta,
+          saldoInicio: exponerSegunTipo(
+            tipoPartida,
+            round2(new Prisma.Decimal(b.saldoIniDebe).minus(b.saldoIniHaber))
+          ),
+          saldoFinal: exponerSegunTipo(
+            tipoPartida,
+            round2(new Prisma.Decimal(b.saldoCierreDebe).minus(b.saldoCierreHaber))
+          ),
+          rubroId: plan.rubroId,
+          nomRubro: plan.nomRubro,
+        });
+      }
+    }
+
+    return {
+      codRubro,
+      nomRubro: rubro.nomRubro,
+      congelado: true,
+      cuentas,
+      totalSaldoInicio: sum(cuentas.map((c) => c.saldoInicio)),
+      totalSaldoFinal: sum(cuentas.map((c) => c.saldoFinal)),
+    };
+  }
 
   const empresas = await prisma.empresa.findMany({ where: { unidadNegocioId: informe.unidadNegocioId } });
 
@@ -691,7 +789,7 @@ export async function getDetalleRubro(informeId: string, codRubro: number): Prom
 
     const planDeCuentas = await prisma.planDeCuentas.findMany({
       where: { empresaId: empresa.codEmp, rubroId: codRubro },
-      include: { partidaPatrimonial: { include: { tipo: true } } },
+      include: { rubro: { include: { partidaPatrimonial: { include: { tipo: true } } } } },
     });
     if (planDeCuentas.length === 0) continue;
     const porCuenta = new Map(planDeCuentas.map((p) => [normalizeCuenta(p.cuenta), p]));
@@ -709,31 +807,30 @@ export async function getDetalleRubro(informeId: string, codRubro: number): Prom
     for (const b of balances) {
       const plan = porCuenta.get(normalizeCuenta(b.cuenta));
       if (!plan) continue;
-      if (!tipoPartida) tipoPartida = plan.partidaPatrimonial.tipo?.rol ?? null;
+      if (!tipoPartida) tipoPartida = plan.rubro.partidaPatrimonial?.tipo?.rol ?? null;
 
       cuentas.push({
+        planDeCuentaId: plan.id,
         empresaNombre: empresa.nombreEmp,
         cuenta: b.cuenta,
         saldoInicio: round2(new Prisma.Decimal(b.saldoIniDebe).minus(b.saldoIniHaber)),
         saldoFinal: round2(new Prisma.Decimal(b.saldoCierreDebe).minus(b.saldoCierreHaber)),
+        rubroId: plan.rubroId,
+        nomRubro: plan.rubro.nomRubro,
       });
     }
   }
 
-  // Mismo cambio de signo por tipo que usa paraExposicionESP (no un valor
-  // absoluto por cuenta) para que la suma de este detalle coincida siempre
-  // con la fila resumen del ESP.
-  const expuesto = (v: number) => (tipoPartida === "ACTIVO" ? v : -v);
-
   const cuentasExpuestas = cuentas.map((c) => ({
     ...c,
-    saldoInicio: expuesto(c.saldoInicio),
-    saldoFinal: expuesto(c.saldoFinal),
+    saldoInicio: exponerSegunTipo(tipoPartida, c.saldoInicio),
+    saldoFinal: exponerSegunTipo(tipoPartida, c.saldoFinal),
   }));
 
   return {
     codRubro,
     nomRubro: rubro.nomRubro,
+    congelado: false,
     cuentas: cuentasExpuestas,
     totalSaldoInicio: sum(cuentasExpuestas.map((c) => c.saldoInicio)),
     totalSaldoFinal: sum(cuentasExpuestas.map((c) => c.saldoFinal)),
