@@ -1,6 +1,7 @@
 import { auth } from "@/auth";
 import { listEmpresas, createEmpresa } from "@/lib/empresa-actions";
 import { listMonedas } from "@/lib/moneda-actions";
+import { permisosDeUnidad } from "@/lib/authz";
 import { CollapsibleAdd } from "@/components/CollapsibleAdd";
 import { EmpresaRow } from "./EmpresaRow";
 
@@ -10,6 +11,16 @@ export default async function EmpresasPage() {
   const [empresas, monedas] = await Promise.all([listEmpresas(), listMonedas()]);
   const session = await auth();
   const isAdmin = session?.user.role === "ADMIN";
+  // Una Empresa sin vincular todavía (unidadNegocioId null) solo la puede
+  // tocar un ADMIN — no hay unidad a la cual delegarle el permiso (ver
+  // requireAccesoConfiguracionEmpresa en empresa-actions.ts).
+  const puedeEditarEmpresa = await Promise.all(
+    empresas.map((e) =>
+      e.unidadNegocioId === null
+        ? Promise.resolve(isAdmin)
+        : permisosDeUnidad(e.unidadNegocioId).then((p) => p.puedeConfiguracion)
+    )
+  );
 
   return (
     <main className="flex w-full flex-col gap-8 p-8">
@@ -98,7 +109,7 @@ export default async function EmpresasPage() {
             </tr>
           </thead>
           <tbody>
-            {empresas.map((empresa) => (
+            {empresas.map((empresa, i) => (
               <EmpresaRow
                 key={empresa.codEmp}
                 codEmp={empresa.codEmp}
@@ -110,7 +121,7 @@ export default async function EmpresasPage() {
                 monedaSecundaria={empresa.monedaSecundaria}
                 actualiza={empresa.actualiza}
                 monedaActualiza={empresa.monedaActualiza}
-                isAdmin={isAdmin}
+                puedeEditar={puedeEditarEmpresa[i]}
               />
             ))}
           </tbody>

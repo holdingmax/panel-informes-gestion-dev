@@ -1,10 +1,10 @@
 import { notFound } from "next/navigation";
-import { auth } from "@/auth";
 import { getUnidadNegocio } from "@/lib/unidad-negocio-actions";
 import { listEmpresasDeUnidad } from "@/lib/empresa-actions";
 import { listCatalog } from "@/lib/catalog-actions";
 import { listRubrosConClasificacion } from "@/lib/rubro-actions";
 import { listPlanDeCuentasPorEmpresas } from "@/lib/plan-de-cuentas-actions";
+import { requireAccesoUnidad } from "@/lib/authz";
 import { CollapsibleAdd } from "@/components/CollapsibleAdd";
 import { PlanDeCuentasTable } from "./PlanDeCuentasTable";
 import { AgregarCuentaForm } from "./AgregarCuentaForm";
@@ -22,8 +22,16 @@ export default async function PlanDeCuentasUnidadPage({
   const unidad = await getUnidadNegocio(codUnidad);
   if (!unidad) notFound();
 
-  const session = await auth();
-  const isAdmin = session?.user.role === "ADMIN";
+  // Acceso al Plan de Cuentas de una Unidad es parte del "menú de
+  // configuración por unidad" (ver UserUnidadPermiso.puedeConfiguracion) —
+  // sin la fila de acceso ni siquiera se puede ver, no solo editar.
+  try {
+    await requireAccesoUnidad(codUnidad, "configuracion");
+  } catch {
+    notFound();
+  }
+  // Pasado el chequeo de arriba, quien llegue acá siempre tiene el permiso.
+  const puedeConfiguracion = true;
 
   const [empresas, rubros, subrubros, subrubros2, subrubros3, categorias] =
     await Promise.all([
@@ -48,21 +56,18 @@ export default async function PlanDeCuentasUnidadPage({
     subrubro2Id: p.subrubro2Id,
     subrubro3Id: p.subrubro3Id,
     categoriaOyAId: p.categoriaOyAId,
-    nombrePartida: p.rubro.partidaPatrimonial?.nomPartida ?? null,
-    nombreRubro: p.rubro.nomRubro,
+    nombrePartida: p.rubro?.partidaPatrimonial?.nomPartida ?? null,
+    nombreRubro: p.rubro?.nomRubro ?? null,
     nombreSubrubro: p.subrubro?.nomSubrubro ?? null,
     nombreSubrubro2: p.subrubro2?.nomSubrubro2 ?? null,
     nombreSubrubro3: p.subrubro3?.nomSubrubro3 ?? null,
     nombreCategoriaOyA: p.categoriaOyA?.nomOyA ?? null,
   }));
 
-  // Subrubro es exclusivo de Rubros de Partida Resultado (Ingresos/Egresos)
-  // — el formulario usa esResultado para mostrar Subrubro o Subrubro2/3.
-  const rubrosOpc = rubros.map((r) => ({
-    id: r.codRubro,
-    nombre: r.nomRubro,
-    esResultado: r.partidaPatrimonial?.tipo?.rol === "RESULTADO",
-  }));
+  // Rubro (ESP) y Subrubro (ER) son independientes: una cuenta de Resultado
+  // no lleva Rubro, una de Balance no necesita Subrubro — ninguno de los dos
+  // es obligatorio ni condiciona al otro.
+  const rubrosOpc = rubros.map((r) => ({ id: r.codRubro, nombre: r.nomRubro }));
   const subrubrosOpc = (subrubros as { codSubrubro: number; nomSubrubro: string }[]).map((s) => ({
     id: s.codSubrubro,
     nombre: s.nomSubrubro,
@@ -89,7 +94,7 @@ export default async function PlanDeCuentasUnidadPage({
         </p>
       ) : (
         <>
-          {isAdmin && (
+          {puedeConfiguracion && (
           <CollapsibleAdd label="Agregar cuenta">
             <AgregarCuentaForm
               empresas={empresas}
@@ -110,7 +115,7 @@ export default async function PlanDeCuentasUnidadPage({
             subrubros2={subrubros2Opc}
             subrubros3={subrubros3Opc}
             categorias={categoriasOpc}
-            isAdmin={isAdmin}
+            puedeConfiguracion={puedeConfiguracion}
           />
         </>
       )}

@@ -18,14 +18,14 @@ export function UnidadNegocioRow({
   imagenMime,
   empresas,
   vinculadasIds,
-  isAdmin,
+  puedeConfiguracion,
 }: {
   codUnidad: number;
   nombreUnidad: string;
   imagenMime: string | null;
   empresas: EmpresaOpcion[];
   vinculadasIds: number[];
-  isAdmin: boolean;
+  puedeConfiguracion: boolean;
 }) {
   const [editing, setEditing] = useState(false);
   const [nombreValue, setNombreValue] = useState(nombreUnidad);
@@ -60,7 +60,7 @@ export function UnidadNegocioRow({
         ) : (
           "—"
         )}
-        {editing && isAdmin && (
+        {editing && puedeConfiguracion && (
           <input
             ref={fileInputRef}
             type="file"
@@ -71,7 +71,7 @@ export function UnidadNegocioRow({
         )}
       </td>
       <td className="py-2 pr-4">
-        {editing && isAdmin ? (
+        {editing && puedeConfiguracion ? (
           <input
             value={nombreValue}
             onChange={(e) => setNombreValue(e.target.value)}
@@ -84,7 +84,7 @@ export function UnidadNegocioRow({
         )}
       </td>
       <td className="py-2 text-sm">
-        {isAdmin ? (
+        {puedeConfiguracion ? (
           <EmpresasVinculadasForm codUnidad={codUnidad} empresas={empresas} vinculadasIds={vinculadasIds} />
         ) : (
           empresas
@@ -94,7 +94,7 @@ export function UnidadNegocioRow({
         )}
       </td>
       <td className="py-2 pr-4">
-        {isAdmin && (
+        {puedeConfiguracion && (
           <div className="flex gap-2">
             {editing ? (
               <>

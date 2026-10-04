@@ -1,12 +1,20 @@
 import { auth } from "@/auth";
 import { listUnidadesNegocio } from "@/lib/unidad-negocio-actions";
+import { unidadesAccesibles } from "@/lib/authz";
 import { UnidadNegocioGrid } from "../../../UnidadNegocioGrid";
 
 export const dynamic = "force-dynamic";
 
 export default async function PreparacionInformesPage() {
   const session = await auth();
-  const unidades = await listUnidadesNegocio();
+  const [todasLasUnidades, accesibles] = await Promise.all([
+    listUnidadesNegocio(),
+    unidadesAccesibles(),
+  ]);
+  const unidades =
+    accesibles === "todas"
+      ? todasLasUnidades
+      : todasLasUnidades.filter((u) => accesibles.includes(u.codUnidad));
 
   return (
     <main className="flex w-full flex-col gap-6 p-8">

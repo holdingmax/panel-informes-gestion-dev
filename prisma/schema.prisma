@@ -34,6 +34,28 @@ model User {
   loginLockedUntil    DateTime?
   createdAt           DateTime  @default(now())
   updatedAt           DateTime  @updatedAt
+
+  permisosUnidad UserUnidadPermiso[]
+}
+
+// Acceso de un usuario (no-ADMIN, que ve/edita todo igual que hoy) a una
+// Unidad de Negocio puntual — unidadNegocioId null = aplica a TODAS las
+// unidades (incluidas las que se creen después), para no tener que mantener
+// una fila por unidad en el caso "acceso a todas". La sola existencia de la
+// fila ya da acceso de lectura (ver la unidad en los paneles); los booleanos
+// dan las capacidades extra dentro de esa unidad.
+model UserUnidadPermiso {
+  id                 String         @id @default(cuid())
+  userId             String
+  user               User           @relation(fields: [userId], references: [id])
+  unidadNegocioId    Int?
+  unidadNegocio      UnidadNegocio? @relation(fields: [unidadNegocioId], references: [codUnidad])
+  puedeConfiguracion Boolean        @default(false)
+  puedeRevisar       Boolean        @default(false)
+  puedeAprobar       Boolean        @default(false)
+  puedeAdjuntar      Boolean        @default(false)
+
+  @@unique([userId, unidadNegocioId])
 }
 
 // El "grupo" que se ve en la pantalla principal y con el que se confecciona
@@ -51,6 +73,7 @@ model UnidadNegocio {
   empresas             Empresa[]
   informes             Informe[]
   resultadosHistoricos ResultadosHistoricos[]
+  permisos             UserUnidadPermiso[]
 
   seriesTablaId Int?
   seriesTabla   SeriesEIndicesTabla? @relation(fields: [seriesTablaId], references: [codTabla])
@@ -83,8 +106,9 @@ model Empresa {
   monedaActualizaId Int?
   monedaActualiza   Moneda? @relation("EmpresaMonedaActualiza", fields: [monedaActualizaId], references: [codMoneda])
 
-  balances      BalanceSumasYSaldos[]
-  planDeCuentas PlanDeCuentas[]
+  balances          BalanceSumasYSaldos[]
+  planDeCuentas     PlanDeCuentas[]
+  reclasificaciones Reclasificacion[]
 }
 
 // Catálogo de monedas usado por Empresa para elegir su moneda primaria,
@@ -104,7 +128,6 @@ enum EstadoInforme {
   PROCESO
   EN_REVISION
   APROBADO
-  DEFINITIVO
 }
 
 model Informe {
@@ -113,6 +136,11 @@ model Informe {
   unidadNegocioId Int
   periodoMes      Int
   periodoAnio     Int
+  // Un informe de un período ya Aprobado es inmodificable — volver a
+  // confeccionar ese mismo período crea una fila nueva con version+1 en vez
+  // de pisarlo (ver bsys-import.ts). 1 = original, nunca se muestra en la
+  // UI; 2+ se muestra como "versión X".
+  version         Int           @default(1)
   estado          EstadoInforme @default(PROCESO)
   // Se completa al pasar a APROBADO (ver avanzarEstadoInforme) y nunca se
   // vuelve a tocar — null significa que el informe todavía se recalcula en
@@ -121,7 +149,10 @@ model Informe {
   createdAt       DateTime      @default(now())
   updatedAt       DateTime      @updatedAt
 
-  @@unique([unidadNegocioId, periodoMes, periodoAnio])
+  reclasificaciones Reclasificacion[]
+  adjuntos          InformeAdjunto[]
+
+  @@unique([unidadNegocioId, periodoMes, periodoAnio, version])
 }
 
 enum TipoBSyS {
@@ -306,14 +337,19 @@ model ResultadosHistoricos {
 }
 
 model PlanDeCuentas {
-  id             String        @id @default(cuid())
-  empresa        Empresa       @relation(fields: [empresaId], references: [codEmp])
-  empresaId      Int
-  cuenta         String        @db.VarChar(90)
-  rubro          Rubro         @relation(fields: [rubroId], references: [codRubro])
-  rubroId        Int
-  // Exclusivo de cuentas de Rubros de Resultado — ver Subrubro. Opcional:
-  // una cuenta de otro Rubro no lo carga.
+  id        String   @id @default(cuid())
+  empresa   Empresa  @relation(fields: [empresaId], references: [codEmp])
+  empresaId Int
+  cuenta    String   @db.VarChar(90)
+  // Opcional — decide si la cuenta entra al ESP (y con qué Partida) y en
+  // qué posición. Una cuenta de Resultado (Ingresos/Egresos) no lleva
+  // Rubro: el ESP se arma exclusivamente con las cuentas que sí lo tienen.
+  rubro     Rubro?   @relation(fields: [rubroId], references: [codRubro])
+  rubroId   Int?
+  // Opcional — decide si la cuenta entra al ER (cuadro Nominal) y a qué
+  // campo aporta. Independiente de Rubro: una cuenta puede tener uno,
+  // el otro, ambos o ninguno todavía (ver los avisos "HAY CUENTAS SIN
+  // VALORES EN RUBRO/SUBRUBRO" en computeInformeReport/computeResultadoCuadro).
   subrubro       Subrubro?     @relation(fields: [subrubroId], references: [codSubrubro])
   subrubroId     Int?
   subrubro2      Subrubro2?    @relation(fields: [subrubro2Id], references: [codSubrubro2])
@@ -323,5 +359,65 @@ model PlanDeCuentas {
   categoriaOyA   CategoriaOyA? @relation(fields: [categoriaOyAId], references: [codOyA])
   categoriaOyAId Int?
 
+  reclasificacionLineas ReclasificacionLinea[]
+
   @@unique([empresaId, cuenta])
+}
+
+// Ajuste extracontable, momentáneo, solo para la exposición de ESTE informe
+// — nunca toca BalanceSumasYSaldos ni el Plan de Cuentas. Mueve saldo entre
+// cuentas de la misma Empresa; sus líneas deben sumar cero (debe = haber en
+// total) para poder guardarse. Se aplica tanto al ESP (BSyS Acumulado) como
+// al ER (BSyS Mes) — ver buildEmpresaBalanceInputs / computeResultadoNominalMesDeEmpresa.
+model Reclasificacion {
+  id        String   @id @default(cuid())
+  informe   Informe  @relation(fields: [informeId], references: [id], onDelete: Cascade)
+  informeId String
+  empresa   Empresa  @relation(fields: [empresaId], references: [codEmp])
+  empresaId Int
+  detalle   String   @db.VarChar(500)
+  // Null si el usuario que la cargó se borró después — no se pierde la
+  // reclasificación por eso.
+  createdByUserId String?
+  createdAt       DateTime @default(now())
+  updatedAt       DateTime @updatedAt
+
+  lineas   ReclasificacionLinea[]
+  adjuntos ReclasificacionAdjunto[]
+}
+
+model ReclasificacionLinea {
+  id                String          @id @default(cuid())
+  reclasificacion   Reclasificacion @relation(fields: [reclasificacionId], references: [id], onDelete: Cascade)
+  reclasificacionId String
+  planDeCuenta      PlanDeCuentas   @relation(fields: [planDeCuentaId], references: [id])
+  planDeCuentaId    String
+  debe              Decimal         @db.Decimal(18, 2)
+  haber             Decimal         @db.Decimal(18, 2)
+}
+
+// Mismo patrón que UnidadNegocio.imagenUnidad (Bytes en Postgres) — tope de
+// 10MB por archivo validado en el server action, no acá.
+model ReclasificacionAdjunto {
+  id                String          @id @default(cuid())
+  reclasificacion   Reclasificacion @relation(fields: [reclasificacionId], references: [id], onDelete: Cascade)
+  reclasificacionId String
+  nombreArchivo     String          @db.VarChar(255)
+  mimeType          String
+  contenido         Bytes
+  createdAt         DateTime        @default(now())
+}
+
+// Documentación general adjuntada a un Informe desde el panel Consulta
+// (gateado por UserUnidadPermiso.puedeAdjuntar) — distinto de
+// ReclasificacionAdjunto, que respalda un ajuste puntual.
+model InformeAdjunto {
+  id              String   @id @default(cuid())
+  informe         Informe  @relation(fields: [informeId], references: [id], onDelete: Cascade)
+  informeId       String
+  nombreArchivo   String   @db.VarChar(255)
+  mimeType        String
+  contenido       Bytes
+  createdByUserId String?
+  createdAt       DateTime @default(now())
 }

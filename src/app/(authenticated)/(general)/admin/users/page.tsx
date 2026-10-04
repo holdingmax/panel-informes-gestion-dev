@@ -1,14 +1,22 @@
 import { listUsers } from "@/lib/auth-actions";
+import { listUnidadesNegocio } from "@/lib/unidad-negocio-actions";
+import { listPermisosDeUsuario } from "@/lib/permiso-unidad-actions";
 import { createUserAction } from "./actions";
 import { ToggleActiveButton } from "./ToggleActiveButton";
 import { UserRowActions } from "./UserRowActions";
+import { PermisosUnidadPanel } from "./PermisosUnidadPanel";
 import { CollapsibleAdd } from "@/components/CollapsibleAdd";
 
 export default async function AdminUsersPage() {
-  const users = await listUsers();
+  const [users, unidades] = await Promise.all([listUsers(), listUnidadesNegocio()]);
+  const permisosPorUsuario = Object.fromEntries(
+    await Promise.all(
+      users.map(async (u) => [u.id, await listPermisosDeUsuario(u.id)] as const)
+    )
+  );
 
   return (
-    <main className="flex w-full max-w-3xl flex-col gap-8 p-8">
+    <main className="flex w-full max-w-4xl flex-col gap-8 p-8">
       <h1 className="text-2xl font-semibold">Usuarios</h1>
 
       <table className="w-full text-left text-lg">
@@ -30,6 +38,13 @@ export default async function AdminUsersPage() {
                 <div className="flex flex-col items-start gap-2">
                   <ToggleActiveButton id={u.id} active={u.active} />
                   <UserRowActions id={u.id} />
+                  {u.role === "USER" && (
+                    <PermisosUnidadPanel
+                      userId={u.id}
+                      unidades={unidades}
+                      permisos={permisosPorUsuario[u.id]}
+                    />
+                  )}
                 </div>
               </td>
             </tr>

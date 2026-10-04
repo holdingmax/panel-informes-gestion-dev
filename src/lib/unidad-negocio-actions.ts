@@ -3,7 +3,7 @@
 import { revalidatePath } from "next/cache";
 import { prisma } from "@/lib/prisma";
 import type { DeleteCheckResult } from "@/components/ConfirmDeleteButton";
-import { requireUser, requireAdmin } from "@/lib/authz";
+import { requireUser, requireAdmin, requireAccesoUnidad } from "@/lib/authz";
 
 const ALLOWED_MIME = [
   "image/jpeg",
@@ -67,7 +67,7 @@ export async function createUnidadNegocio(formData: FormData) {
 }
 
 export async function updateUnidadNegocioNombre(codUnidad: number, nombreUnidad: string) {
-  await requireAdmin();
+  await requireAccesoUnidad(codUnidad, "configuracion");
   const value = nombreUnidad.trim();
   if (!value) throw new Error("El nombre es obligatorio");
   if (value.length > 35) throw new Error("El nombre no puede superar 35 caracteres");
@@ -78,8 +78,8 @@ export async function updateUnidadNegocioNombre(codUnidad: number, nombreUnidad:
 }
 
 export async function updateUnidadNegocioLogo(formData: FormData) {
-  await requireAdmin();
   const codUnidad = Number(formData.get("codUnidad"));
+  await requireAccesoUnidad(codUnidad, "configuracion");
   const file = formData.get("imagen");
   if (!(file instanceof File) || file.size === 0) {
     throw new Error("Seleccioná una imagen");
@@ -119,7 +119,7 @@ export async function checkDeleteUnidadNegocio(codUnidad: number): Promise<Delet
 }
 
 export async function deleteUnidadNegocio(codUnidad: number) {
-  await requireAdmin();
+  await requireAccesoUnidad(codUnidad, "configuracion");
   const check = await checkDeleteUnidadNegocio(codUnidad);
   if (check.blocked) throw new Error(check.reason);
 
@@ -133,8 +133,8 @@ export async function deleteUnidadNegocio(codUnidad: number) {
 // solo puede estar vinculada a una Unidad de Negocio a la vez, así que
 // elegirla acá se la saca de donde estuviera antes.
 export async function actualizarEmpresasVinculadas(formData: FormData) {
-  await requireAdmin();
   const codUnidad = Number(formData.get("codUnidad"));
+  await requireAccesoUnidad(codUnidad, "configuracion");
   const empresaIds = formData.getAll("empresaIds").map(Number).filter(Number.isFinite);
 
   await prisma.$transaction([

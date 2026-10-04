@@ -13,10 +13,6 @@ function round2(d: Prisma.Decimal): number {
   return d.toDecimalPlaces(2).toNumber();
 }
 
-function sumDecimal(values: Prisma.Decimal[]): Prisma.Decimal {
-  return values.reduce((a, b) => a.plus(b), new Prisma.Decimal(0));
-}
-
 const MESES_ABREV = [
   "ene",
   "feb",
@@ -73,6 +69,9 @@ export type InformeReport = {
   periodoLabel: string;
   periodoAnteriorLabel: string;
   estado: string;
+  // 1 = original, nunca se muestra en la UI; 2+ se muestra como "versión X"
+  // (ver bsys-import.ts).
+  version: number;
   fechaCargaAcumulado: Date | null;
   balance: {
     activo: RubroLine[];
@@ -111,6 +110,19 @@ export type InformeReport = {
     control: number;
   };
   advertencias: string[];
+  // Cuentas con saldo este período que no tienen ni Rubro ni Subrubro —
+  // candidatas a terminar de clasificarse (ver aviso "HAY CUENTAS SIN
+  // VALORES EN RUBRO" en la pantalla del informe). Una cuenta con Subrubro
+  // ya tiene un destino claro en el ER y no entra acá, aunque no tenga Rubro.
+  cuentasSinRubro: CuentaSinClasificar[];
+};
+
+export type CuentaSinClasificar = {
+  planDeCuentaId: string | null;
+  empresaNombre: string;
+  cuenta: string;
+  saldoInicio: number;
+  saldoFinal: number;
 };
 
 type RubroAgg = {
@@ -220,10 +232,82 @@ export type CuentaSaldoInput = {
   saldoCierreHaber: number;
 };
 
+// Overlay de Reclasificación (ver prisma.Reclasificacion): un ajuste
+// extracontable, momentáneo, solo para la exposición de ESTE informe —
+// mueve saldo entre cuentas de una misma Empresa sin tocar nunca
+// BalanceSumasYSaldos. Se aplica tanto al ESP (BSyS Acumulado, acá) como al
+// ER (BSyS Mes, resultado-nominal.ts) porque ambos comparten exactamente la
+// misma forma de balance — solo el "saldo final" (saldoCierreDebe/Haber) se
+// toca, nunca el saldo de inicio.
+export async function aplicarReclasificaciones(
+  informeId: string,
+  empresaId: number,
+  balances: CuentaSaldoInput[]
+): Promise<CuentaSaldoInput[]> {
+  const lineas = await prisma.reclasificacionLinea.findMany({
+    where: { reclasificacion: { informeId, empresaId } },
+    include: { planDeCuenta: { select: { cuenta: true } } },
+  });
+  if (lineas.length === 0) return balances;
+
+  const deltaPorCuenta = new Map<string, Prisma.Decimal>();
+  for (const l of lineas) {
+    const key = normalizeCuenta(l.planDeCuenta.cuenta);
+    const actual = deltaPorCuenta.get(key) ?? new Prisma.Decimal(0);
+    deltaPorCuenta.set(key, actual.plus(l.debe).minus(l.haber));
+  }
+
+  const resultado = balances.map((b) => {
+    const delta = deltaPorCuenta.get(normalizeCuenta(b.cuenta));
+    if (!delta || delta.isZero()) return b;
+    deltaPorCuenta.delete(normalizeCuenta(b.cuenta));
+    return aplicarDeltaASaldoFinal(b, delta);
+  });
+
+  // Cuentas que la reclasificación tocó pero no tenían saldo este período
+  // (sin fila en balances todavía) — se agregan sintéticas, solo con el
+  // delta.
+  for (const [cuentaNormalizada, delta] of deltaPorCuenta) {
+    if (delta.isZero()) continue;
+    const original = lineas.find((l) => normalizeCuenta(l.planDeCuenta.cuenta) === cuentaNormalizada);
+    if (!original) continue;
+    resultado.push(
+      aplicarDeltaASaldoFinal(
+        {
+          cuenta: original.planDeCuenta.cuenta,
+          saldoIniDebe: 0,
+          saldoIniHaber: 0,
+          saldoCierreDebe: 0,
+          saldoCierreHaber: 0,
+        },
+        delta
+      )
+    );
+  }
+
+  return resultado;
+}
+
+function aplicarDeltaASaldoFinal(entry: CuentaSaldoInput, delta: Prisma.Decimal): CuentaSaldoInput {
+  if (delta.isPositive()) {
+    return {
+      ...entry,
+      saldoCierreDebe: round2(new Prisma.Decimal(entry.saldoCierreDebe).plus(delta)),
+    };
+  }
+  return {
+    ...entry,
+    saldoCierreHaber: round2(new Prisma.Decimal(entry.saldoCierreHaber).plus(delta.abs())),
+  };
+}
+
 export type PlanCuentaInput = {
+  id: string;
   cuenta: string;
-  rubroId: number;
-  nomRubro: string;
+  // Opcional: una cuenta de Resultado (Ingresos/Egresos) no lleva Rubro — el
+  // ESP se arma solo con las cuentas que sí lo tienen (ver buildInformeReport).
+  rubroId: number | null;
+  nomRubro: string | null;
   rubroBucketNOF: "OPERATIVO" | "NO_OPERATIVO" | "FINANCIAMIENTO" | null;
   rubroOrden: number | null;
   tipoRol: "ACTIVO" | "PASIVO" | "PATRIMONIO_NETO" | "RESULTADO" | null;
@@ -231,6 +315,10 @@ export type PlanCuentaInput = {
   exigeSaldoCero: boolean;
   categoriaOyAId: number | null;
   categoriaOyABucketNOF: "OPERATIVO" | "NO_OPERATIVO" | "FINANCIAMIENTO" | null;
+  // Independiente de rubroId — decide si la cuenta aporta al "Resultado del
+  // período" de este ESP (ver el loop principal) y al cuadro Nominal del ER
+  // (resultado-nominal.ts). Null = esta cuenta no es de Resultado.
+  subrubroId: number | null;
 };
 
 export type EmpresaBalanceInput = {
@@ -245,7 +333,7 @@ export type EmpresaBalanceInput = {
 
 export type InformeReportCore = Omit<
   InformeReport,
-  "informeId" | "unidadNegocioId" | "unidadNegocioNombre" | "estado" | "fechaCargaAcumulado"
+  "informeId" | "unidadNegocioId" | "unidadNegocioNombre" | "estado" | "version" | "fechaCargaAcumulado"
 >;
 
 // Lo que se congela al aprobar un informe (avanzarEstadoInforme) — una sola
@@ -264,6 +352,7 @@ export type InformeSnapshot = {
   erActual: {
     valores: ResultadoNominal;
     cuentas: DetalleSubrubroCuenta[];
+    cuentasSinSubrubro: CuentaSinClasificar[];
   };
 };
 
@@ -289,6 +378,12 @@ export function buildInformeReport(
   // pueden caer en buckets de NOF distintos, así que se agrupa por la
   // combinación Rubro + Categoría OyA.
   const nofMap = new Map<string, NofAgg>();
+  // "Resultado del período" ya no sale de Rubros de Partida Resultado (una
+  // cuenta de Resultado no tiene Rubro) — se arma sumando directamente las
+  // cuentas que tienen Subrubro, sea cual sea su Rubro (o la ausencia de).
+  let resultadoDelPeriodoRawDec = new Prisma.Decimal(0);
+  let resultadoDelPeriodoAnteriorRawDec = new Prisma.Decimal(0);
+  const cuentasSinRubro: CuentaSinClasificar[] = [];
 
   for (const empresa of empresas) {
     if (!empresa.tieneAcumulado) {
@@ -315,11 +410,29 @@ export function buildInformeReport(
       const debeHaber = new Prisma.Decimal(b.saldoIniDebe).minus(b.saldoIniHaber);
       const debeHaberFinal = new Prisma.Decimal(b.saldoCierreDebe).minus(b.saldoCierreHaber);
 
+      if (plan.subrubroId != null) {
+        resultadoDelPeriodoRawDec = resultadoDelPeriodoRawDec.plus(debeHaberFinal);
+        resultadoDelPeriodoAnteriorRawDec = resultadoDelPeriodoAnteriorRawDec.plus(debeHaber);
+      }
+
+      if (plan.rubroId == null) {
+        if (plan.subrubroId == null) {
+          cuentasSinRubro.push({
+            planDeCuentaId: plan.id,
+            empresaNombre: empresa.nombreEmp,
+            cuenta: b.cuenta,
+            saldoInicio: round2(debeHaber),
+            saldoFinal: round2(debeHaberFinal),
+          });
+        }
+        continue;
+      }
+
       let agg = rubroMap.get(plan.rubroId);
       if (!agg) {
         agg = {
           codRubro: plan.rubroId,
-          nomRubro: plan.nomRubro,
+          nomRubro: plan.nomRubro!,
           bucketNOF: plan.rubroBucketNOF,
           orden: plan.rubroOrden,
           tipoPartida: plan.tipoRol,
@@ -343,7 +456,7 @@ export function buildInformeReport(
         if (!nofAgg) {
           nofAgg = {
             codRubro: plan.rubroId,
-            nomRubro: plan.nomRubro,
+            nomRubro: plan.nomRubro!,
             bucketNOF,
             saldoInicio: new Prisma.Decimal(0),
             saldoFinal: new Prisma.Decimal(0),
@@ -399,16 +512,13 @@ export function buildInformeReport(
   const patrimonioNetoRubros = rubros
     .filter((r) => r.tipoPartida === "PATRIMONIO_NETO")
     .sort(porOrdenDeExposicion);
-  const resultadoRubros = rubros.filter((r) => r.tipoPartida === "RESULTADO");
   const balanceRubros = [...activoRubros, ...pasivoRubros, ...patrimonioNetoRubros];
 
-  // Crudo (Debe - Haber), sin convertir a exposición: se usa tal cual para
-  // armar la línea "Resultado del período" del Estado Patrimonial (hoja 2),
-  // que se expone junto con el resto de Patrimonio Neto vía
-  // paraExposicionESP más abajo.
-  const resultadoDelPeriodoRawDec = sumDecimal(resultadoRubros.map((r) => r.saldoFinal));
-  const resultadoDelPeriodoAnteriorRawDec = sumDecimal(resultadoRubros.map((r) => r.saldoInicio));
-
+  // resultadoDelPeriodoRawDec/resultadoDelPeriodoAnteriorRawDec ya se
+  // acumularon arriba, por Subrubro — crudos (Debe - Haber), sin convertir a
+  // exposición: se usan tal cual para armar la línea "Resultado del período"
+  // del Estado Patrimonial (hoja 2), que se expone junto con el resto de
+  // Patrimonio Neto vía paraExposicionESP más abajo.
   const rdoPeriodoLine: RubroLine = {
     codRubro: -1,
     nombre: "Resultado del período",
@@ -542,6 +652,7 @@ export function buildInformeReport(
       control: controlNOF,
     },
     advertencias,
+    cuentasSinRubro,
   };
 }
 
@@ -551,6 +662,7 @@ export function buildInformeReport(
 // leer un informe en vivo (computeInformeReport) como para armar el
 // snapshot al aprobarlo (avanzarEstadoInforme, en informe-actions.ts).
 export async function buildEmpresaBalanceInputs(
+  informeId: string,
   unidadNegocioId: number,
   periodoMes: number,
   periodoAnio: number
@@ -607,27 +719,35 @@ export async function buildEmpresaBalanceInputs(
       },
     });
 
-    empresasInput.push({
-      nombreEmp: empresa.nombreEmp,
-      tieneAcumulado: true,
-      balances: balances.map((b) => ({
+    const balancesConReclasificacion = await aplicarReclasificaciones(
+      informeId,
+      empresa.codEmp,
+      balances.map((b) => ({
         cuenta: b.cuenta,
         saldoIniDebe: Number(b.saldoIniDebe),
         saldoIniHaber: Number(b.saldoIniHaber),
         saldoCierreDebe: Number(b.saldoCierreDebe),
         saldoCierreHaber: Number(b.saldoCierreHaber),
-      })),
+      }))
+    );
+
+    empresasInput.push({
+      nombreEmp: empresa.nombreEmp,
+      tieneAcumulado: true,
+      balances: balancesConReclasificacion,
       planDeCuentas: planDeCuentas.map((p) => ({
+        id: p.id,
         cuenta: p.cuenta,
         rubroId: p.rubroId,
-        nomRubro: p.rubro.nomRubro,
-        rubroBucketNOF: p.rubro.bucketNOF,
-        rubroOrden: p.rubro.orden,
-        tipoRol: p.rubro.partidaPatrimonial?.tipo?.rol ?? null,
-        tieneTipo: p.rubro.partidaPatrimonial?.tipo != null,
-        exigeSaldoCero: p.rubro.partidaPatrimonial?.tipo?.exigeSaldoCero ?? false,
+        nomRubro: p.rubro?.nomRubro ?? null,
+        rubroBucketNOF: p.rubro?.bucketNOF ?? null,
+        rubroOrden: p.rubro?.orden ?? null,
+        tipoRol: p.rubro?.partidaPatrimonial?.tipo?.rol ?? null,
+        tieneTipo: p.rubro?.partidaPatrimonial?.tipo != null,
+        exigeSaldoCero: p.rubro?.partidaPatrimonial?.tipo?.exigeSaldoCero ?? false,
         categoriaOyAId: p.categoriaOyAId,
         categoriaOyABucketNOF: p.categoriaOyA?.bucketNOF ?? null,
+        subrubroId: p.subrubroId,
       })),
     });
   }
@@ -656,6 +776,7 @@ export async function computeInformeReport(informeId: string): Promise<InformeRe
       unidadNegocioId: informe.unidadNegocioId,
       unidadNegocioNombre: informe.unidadNegocio.nombreUnidad,
       estado: informe.estado,
+      version: informe.version,
       fechaCargaAcumulado: snapshot.esp.fechaCargaAcumulado
         ? new Date(snapshot.esp.fechaCargaAcumulado)
         : null,
@@ -664,6 +785,7 @@ export async function computeInformeReport(informeId: string): Promise<InformeRe
   }
 
   const { empresasInput, fechaCargaAcumulado } = await buildEmpresaBalanceInputs(
+    informe.id,
     informe.unidadNegocioId,
     informe.periodoMes,
     informe.periodoAnio
@@ -679,6 +801,7 @@ export async function computeInformeReport(informeId: string): Promise<InformeRe
     unidadNegocioId: informe.unidadNegocioId,
     unidadNegocioNombre: informe.unidadNegocio.nombreUnidad,
     estado: informe.estado,
+    version: informe.version,
     fechaCargaAcumulado,
     ...core,
   };
@@ -753,8 +876,8 @@ export async function getDetalleRubro(informeId: string, codRubro: number): Prom
             tipoPartida,
             round2(new Prisma.Decimal(b.saldoCierreDebe).minus(b.saldoCierreHaber))
           ),
-          rubroId: plan.rubroId,
-          nomRubro: plan.nomRubro,
+          rubroId: plan.rubroId!,
+          nomRubro: plan.nomRubro!,
         });
       }
     }
@@ -807,7 +930,7 @@ export async function getDetalleRubro(informeId: string, codRubro: number): Prom
     for (const b of balances) {
       const plan = porCuenta.get(normalizeCuenta(b.cuenta));
       if (!plan) continue;
-      if (!tipoPartida) tipoPartida = plan.rubro.partidaPatrimonial?.tipo?.rol ?? null;
+      if (!tipoPartida) tipoPartida = plan.rubro!.partidaPatrimonial?.tipo?.rol ?? null;
 
       cuentas.push({
         planDeCuentaId: plan.id,
@@ -815,8 +938,8 @@ export async function getDetalleRubro(informeId: string, codRubro: number): Prom
         cuenta: b.cuenta,
         saldoInicio: round2(new Prisma.Decimal(b.saldoIniDebe).minus(b.saldoIniHaber)),
         saldoFinal: round2(new Prisma.Decimal(b.saldoCierreDebe).minus(b.saldoCierreHaber)),
-        rubroId: plan.rubroId,
-        nomRubro: plan.rubro.nomRubro,
+        rubroId: plan.rubroId!,
+        nomRubro: plan.rubro!.nomRubro,
       });
     }
   }
@@ -834,5 +957,28 @@ export async function getDetalleRubro(informeId: string, codRubro: number): Prom
     cuentas: cuentasExpuestas,
     totalSaldoInicio: sum(cuentasExpuestas.map((c) => c.saldoInicio)),
     totalSaldoFinal: sum(cuentasExpuestas.map((c) => c.saldoFinal)),
+  };
+}
+
+export type CuentasSinRubro = {
+  congelado: boolean;
+  cuentas: CuentaSinClasificar[];
+  totalSaldoInicio: number;
+  totalSaldoFinal: number;
+};
+
+// Para el aviso "HAY CUENTAS SIN VALORES EN RUBRO" del ESP — mismo criterio
+// de congelamiento que el resto (computeInformeReport ya resuelve snapshot
+// vs. en vivo, acá solo se reusa su resultado).
+export async function getCuentasSinRubro(informeId: string): Promise<CuentasSinRubro> {
+  const [informe, report] = await Promise.all([
+    prisma.informe.findUniqueOrThrow({ where: { id: informeId }, select: { snapshot: true } }),
+    computeInformeReport(informeId),
+  ]);
+  return {
+    congelado: informe.snapshot !== null,
+    cuentas: report.cuentasSinRubro,
+    totalSaldoInicio: sum(report.cuentasSinRubro.map((c) => c.saldoInicio)),
+    totalSaldoFinal: sum(report.cuentasSinRubro.map((c) => c.saldoFinal)),
   };
 }

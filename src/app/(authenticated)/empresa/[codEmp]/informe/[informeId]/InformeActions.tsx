@@ -6,27 +6,32 @@ import { avanzarEstadoInforme } from "@/lib/informe-actions";
 const SIGUIENTE_LABEL: Record<string, string> = {
   PROCESO: "Enviar a revisión",
   EN_REVISION: "Aprobar",
-  APROBADO: "Marcar como definitivo",
 };
 
 export function InformeActions({
   informeId,
   estado,
-  isAdmin,
+  puedeRevisar,
+  puedeAprobar,
+  soloLectura = false,
 }: {
   informeId: string;
   estado: string;
-  isAdmin: boolean;
+  puedeRevisar: boolean;
+  puedeAprobar: boolean;
+  soloLectura?: boolean;
 }) {
   const [pending, startTransition] = useTransition();
   const label = SIGUIENTE_LABEL[estado];
 
-  // PROCESO -> EN_REVISION lo puede hacer cualquier usuario autenticado;
-  // EN_REVISION -> APROBADO y APROBADO -> DEFINITIVO requieren ADMIN
-  // (ver avanzarEstadoInforme en informe-actions.ts).
-  const puedeAvanzar = estado === "PROCESO" || isAdmin;
+  // PROCESO -> EN_REVISION exige el permiso "revisar" en esta unidad;
+  // EN_REVISION -> APROBADO exige "aprobar" (ver avanzarEstadoInforme en
+  // informe-actions.ts, que aplica la misma regla del lado del servidor).
+  // Aprobado es el estado final, no hay paso siguiente.
+  const puedeAvanzar =
+    !soloLectura && ((estado === "PROCESO" && puedeRevisar) || (estado === "EN_REVISION" && puedeAprobar));
 
-  const puedeDescargarPdf = estado === "APROBADO" || estado === "DEFINITIVO";
+  const puedeDescargarPdf = estado === "APROBADO";
 
   return (
     <div className="flex items-center gap-4">

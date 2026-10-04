@@ -1,7 +1,7 @@
 import { notFound } from "next/navigation";
-import { auth } from "@/auth";
 import { getDetalleCampoResultado, CAMPO_LABEL, type ResultadoNominal } from "@/lib/resultado-nominal";
 import { listCatalog } from "@/lib/catalog-actions";
+import { permisosDeInforme } from "@/lib/authz";
 import { DetalleCampoRow } from "./DetalleCampoRow";
 
 export const dynamic = "force-dynamic";
@@ -15,21 +15,24 @@ const CAMPOS_VALIDOS = Object.keys(CAMPO_LABEL) as (keyof ResultadoNominal)[];
 
 export default async function DetalleCampoResultadoPage({
   params,
+  searchParams,
 }: {
   params: Promise<{ informeId: string; campo: string }>;
+  searchParams: Promise<{ soloLectura?: string }>;
 }) {
   const { informeId, campo: campoRaw } = await params;
+  const { soloLectura } = await searchParams;
   if (!CAMPOS_VALIDOS.includes(campoRaw as keyof ResultadoNominal)) notFound();
   const campo = campoRaw as keyof ResultadoNominal;
 
-  const [detalle, session, subrubros] = await Promise.all([
+  const [detalle, permisos, subrubros] = await Promise.all([
     getDetalleCampoResultado(informeId, campo),
-    auth(),
+    permisosDeInforme(informeId),
     listCatalog("subrubro"),
   ]);
-  // Solo mientras el informe no está congelado (Aprobado/Definitivo) — una
-  // vez validado, reclasificar una cuenta ya no debe poder tocarlo.
-  const puedeEditar = session?.user.role === "ADMIN" && !detalle.congelado;
+  // Solo mientras el informe no está congelado (Aprobado) — una vez
+  // validado, reclasificar una cuenta ya no debe poder tocarlo.
+  const puedeEditar = permisos.puedeConfiguracion && !detalle.congelado && soloLectura !== "1";
   const subrubrosOpc = (subrubros as { codSubrubro: number; nomSubrubro: string }[]).map((s) => ({
     codSubrubro: s.codSubrubro,
     nomSubrubro: s.nomSubrubro,

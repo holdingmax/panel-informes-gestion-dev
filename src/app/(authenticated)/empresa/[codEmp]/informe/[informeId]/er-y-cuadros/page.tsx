@@ -1,7 +1,8 @@
 import { computeResultadoCuadro, type ResultadoBloque, type ResultadoColumna } from "@/lib/resultado-cuadro";
 import { formatPeriodoAbrev } from "@/lib/balance-oya-report";
-import type { ResultadoNominal } from "@/lib/resultado-nominal";
+import { getCuentasSinSubrubro, type ResultadoNominal } from "@/lib/resultado-nominal";
 import { OjoCampoResultado } from "./OjoCampoResultado";
+import { AvisoCuentasSinClasificar } from "../AvisoCuentasSinClasificar";
 
 export const dynamic = "force-dynamic";
 
@@ -70,6 +71,7 @@ function CuadroResultado({
   codEmp,
   informeId,
   mostrarOjo,
+  soloLectura,
 }: {
   titulo: string;
   bloque: ResultadoBloque;
@@ -80,6 +82,7 @@ function CuadroResultado({
   codEmp: string;
   informeId: string;
   mostrarOjo?: boolean;
+  soloLectura: boolean;
 }) {
   const columnas: { label: string; datos: ResultadoColumna }[] = [
     { label: periodoLabel, datos: bloque.actual },
@@ -119,7 +122,12 @@ function CuadroResultado({
                 <span className="inline-flex items-center gap-2">
                   {fila.label}
                   {mostrarOjo && fila.campo && (
-                    <OjoCampoResultado codEmp={codEmp} informeId={informeId} campo={fila.campo} />
+                    <OjoCampoResultado
+                      codEmp={codEmp}
+                      informeId={informeId}
+                      campo={fila.campo}
+                      soloLectura={soloLectura}
+                    />
                   )}
                 </span>
               </td>
@@ -141,19 +149,35 @@ function CuadroResultado({
 
 export default async function ErYCuadrosPage({
   params,
+  searchParams,
 }: {
   params: Promise<{ codEmp: string; informeId: string }>;
+  searchParams: Promise<{ soloLectura?: string }>;
 }) {
   const { codEmp, informeId } = await params;
-  const report = await computeResultadoCuadro(informeId);
+  const { soloLectura: soloLecturaParam } = await searchParams;
+  const soloLectura = soloLecturaParam === "1";
+  const [report, sinSubrubro] = await Promise.all([
+    computeResultadoCuadro(informeId),
+    getCuentasSinSubrubro(informeId),
+  ]);
   const periodoLabel = formatPeriodoAbrev(report.periodoMes, report.periodoAnio);
   const periodoAnteriorLabel = formatPeriodoAbrev(report.periodoMes, report.periodoAnio - 1);
 
   return (
     <div className="flex flex-col gap-8">
       <h2 className="text-lg font-medium">
-        ER y Cuadros — {periodoLabel} — {report.unidadNegocioNombre}
+        ER y Cuadros — {periodoLabel}
+        {report.version > 1 && ` — versión ${report.version}`} — {report.unidadNegocioNombre}
       </h2>
+
+      {sinSubrubro.cuentas.length > 0 && (
+        <AvisoCuentasSinClasificar
+          mensaje={`HAY CUENTAS SIN VALORES EN SUBRUBRO (${sinSubrubro.cuentas.length})`}
+          url={`/empresa/${codEmp}/informe/${informeId}/er-y-cuadros/sin-subrubro${soloLectura ? "?soloLectura=1" : ""}`}
+          windowName={`sin-subrubro-${informeId}`}
+        />
+      )}
 
       {report.advertencias.length > 0 && (
         <div className="rounded border border-amber-400 bg-amber-50 p-3 text-sm text-amber-800">
@@ -175,6 +199,7 @@ export default async function ErYCuadrosPage({
         fmt={(n) => fmtParen(n, report.presentaEnMiles)}
         codEmp={codEmp}
         informeId={informeId}
+        soloLectura={soloLectura}
         mostrarOjo
       />
 
@@ -189,6 +214,7 @@ export default async function ErYCuadrosPage({
             fmt={(n) => fmtParen(n, report.presentaEnMiles)}
             codEmp={codEmp}
             informeId={informeId}
+            soloLectura={soloLectura}
           />
         ) : (
           <p className="text-sm text-zinc-600">
@@ -208,6 +234,7 @@ export default async function ErYCuadrosPage({
             fmt={fmtUsd}
             codEmp={codEmp}
             informeId={informeId}
+            soloLectura={soloLectura}
           />
         ) : (
           <p className="text-sm text-zinc-600">

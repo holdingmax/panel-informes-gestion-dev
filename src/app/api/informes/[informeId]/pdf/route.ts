@@ -16,7 +16,7 @@ export async function GET(
   const informe = await prisma.informe.findUnique({ where: { id: informeId } });
   if (!informe) return new Response(null, { status: 404 });
 
-  if (informe.estado !== "APROBADO" && informe.estado !== "DEFINITIVO") {
+  if (informe.estado !== "APROBADO") {
     return new Response("El informe todavía no fue aprobado.", { status: 403 });
   }
 

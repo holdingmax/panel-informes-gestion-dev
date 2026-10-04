@@ -1051,11 +1051,19 @@ async function importarBsys(empresaArg: string, filePath: string, periodo?: { me
   await prisma.$transaction(async (tx) => {
     await tx.balanceSumasYSaldos.createMany({ data: filasAcumulado.map((f) => ({ ...f, periodoMes, periodoAnio })) });
     await tx.balanceSumasYSaldos.createMany({ data: filasMes.map((f) => ({ ...f, periodoMes, periodoAnio })) });
-    await tx.informe.upsert({
-      where: { unidadNegocioId_periodoMes_periodoAnio: { unidadNegocioId, periodoMes, periodoAnio } },
-      update: {},
-      create: { unidadNegocioId, periodoMes, periodoAnio },
+    // Mismo criterio que bsys-import.ts: un informe de un período ya
+    // Aprobado no se pisa, se versiona.
+    const actual = await tx.informe.findFirst({
+      where: { unidadNegocioId, periodoMes, periodoAnio },
+      orderBy: { version: "desc" },
     });
+    if (!actual) {
+      await tx.informe.create({ data: { unidadNegocioId, periodoMes, periodoAnio } });
+    } else if (actual.estado === "APROBADO") {
+      await tx.informe.create({
+        data: { unidadNegocioId, periodoMes, periodoAnio, version: actual.version + 1 },
+      });
+    }
   });
 
   console.log(`Listo: BSyS de ${periodoMes}/${periodoAnio} importado para ${config.mensajeEmpresa}.`);

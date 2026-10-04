@@ -1,6 +1,11 @@
+// OBSOLETO (2026-10-03): el Rubro ya no clasifica cuentas de Resultado — una
+// cuenta de Ingresos/Egresos no lleva Rubro, el campo del ER sale solo de
+// Subrubro (ver resultado-nominal.ts). Conservado como referencia histórica,
+// igual que el resto de prisma/legacy/ — no correr tal cual contra datos
+// actuales, ver README.md.
 import "dotenv/config";
 import ExcelJS from "exceljs";
-import { PrismaClient } from "../src/generated/prisma/client";
+import { PrismaClient } from "../../src/generated/prisma/client";
 import { PrismaPg } from "@prisma/adapter-pg";
 
 const adapter = new PrismaPg({ connectionString: process.env.DATABASE_URL! });

@@ -1,6 +1,6 @@
-import { auth } from "@/auth";
 import { getDetalleRubro } from "@/lib/balance-oya-report";
 import { listRubrosConClasificacion } from "@/lib/rubro-actions";
+import { permisosDeInforme } from "@/lib/authz";
 import { DetalleRubroRow } from "./DetalleRubroRow";
 
 export const dynamic = "force-dynamic";
@@ -12,18 +12,23 @@ function fmtParen(n: number) {
 
 export default async function DetalleRubroPage({
   params,
+  searchParams,
 }: {
   params: Promise<{ informeId: string; codRubro: string }>;
+  searchParams: Promise<{ soloLectura?: string }>;
 }) {
   const { informeId, codRubro } = await params;
-  const [detalle, session, rubros] = await Promise.all([
+  const { soloLectura } = await searchParams;
+  const [detalle, permisos, rubros] = await Promise.all([
     getDetalleRubro(informeId, Number(codRubro)),
-    auth(),
+    permisosDeInforme(informeId),
     listRubrosConClasificacion(),
   ]);
-  // Solo mientras el informe no está congelado (Aprobado/Definitivo) — una
-  // vez validado, reclasificar una cuenta ya no debe poder tocarlo.
-  const puedeEditar = session?.user.role === "ADMIN" && !detalle.congelado;
+  // Solo mientras el informe no está congelado (Aprobado) — una vez
+  // validado, reclasificar una cuenta ya no debe poder tocarlo. Tampoco en
+  // la vista de solo lectura de Consulta (soloLectura=1), aunque el informe
+  // siga en Proceso.
+  const puedeEditar = permisos.puedeConfiguracion && !detalle.congelado && soloLectura !== "1";
   const rubrosOpc = rubros.map((r) => ({ codRubro: r.codRubro, nomRubro: r.nomRubro }));
 
   return (

@@ -1,6 +1,7 @@
 import { notFound } from "next/navigation";
 import Link from "next/link";
 import { getUnidadNegocio } from "@/lib/unidad-negocio-actions";
+import { requireAccesoUnidad } from "@/lib/authz";
 
 export const dynamic = "force-dynamic";
 
@@ -14,6 +15,12 @@ export default async function EmpresaLayout({
   const { codEmp } = await params;
   const empresa = await getUnidadNegocio(Number(codEmp));
   if (!empresa) notFound();
+
+  try {
+    await requireAccesoUnidad(empresa.codUnidad);
+  } catch {
+    notFound();
+  }
 
   const backgroundStyle = empresa.imagenMime
     ? {
@@ -41,6 +48,12 @@ export default async function EmpresaLayout({
               className="rounded-md px-3 py-1.5 text-slate-700 underline hover:bg-slate-50 hover:text-accent focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-accent focus-visible:ring-offset-2"
             >
               Histórico de Informes
+            </Link>
+            <Link
+              href={`/empresa/${empresa.codUnidad}/panel-reclasificacion`}
+              className="rounded-md px-3 py-1.5 text-slate-700 underline hover:bg-slate-50 hover:text-accent focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-accent focus-visible:ring-offset-2"
+            >
+              Panel Reclasificación
             </Link>
             <Link
               href={`/empresa/${empresa.codUnidad}/resultados-historicos`}

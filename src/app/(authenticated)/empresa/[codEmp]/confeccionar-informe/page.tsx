@@ -5,6 +5,10 @@ import { BsysUploadForm } from "../BsysUploadForm";
 
 export const dynamic = "force-dynamic";
 
+const MESES_ABREV = [
+  "ene", "feb", "mar", "abr", "may", "jun", "jul", "ago", "sep", "oct", "nov", "dic",
+];
+
 async function ultimaCargaInfo(empresaId: number, tipo: "MES" | "ACUMULADO") {
   const ultimaCarga = await prisma.balanceSumasYSaldos.findFirst({
     where: { empresaId, tipo },
@@ -53,6 +57,23 @@ export default async function ConfeccionarInformePage({
     }))
   );
 
+  // Volver a confeccionar un período cuya última versión ya está Aprobada
+  // no la pisa — crea una versión nueva (ver bsys-import.ts). Se avisa acá,
+  // antes de subir nada, para que no sea una sorpresa.
+  const todosLosInformes = await prisma.informe.findMany({
+    where: { unidadNegocioId },
+    orderBy: { version: "desc" },
+    select: { periodoMes: true, periodoAnio: true, version: true, estado: true },
+  });
+  const ultimaVersionPorPeriodo = new Map<string, (typeof todosLosInformes)[number]>();
+  for (const i of todosLosInformes) {
+    const key = `${i.periodoAnio}-${i.periodoMes}`;
+    if (!ultimaVersionPorPeriodo.has(key)) ultimaVersionPorPeriodo.set(key, i);
+  }
+  const periodosQueVersionarian = [...ultimaVersionPorPeriodo.values()]
+    .filter((i) => i.estado === "APROBADO")
+    .sort((a, b) => b.periodoAnio - a.periodoAnio || b.periodoMes - a.periodoMes);
+
   return (
     <div className="flex flex-col gap-6">
       <div>
@@ -63,6 +84,23 @@ export default async function ConfeccionarInformePage({
           período. Cada cuenta se valida contra el Plan de Cuentas de su propia empresa.
         </p>
       </div>
+
+      {periodosQueVersionarian.length > 0 && (
+        <div className="rounded border border-amber-400 bg-amber-50 p-3 text-sm text-amber-800">
+          <p className="font-medium">
+            Estos períodos ya tienen un informe Aprobado — volver a confeccionarlos no lo pisa,
+            crea una versión nueva:
+          </p>
+          <ul className="mt-1 list-disc pl-5">
+            {periodosQueVersionarian.map((i) => (
+              <li key={`${i.periodoAnio}-${i.periodoMes}`}>
+                {MESES_ABREV[i.periodoMes - 1]}-{String(i.periodoAnio).slice(-2)} (versión actual:{" "}
+                {i.version} → la próxima carga sería la versión {i.version + 1})
+              </li>
+            ))}
+          </ul>
+        </div>
+      )}
 
       {ultimasCargas.some((c) => c.ultimoMes || c.ultimoAcumulado) && (
         <div className="flex flex-col gap-2 text-sm text-zinc-500">

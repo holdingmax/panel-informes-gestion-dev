@@ -3,7 +3,24 @@
 import { revalidatePath } from "next/cache";
 import { prisma } from "@/lib/prisma";
 import type { DeleteCheckResult } from "@/components/ConfirmDeleteButton";
-import { requireUser, requireAdmin } from "@/lib/authz";
+import { requireUser, requireAdmin, requireAccesoUnidad } from "@/lib/authz";
+
+// El Plan de Cuentas es por Empresa, pero el permiso se concede por Unidad
+// de Negocio (ver UserUnidadPermiso) — se resuelve la unidad dueña de la
+// empresa y se chequea ahí. Una Empresa todavía no vinculada a ninguna
+// Unidad (recién creada) solo la puede tocar un ADMIN — no hay unidad a la
+// cual delegarle el permiso.
+async function requireAccesoConfiguracionEmpresa(empresaId: number) {
+  const empresa = await prisma.empresa.findUniqueOrThrow({
+    where: { codEmp: empresaId },
+    select: { unidadNegocioId: true },
+  });
+  if (empresa.unidadNegocioId === null) {
+    await requireAdmin();
+    return;
+  }
+  await requireAccesoUnidad(empresa.unidadNegocioId, "configuracion");
+}
 
 const INCLUDE = {
   empresa: true,
@@ -28,11 +45,6 @@ function readCampos(formData: FormData) {
   if (!cuenta) throw new Error("La cuenta es obligatoria");
   if (cuenta.length > 90) throw new Error("La cuenta no puede superar 90 caracteres");
 
-  const rubroId = Number(formData.get("rubroId"));
-  if (!Number.isInteger(rubroId)) {
-    throw new Error("Completá Cuenta y Rubro");
-  }
-
   const optionalId = (field: string) => {
     const raw = String(formData.get(field) ?? "").trim();
     if (!raw) return null;
@@ -42,9 +54,10 @@ function readCampos(formData: FormData) {
 
   return {
     cuenta,
-    rubroId,
-    // Subrubro es exclusivo de Rubros de Partida Resultado (ver UI, que lo
-    // oculta para el resto) — acá queda siempre opcional.
+    // Rubro (ESP) y Subrubro (ER) son ambos opcionales e independientes —
+    // una cuenta de Resultado no lleva Rubro, una de Balance no necesita
+    // Subrubro.
+    rubroId: optionalId("rubroId"),
     subrubroId: optionalId("subrubroId"),
     subrubro2Id: optionalId("subrubro2Id"),
     subrubro3Id: optionalId("subrubro3Id"),
@@ -53,9 +66,9 @@ function readCampos(formData: FormData) {
 }
 
 export async function createPlanDeCuentas(formData: FormData) {
-  await requireAdmin();
   const empresaId = Number(formData.get("empresaId"));
   if (!Number.isInteger(empresaId)) throw new Error("Completá la Empresa");
+  await requireAccesoConfiguracionEmpresa(empresaId);
 
   const campos = readCampos(formData);
 
@@ -65,7 +78,9 @@ export async function createPlanDeCuentas(formData: FormData) {
 }
 
 export async function updatePlanDeCuentas(id: string, formData: FormData) {
-  await requireAdmin();
+  const existente = await prisma.planDeCuentas.findUniqueOrThrow({ where: { id }, select: { empresaId: true } });
+  await requireAccesoConfiguracionEmpresa(existente.empresaId);
+
   const campos = readCampos(formData);
 
   await prisma.planDeCuentas.update({ where: { id }, data: campos });
@@ -80,7 +95,8 @@ export async function updatePlanDeCuentas(id: string, formData: FormData) {
 // chequeo acá porque un informe ya aprobado lee de su snapshot y no se ve
 // afectado por este cambio.
 export async function updatePlanDeCuentaRubro(id: string, rubroId: number) {
-  await requireAdmin();
+  const existente = await prisma.planDeCuentas.findUniqueOrThrow({ where: { id }, select: { empresaId: true } });
+  await requireAccesoConfiguracionEmpresa(existente.empresaId);
   if (!Number.isInteger(rubroId)) throw new Error("Rubro inválido");
   await prisma.planDeCuentas.update({ where: { id }, data: { rubroId } });
   revalidatePath("/configuracion/plan-de-cuentas");
@@ -89,7 +105,8 @@ export async function updatePlanDeCuentaRubro(id: string, rubroId: number) {
 // Mismo propósito que updatePlanDeCuentaRubro, para el "ojo" del ER
 // (drill-down por Subrubro, cuadro Nominal).
 export async function updatePlanDeCuentaSubrubro(id: string, subrubroId: number) {
-  await requireAdmin();
+  const existente = await prisma.planDeCuentas.findUniqueOrThrow({ where: { id }, select: { empresaId: true } });
+  await requireAccesoConfiguracionEmpresa(existente.empresaId);
   if (!Number.isInteger(subrubroId)) throw new Error("Subrubro inválido");
   await prisma.planDeCuentas.update({ where: { id }, data: { subrubroId } });
   revalidatePath("/configuracion/plan-de-cuentas");
@@ -103,7 +120,8 @@ export async function checkDeletePlanDeCuentas(): Promise<DeleteCheckResult> {
 }
 
 export async function deletePlanDeCuentas(id: string) {
-  await requireAdmin();
+  const existente = await prisma.planDeCuentas.findUniqueOrThrow({ where: { id }, select: { empresaId: true } });
+  await requireAccesoConfiguracionEmpresa(existente.empresaId);
   await prisma.planDeCuentas.delete({ where: { id } });
   revalidatePath("/configuracion/plan-de-cuentas");
 }

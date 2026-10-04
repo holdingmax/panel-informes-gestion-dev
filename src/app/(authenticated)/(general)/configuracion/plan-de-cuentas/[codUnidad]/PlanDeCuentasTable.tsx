@@ -4,20 +4,19 @@ import { useState } from "react";
 import { PlanDeCuentaRow } from "./PlanDeCuentaRow";
 
 type Opcion = { id: number; nombre: string };
-type RubroOpcion = Opcion & { esResultado: boolean };
 
 type Fila = {
   id: string;
   empresaId: number;
   nombreEmpresa: string;
   cuenta: string;
-  rubroId: number;
+  rubroId: number | null;
   subrubroId: number | null;
   subrubro2Id: number | null;
   subrubro3Id: number | null;
   categoriaOyAId: number | null;
   nombrePartida: string | null;
-  nombreRubro: string;
+  nombreRubro: string | null;
   nombreSubrubro: string | null;
   nombreSubrubro2: string | null;
   nombreSubrubro3: string | null;
@@ -32,16 +31,16 @@ export function PlanDeCuentasTable({
   subrubros2,
   subrubros3,
   categorias,
-  isAdmin,
+  puedeConfiguracion,
 }: {
   filas: Fila[];
   empresas: { codEmp: number; nombreEmp: string }[];
-  rubros: RubroOpcion[];
+  rubros: Opcion[];
   subrubros: Opcion[];
   subrubros2: Opcion[];
   subrubros3: Opcion[];
   categorias: Opcion[];
-  isAdmin: boolean;
+  puedeConfiguracion: boolean;
 }) {
   const [filtroEmpresa, setFiltroEmpresa] = useState("");
   const [filtroCuenta, setFiltroCuenta] = useState("");
@@ -201,7 +200,7 @@ export function PlanDeCuentasTable({
                 subrubros2={subrubros2}
                 subrubros3={subrubros3}
                 categorias={categorias}
-                isAdmin={isAdmin}
+                puedeConfiguracion={puedeConfiguracion}
               />
             ))}
           </tbody>

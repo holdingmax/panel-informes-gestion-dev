@@ -8,7 +8,13 @@ type UnidadNegocioTile = {
   imagenMime: string | null;
 };
 
-export function UnidadNegocioGrid({ unidades }: { unidades: UnidadNegocioTile[] }) {
+export function UnidadNegocioGrid({
+  unidades,
+  basePath = "/empresa",
+}: {
+  unidades: UnidadNegocioTile[];
+  basePath?: string;
+}) {
   if (unidades.length === 0) {
     return (
       <p className="text-sm text-zinc-500">
@@ -23,7 +29,7 @@ export function UnidadNegocioGrid({ unidades }: { unidades: UnidadNegocioTile[] 
         <button
           key={unidad.codUnidad}
           onClick={() =>
-            openInWindow(`/empresa/${unidad.codUnidad}`, `unidad-${unidad.codUnidad}`)
+            openInWindow(`${basePath}/${unidad.codUnidad}`, `unidad-${unidad.codUnidad}`)
           }
           className="flex flex-col items-center gap-3 rounded-md border border-slate-200 bg-white p-8 text-center shadow-sm transition-colors hover:bg-slate-50 focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-accent focus-visible:ring-offset-2"
         >

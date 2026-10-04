@@ -1,7 +1,9 @@
 import { auth } from "@/auth";
 import { computeInformeReport, type RubroLine } from "@/lib/balance-oya-report";
+import { permisosDeUnidad } from "@/lib/authz";
 import { InformeActions } from "./InformeActions";
 import { RubroRowActions } from "./RubroRowActions";
+import { AvisoCuentasSinClasificar } from "./AvisoCuentasSinClasificar";
 
 export const dynamic = "force-dynamic";
 
@@ -35,11 +37,13 @@ function BalanceRows({
   codEmp,
   informeId,
   isAdmin,
+  soloLectura,
 }: {
   rows: RubroLine[];
   codEmp: string;
   informeId: string;
   isAdmin: boolean;
+  soloLectura: boolean;
 }) {
   return (
     <>
@@ -55,6 +59,7 @@ function BalanceRows({
                   codRubro={r.codRubro}
                   bucketNOF={r.bucketNOF}
                   isAdmin={isAdmin}
+                  soloLectura={soloLectura}
                 />
               )}
             </span>
@@ -110,13 +115,18 @@ function OrigenAplicacionRows({ rows }: { rows: RubroLine[] }) {
 
 export default async function InformeDetallePage({
   params,
+  searchParams,
 }: {
   params: Promise<{ codEmp: string; informeId: string }>;
+  searchParams: Promise<{ soloLectura?: string }>;
 }) {
   const { codEmp, informeId } = await params;
+  const { soloLectura: soloLecturaParam } = await searchParams;
+  const soloLectura = soloLecturaParam === "1";
   const report = await computeInformeReport(informeId);
   const session = await auth();
   const isAdmin = session?.user.role === "ADMIN";
+  const permisos = await permisosDeUnidad(report.unidadNegocioId);
   const {
     balance,
     origenAplicacion,
@@ -131,9 +141,16 @@ export default async function InformeDetallePage({
     <div className="flex flex-col gap-10">
       <div className="flex items-center justify-between">
         <h2 className="text-lg font-medium">
-          Informe {MESES[report.periodoMes - 1]} {report.periodoAnio} — {report.unidadNegocioNombre}
+          Informe {MESES[report.periodoMes - 1]} {report.periodoAnio}
+          {report.version > 1 && ` — versión ${report.version}`} — {report.unidadNegocioNombre}
         </h2>
-        <InformeActions informeId={report.informeId} estado={report.estado} isAdmin={isAdmin} />
+        <InformeActions
+          informeId={report.informeId}
+          estado={report.estado}
+          puedeRevisar={permisos.puedeRevisar}
+          puedeAprobar={permisos.puedeAprobar}
+          soloLectura={soloLectura}
+        />
       </div>
 
       {report.advertencias.length > 0 && (
@@ -145,6 +162,14 @@ export default async function InformeDetallePage({
             ))}
           </ul>
         </div>
+      )}
+
+      {report.cuentasSinRubro.length > 0 && (
+        <AvisoCuentasSinClasificar
+          mensaje={`HAY CUENTAS SIN VALORES EN RUBRO (${report.cuentasSinRubro.length})`}
+          url={`/empresa/${codEmp}/informe/${informeId}/sin-rubro${soloLectura ? "?soloLectura=1" : ""}`}
+          windowName={`sin-rubro-${informeId}`}
+        />
       )}
 
       {/* Hoja 2: Estado Patrimonial - Origen y Aplicación de Fondos */}
@@ -162,21 +187,21 @@ export default async function InformeDetallePage({
             </tr>
           </thead>
           <tbody>
-            <BalanceRows rows={balance.activo} codEmp={codEmp} informeId={informeId} isAdmin={isAdmin} />
+            <BalanceRows rows={balance.activo} codEmp={codEmp} informeId={informeId} isAdmin={isAdmin} soloLectura={soloLectura} />
             <TotalRow
               label="Total Activo"
               final={balance.totalActivo}
               inicio={balance.totalActivoAnterior}
             />
             <Spacer />
-            <BalanceRows rows={balance.pasivo} codEmp={codEmp} informeId={informeId} isAdmin={isAdmin} />
+            <BalanceRows rows={balance.pasivo} codEmp={codEmp} informeId={informeId} isAdmin={isAdmin} soloLectura={soloLectura} />
             <TotalRow
               label="Total Pasivo"
               final={balance.totalPasivo}
               inicio={balance.totalPasivoAnterior}
             />
             <Spacer />
-            <BalanceRows rows={balance.patrimonioNeto} codEmp={codEmp} informeId={informeId} isAdmin={isAdmin} />
+            <BalanceRows rows={balance.patrimonioNeto} codEmp={codEmp} informeId={informeId} isAdmin={isAdmin} soloLectura={soloLectura} />
             <TotalRow
               label="Total Patrimonio Neto"
               final={balance.totalPatrimonioNeto}

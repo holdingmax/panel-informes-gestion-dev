@@ -23,7 +23,6 @@ const ESTADO_LABEL: Record<string, string> = {
   PROCESO: "En proceso",
   EN_REVISION: "En revisión",
   APROBADO: "Aprobado",
-  DEFINITIVO: "Definitivo",
 };
 
 export default async function HistoricoPage({
@@ -54,7 +53,7 @@ export default async function HistoricoPage({
           </thead>
           <tbody>
             {informes.map((informe) => {
-              const periodoLabel = `${MESES[informe.periodoMes - 1]} ${informe.periodoAnio}`;
+              const periodoLabel = `${MESES[informe.periodoMes - 1]} ${informe.periodoAnio}${informe.version > 1 ? ` — versión ${informe.version}` : ""}`;
               return (
                 <tr key={informe.id} className="border-t">
                   <td className="py-2">{periodoLabel}</td>

@@ -45,7 +45,7 @@ export function EmpresaRow({
   monedaSecundaria,
   actualiza,
   monedaActualiza,
-  isAdmin,
+  puedeEditar,
 }: {
   codEmp: number;
   nombreEmp: string;
@@ -56,7 +56,7 @@ export function EmpresaRow({
   monedaSecundaria: MonedaRef;
   actualiza: boolean;
   monedaActualiza: MonedaRef;
-  isAdmin: boolean;
+  puedeEditar: boolean;
 }) {
   const [editing, setEditing] = useState(false);
   const [nombreValue, setNombreValue] = useState(nombreEmp);
@@ -70,7 +70,7 @@ export function EmpresaRow({
     });
   }
 
-  if (editing && isAdmin) {
+  if (editing && puedeEditar) {
     return (
       <tr className="border-t align-top">
         <td className="py-2 pr-4">{codEmp}</td>
@@ -170,7 +170,7 @@ export function EmpresaRow({
           : "No"}
       </td>
       <td className="py-2 pr-4">
-        {isAdmin && (
+        {puedeEditar && (
           <div className="flex gap-2">
             <button
               type="button"

@@ -9,7 +9,6 @@ import {
 import { ConfirmDeleteButton } from "@/components/ConfirmDeleteButton";
 
 type Opcion = { id: number; nombre: string };
-type RubroOpcion = Opcion & { esResultado: boolean };
 
 export function PlanDeCuentaRow({
   id,
@@ -31,34 +30,32 @@ export function PlanDeCuentaRow({
   subrubros2,
   subrubros3,
   categorias,
-  isAdmin,
+  puedeConfiguracion,
 }: {
   id: string;
   nombreEmpresa: string;
   cuenta: string;
-  rubroId: number;
+  rubroId: number | null;
   subrubroId: number | null;
   subrubro2Id: number | null;
   subrubro3Id: number | null;
   categoriaOyAId: number | null;
   nombrePartida: string | null;
-  nombreRubro: string;
+  nombreRubro: string | null;
   nombreSubrubro: string | null;
   nombreSubrubro2: string | null;
   nombreSubrubro3: string | null;
   nombreCategoriaOyA: string | null;
-  rubros: RubroOpcion[];
+  rubros: Opcion[];
   subrubros: Opcion[];
   subrubros2: Opcion[];
   subrubros3: Opcion[];
   categorias: Opcion[];
-  isAdmin: boolean;
+  puedeConfiguracion: boolean;
 }) {
   const [editing, setEditing] = useState(false);
   const [cuentaValue, setCuentaValue] = useState(cuenta);
-  const [rubroIdValue, setRubroIdValue] = useState(String(rubroId));
   const [pending, startTransition] = useTransition();
-  const esResultado = rubros.find((r) => String(r.id) === rubroIdValue)?.esResultado ?? false;
 
   function guardar(formData: FormData) {
     formData.set("cuenta", cuentaValue);
@@ -68,7 +65,7 @@ export function PlanDeCuentaRow({
     });
   }
 
-  if (editing && isAdmin) {
+  if (editing && puedeConfiguracion) {
     return (
       <tr className="border-t align-top">
         <td className="py-1.5 pr-4">{nombreEmpresa}</td>
@@ -85,14 +82,14 @@ export function PlanDeCuentaRow({
               />
             </label>
             <label className="flex flex-col gap-1 text-xs">
-              <span>Rubro</span>
+              <span>Rubro (ESP)</span>
               <select
                 name="rubroId"
-                value={rubroIdValue}
-                onChange={(e) => setRubroIdValue(e.target.value)}
+                defaultValue={rubroId ?? ""}
                 disabled={pending}
                 className="rounded border px-2 py-1 text-sm"
               >
+                <option value="">Sin clasificar</option>
                 {rubros.map((r) => (
                   <option key={r.id} value={r.id}>
                     {r.nombre}
@@ -100,59 +97,54 @@ export function PlanDeCuentaRow({
                 ))}
               </select>
             </label>
-            {esResultado ? (
-              <label className="flex flex-col gap-1 text-xs">
-                <span>Subrubro</span>
-                <select
-                  name="subrubroId"
-                  defaultValue={subrubroId ?? ""}
-                  disabled={pending}
-                  className="rounded border px-2 py-1 text-sm"
-                >
-                  <option value="">Seleccionar...</option>
-                  {subrubros.map((s) => (
-                    <option key={s.id} value={s.id}>
-                      {s.nombre}
-                    </option>
-                  ))}
-                </select>
-              </label>
-            ) : (
-              <>
-                <label className="flex flex-col gap-1 text-xs">
-                  <span>Subrubro 2</span>
-                  <select
-                    name="subrubro2Id"
-                    defaultValue={subrubro2Id ?? ""}
-                    disabled={pending}
-                    className="rounded border px-2 py-1 text-sm"
-                  >
-                    <option value="">Sin clasificar</option>
-                    {subrubros2.map((s) => (
-                      <option key={s.id} value={s.id}>
-                        {s.nombre}
-                      </option>
-                    ))}
-                  </select>
-                </label>
-                <label className="flex flex-col gap-1 text-xs">
-                  <span>Subrubro 3</span>
-                  <select
-                    name="subrubro3Id"
-                    defaultValue={subrubro3Id ?? ""}
-                    disabled={pending}
-                    className="rounded border px-2 py-1 text-sm"
-                  >
-                    <option value="">Sin clasificar</option>
-                    {subrubros3.map((s) => (
-                      <option key={s.id} value={s.id}>
-                        {s.nombre}
-                      </option>
-                    ))}
-                  </select>
-                </label>
-              </>
-            )}
+            <label className="flex flex-col gap-1 text-xs">
+              <span>Subrubro (ER)</span>
+              <select
+                name="subrubroId"
+                defaultValue={subrubroId ?? ""}
+                disabled={pending}
+                className="rounded border px-2 py-1 text-sm"
+              >
+                <option value="">Sin clasificar</option>
+                {subrubros.map((s) => (
+                  <option key={s.id} value={s.id}>
+                    {s.nombre}
+                  </option>
+                ))}
+              </select>
+            </label>
+            <label className="flex flex-col gap-1 text-xs">
+              <span>Subrubro 2</span>
+              <select
+                name="subrubro2Id"
+                defaultValue={subrubro2Id ?? ""}
+                disabled={pending}
+                className="rounded border px-2 py-1 text-sm"
+              >
+                <option value="">Sin clasificar</option>
+                {subrubros2.map((s) => (
+                  <option key={s.id} value={s.id}>
+                    {s.nombre}
+                  </option>
+                ))}
+              </select>
+            </label>
+            <label className="flex flex-col gap-1 text-xs">
+              <span>Subrubro 3</span>
+              <select
+                name="subrubro3Id"
+                defaultValue={subrubro3Id ?? ""}
+                disabled={pending}
+                className="rounded border px-2 py-1 text-sm"
+              >
+                <option value="">Sin clasificar</option>
+                {subrubros3.map((s) => (
+                  <option key={s.id} value={s.id}>
+                    {s.nombre}
+                  </option>
+                ))}
+              </select>
+            </label>
             <label className="flex flex-col gap-1 text-xs">
               <span>Categoría OyA</span>
               <select
@@ -181,7 +173,6 @@ export function PlanDeCuentaRow({
                 type="button"
                 onClick={() => {
                   setCuentaValue(cuenta);
-                  setRubroIdValue(String(rubroId));
                   setEditing(false);
                 }}
                 disabled={pending}
@@ -201,13 +192,13 @@ export function PlanDeCuentaRow({
       <td className="py-1.5 pr-4">{nombreEmpresa}</td>
       <td className="py-1.5 pr-4">{cuenta}</td>
       <td className="py-1.5 pr-4">{nombrePartida ?? "—"}</td>
-      <td className="py-1.5 pr-4">{nombreRubro}</td>
+      <td className="py-1.5 pr-4">{nombreRubro ?? "—"}</td>
       <td className="py-1.5 pr-4">{nombreSubrubro ?? "—"}</td>
       <td className="py-1.5 pr-4">{nombreSubrubro2 ?? "—"}</td>
       <td className="py-1.5 pr-4">{nombreSubrubro3 ?? "—"}</td>
       <td className="py-1.5 pr-4">{nombreCategoriaOyA ?? "—"}</td>
       <td className="py-1.5 pr-4">
-        {isAdmin && (
+        {puedeConfiguracion && (
           <div className="flex gap-2">
             <button
               type="button"

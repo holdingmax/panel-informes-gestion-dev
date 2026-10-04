@@ -2,7 +2,7 @@ import { prisma } from "@/lib/prisma";
 import { Prisma } from "@/generated/prisma/client";
 import type { CampoResultado } from "@/generated/prisma/enums";
 import { normalizeCuenta } from "@/lib/cuenta-normalize";
-import type { InformeSnapshot } from "@/lib/balance-oya-report";
+import { aplicarReclasificaciones, type InformeSnapshot, type CuentaSinClasificar } from "@/lib/balance-oya-report";
 
 function round2(d: Prisma.Decimal): number {
   return d.toDecimalPlaces(2).toNumber();
@@ -14,20 +14,6 @@ export type ResultadoNominal = {
   gastosOperativos: number;
   expensas: number;
   otrasGananciasYPerdidas: number;
-};
-
-// Fallback de transición: nombres de Rubro tal como venían clasificados en
-// el Plan de Cuentas para las cuentas de Resultado (ver HOJA LLAVE del
-// archivo de indicadores), de cuando el ER se armaba por nombre de Rubro en
-// vez de por Subrubro.campoResultado (ver CAMPO_RESULTADO_A_CLAVE). Se usa
-// solo mientras algún Subrubro todavía no tiene su campo clasificado en
-// Configuración → Subrubro — sacar una vez que todos estén clasificados.
-const RUBRO_A_CAMPO: Record<string, keyof ResultadoNominal> = {
-  VENTAS: "ventas",
-  "Costos directos/variables": "costosDirectos",
-  "Gastos Fijos Operativos": "gastosOperativos",
-  EXPENSAS: "expensas",
-  "Otras Ganancias y Perdidas": "otrasGananciasYPerdidas",
 };
 
 const CAMPO_RESULTADO_A_CLAVE: Record<CampoResultado, keyof ResultadoNominal> = {
@@ -62,13 +48,13 @@ export type BalanceMesInput = {
 
 export type PlanCuentaResultadoInput = {
   cuenta: string;
-  nomRubro: string;
-  tipoRol: "ACTIVO" | "PASIVO" | "PATRIMONIO_NETO" | "RESULTADO" | null;
-  subrubroId?: number | null;
-  nomSubrubro?: string | null;
-  // undefined/null = Subrubro sin clasificar todavía — cae al fallback por
-  // nombre de Rubro (RUBRO_A_CAMPO).
-  campoResultado?: CampoResultado | null;
+  // Independiente de subrubroId — una cuenta con Rubro (Balance) y sin
+  // Subrubro es normal y no genera aviso; solo las cuentas sin NINGUNO de
+  // los dos entran a cuentasSinSubrubro (ver el loop principal).
+  rubroId: number | null;
+  subrubroId: number | null;
+  nomSubrubro: string | null;
+  campoResultado: CampoResultado | null;
 };
 
 export type DetalleSubrubroCuenta = {
@@ -96,9 +82,15 @@ export function computeResultadoNominalDeEmpresaPure(
   empresaNombre: string,
   balances: BalanceMesInput[],
   planDeCuentas: PlanCuentaResultadoInput[]
-): { valores: ResultadoNominal; cuentas: DetalleSubrubroCuenta[]; advertencias: string[] } {
+): {
+  valores: ResultadoNominal;
+  cuentas: DetalleSubrubroCuenta[];
+  cuentasSinSubrubro: CuentaSinClasificar[];
+  advertencias: string[];
+} {
   const advertencias: string[] = [];
   const cuentas: DetalleSubrubroCuenta[] = [];
+  const cuentasSinSubrubro: CuentaSinClasificar[] = [];
   const porCuenta = new Map(planDeCuentas.map((p) => [normalizeCuenta(p.cuenta), p]));
   // Decimal mientras se acumulan las cuentas (pueden ser muchas por campo);
   // se convierte a number recién al final, redondeado a 2 decimales.
@@ -118,20 +110,29 @@ export function computeResultadoNominalDeEmpresaPure(
       );
       continue;
     }
-    if (plan.tipoRol !== "RESULTADO") continue;
-
-    // El Subrubro decide el campo del ER (exclusivo de Rubros de Resultado) —
-    // mientras no esté clasificado, cae al fallback por nombre de Rubro.
-    const campo = (plan.campoResultado && CAMPO_RESULTADO_A_CLAVE[plan.campoResultado]) ?? RUBRO_A_CAMPO[plan.nomRubro];
-    if (!campo) {
-      advertencias.push(
-        `La cuenta "${b.cuenta}" (${empresaNombre}, rubro "${plan.nomRubro}") no tiene un Subrubro clasificado con Campo del ER, y su rubro tampoco corresponde a ninguno de los 5 campos de Resultado por nombre. Clasificá su Subrubro en Configuración → Subrubro.`
-      );
-      continue;
-    }
 
     const inicio = new Prisma.Decimal(b.saldoIniDebe).minus(b.saldoIniHaber);
     const cierre = new Prisma.Decimal(b.saldoCierreDebe).minus(b.saldoCierreHaber);
+
+    // El Subrubro decide el campo del ER, independiente del Rubro — una
+    // cuenta sin Subrubro simplemente no aporta al ER (es lo esperado para
+    // una cuenta de Balance). Solo se avisa si TAMPOCO tiene Rubro: ahí sí
+    // es una cuenta sin terminar de clasificar (ver cuentasSinRubro en
+    // balance-oya-report.ts, mismo criterio para el ESP).
+    const campo = plan.campoResultado ? CAMPO_RESULTADO_A_CLAVE[plan.campoResultado] : null;
+    if (!campo) {
+      if (plan.rubroId == null) {
+        cuentasSinSubrubro.push({
+          planDeCuentaId: null,
+          empresaNombre,
+          cuenta: b.cuenta,
+          saldoInicio: round2(inicio),
+          saldoFinal: round2(cierre),
+        });
+      }
+      continue;
+    }
+
     const movimientoRaw = cierre.minus(inicio);
     // Convención "positivo = favorable" (Ventas positiva, Costos/Gastos
     // negativos): misma que ya usan los datos históricos pre-cargados en
@@ -144,8 +145,8 @@ export function computeResultadoNominalDeEmpresaPure(
       cuenta: b.cuenta,
       saldoInicio: round2(inicio),
       saldoFinal: round2(cierre),
-      subrubroId: plan.subrubroId ?? null,
-      nomSubrubro: plan.nomSubrubro ?? null,
+      subrubroId: plan.subrubroId,
+      nomSubrubro: plan.nomSubrubro,
       campo,
     });
   }
@@ -155,10 +156,11 @@ export function computeResultadoNominalDeEmpresaPure(
     valores[campo] = round2(acumulado[campo]);
   }
 
-  return { valores, cuentas, advertencias };
+  return { valores, cuentas, cuentasSinSubrubro, advertencias };
 }
 
 async function computeResultadoNominalMesDeEmpresa(
+  informeId: string,
   empresaId: number,
   empresaNombre: string,
   periodoMes: number,
@@ -166,6 +168,7 @@ async function computeResultadoNominalMesDeEmpresa(
 ): Promise<{
   valores: ResultadoNominal | null;
   cuentas: DetalleSubrubroCuenta[];
+  cuentasSinSubrubro: CuentaSinClasificar[];
   fechaCarga: Date | null;
   advertencias: string[];
 }> {
@@ -181,6 +184,7 @@ async function computeResultadoNominalMesDeEmpresa(
     return {
       valores: null,
       cuentas: [],
+      cuentasSinSubrubro: [],
       fechaCarga: null,
       advertencias: [
         `No hay BSyS Mes cargado para "${empresaNombre}" en el período ${fmtPeriodo(periodoMes, periodoAnio)}.`,
@@ -194,23 +198,28 @@ async function computeResultadoNominalMesDeEmpresa(
 
   const planDeCuentas = await prisma.planDeCuentas.findMany({
     where: { empresaId },
-    include: { rubro: { include: { partidaPatrimonial: { include: { tipo: true } } } }, subrubro: true },
+    include: { subrubro: true },
   });
   const porCuenta = new Map(planDeCuentas.map((p) => [normalizeCuenta(p.cuenta), p]));
 
-  const { valores, cuentas, advertencias } = computeResultadoNominalDeEmpresaPure(
-    empresaNombre,
+  const balancesConReclasificacion = await aplicarReclasificaciones(
+    informeId,
+    empresaId,
     balances.map((b) => ({
       cuenta: b.cuenta,
       saldoIniDebe: Number(b.saldoIniDebe),
       saldoIniHaber: Number(b.saldoIniHaber),
       saldoCierreDebe: Number(b.saldoCierreDebe),
       saldoCierreHaber: Number(b.saldoCierreHaber),
-    })),
+    }))
+  );
+
+  const { valores, cuentas, cuentasSinSubrubro, advertencias } = computeResultadoNominalDeEmpresaPure(
+    empresaNombre,
+    balancesConReclasificacion,
     planDeCuentas.map((p) => ({
       cuenta: p.cuenta,
-      nomRubro: p.rubro.nomRubro,
-      tipoRol: p.rubro.partidaPatrimonial?.tipo?.rol ?? null,
+      rubroId: p.rubroId,
       subrubroId: p.subrubroId,
       nomSubrubro: p.subrubro?.nomSubrubro ?? null,
       campoResultado: p.subrubro?.campoResultado ?? null,
@@ -220,12 +229,16 @@ async function computeResultadoNominalMesDeEmpresa(
   // computeResultadoNominalDeEmpresaPure no conoce el id real de
   // PlanDeCuentas (es una función pura) — se completa acá para el botón
   // Editar del drill-down del ER.
-  const cuentasConId = cuentas.map((c) => ({
-    ...c,
-    planDeCuentaId: porCuenta.get(normalizeCuenta(c.cuenta))?.id ?? null,
-  }));
+  const conId = <T extends { cuenta: string }>(lista: T[]) =>
+    lista.map((c) => ({ ...c, planDeCuentaId: porCuenta.get(normalizeCuenta(c.cuenta))?.id ?? null }));
 
-  return { valores, cuentas: cuentasConId, fechaCarga: ultimoMes.fechaCarga, advertencias };
+  return {
+    valores,
+    cuentas: conId(cuentas),
+    cuentasSinSubrubro: conId(cuentasSinSubrubro),
+    fechaCarga: ultimoMes.fechaCarga,
+    advertencias,
+  };
 }
 
 // Una Unidad de Negocio puede combinar el resultado de varias Empresas: se
@@ -234,12 +247,14 @@ async function computeResultadoNominalMesDeEmpresa(
 // período, su aporte queda en cero y se advierte, pero no bloquea el
 // cálculo de las demás.
 export async function computeResultadoNominalMes(
+  informeId: string,
   unidadNegocioId: number,
   periodoMes: number,
   periodoAnio: number
 ): Promise<{
   valores: ResultadoNominal | null;
   cuentas: DetalleSubrubroCuenta[];
+  cuentasSinSubrubro: CuentaSinClasificar[];
   fechaCarga: Date | null;
   advertencias: string[];
 }> {
@@ -248,19 +263,23 @@ export async function computeResultadoNominalMes(
     return {
       valores: null,
       cuentas: [],
+      cuentasSinSubrubro: [],
       fechaCarga: null,
       advertencias: ["Esta unidad de negocio no tiene empresas vinculadas."],
     };
   }
 
   const porEmpresa = await Promise.all(
-    empresas.map((e) => computeResultadoNominalMesDeEmpresa(e.codEmp, e.nombreEmp, periodoMes, periodoAnio))
+    empresas.map((e) =>
+      computeResultadoNominalMesDeEmpresa(informeId, e.codEmp, e.nombreEmp, periodoMes, periodoAnio)
+    )
   );
 
   const advertencias = porEmpresa.flatMap((r) => r.advertencias);
+  const cuentasSinSubrubro = porEmpresa.flatMap((r) => r.cuentasSinSubrubro);
   const conDatos = porEmpresa.filter((r) => r.valores !== null);
   if (conDatos.length === 0) {
-    return { valores: null, cuentas: [], fechaCarga: null, advertencias };
+    return { valores: null, cuentas: [], cuentasSinSubrubro, fechaCarga: null, advertencias };
   }
 
   const valores = vacio();
@@ -275,7 +294,7 @@ export async function computeResultadoNominalMes(
     .map((r) => r.fechaCarga!)
     .reduce((max, f) => (f > max ? f : max));
 
-  return { valores, cuentas, fechaCarga, advertencias };
+  return { valores, cuentas, cuentasSinSubrubro, fechaCarga, advertencias };
 }
 
 export const CAMPO_LABEL: Record<keyof ResultadoNominal, string> = {
@@ -325,6 +344,7 @@ export async function getDetalleCampoResultado(
   }
 
   const { cuentas: todasLasCuentas } = await computeResultadoNominalMes(
+    informe.id,
     informe.unidadNegocioId,
     informe.periodoMes,
     informe.periodoAnio
@@ -335,6 +355,37 @@ export async function getDetalleCampoResultado(
     campo,
     label: CAMPO_LABEL[campo],
     congelado: false,
+    cuentas,
+    totalSaldoInicio: sum(cuentas.map((c) => c.saldoInicio)),
+    totalSaldoFinal: sum(cuentas.map((c) => c.saldoFinal)),
+  };
+}
+
+export type CuentasSinSubrubro = {
+  congelado: boolean;
+  cuentas: CuentaSinClasificar[];
+  totalSaldoInicio: number;
+  totalSaldoFinal: number;
+};
+
+// Para el aviso "HAY CUENTAS SIN VALORES EN SUBRUBRO" del ER (cuadro
+// Nominal) — mismo criterio de congelamiento que getDetalleCampoResultado.
+export async function getCuentasSinSubrubro(informeId: string): Promise<CuentasSinSubrubro> {
+  const informe = await prisma.informe.findUniqueOrThrow({ where: { id: informeId } });
+
+  const cuentas = informe.snapshot
+    ? (informe.snapshot as unknown as InformeSnapshot).erActual.cuentasSinSubrubro
+    : (
+        await computeResultadoNominalMes(
+          informe.id,
+          informe.unidadNegocioId,
+          informe.periodoMes,
+          informe.periodoAnio
+        )
+      ).cuentasSinSubrubro;
+
+  return {
+    congelado: informe.snapshot !== null,
     cuentas,
     totalSaldoInicio: sum(cuentas.map((c) => c.saldoInicio)),
     totalSaldoFinal: sum(cuentas.map((c) => c.saldoFinal)),

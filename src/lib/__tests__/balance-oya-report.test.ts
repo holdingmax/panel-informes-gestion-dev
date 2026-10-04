@@ -20,12 +20,14 @@ function saldo(
 
 function plan(overrides: Partial<PlanCuentaInput> & Pick<PlanCuentaInput, "cuenta" | "rubroId" | "nomRubro" | "tipoRol">): PlanCuentaInput {
   return {
+    id: "test-id",
     rubroBucketNOF: null,
     rubroOrden: null,
     tieneTipo: true,
     exigeSaldoCero: false,
     categoriaOyAId: null,
     categoriaOyABucketNOF: null,
+    subrubroId: null,
     ...overrides,
   };
 }
@@ -147,7 +149,7 @@ describe("buildInformeReport — Estado de Origen y Aplicación de Fondos", () =
 });
 
 describe("buildInformeReport — Resultado del período", () => {
-  it("coincide con la suma de las cuentas de Resultado", () => {
+  it("coincide con la suma de las cuentas con Subrubro (una cuenta de Resultado no lleva Rubro)", () => {
     const empresas = [
       empresa(
         [
@@ -155,8 +157,8 @@ describe("buildInformeReport — Resultado del período", () => {
           saldo("COSTOS", 0, 0, 400, 0),
         ],
         [
-          plan({ cuenta: "VENTAS", rubroId: 10, nomRubro: "Ventas", tipoRol: "RESULTADO" }),
-          plan({ cuenta: "COSTOS", rubroId: 11, nomRubro: "Costos", tipoRol: "RESULTADO" }),
+          plan({ cuenta: "VENTAS", rubroId: null, nomRubro: null, tipoRol: null, subrubroId: 1 }),
+          plan({ cuenta: "COSTOS", rubroId: null, nomRubro: null, tipoRol: null, subrubroId: 2 }),
         ]
       ),
     ];
@@ -166,6 +168,36 @@ describe("buildInformeReport — Resultado del período", () => {
     // Crudo: Ventas final=-1000, Costos final=+400 → suma=-600.
     // Expuesto (positivo=ganancia) = -(-600) = 600.
     expect(report.resultadoDelPeriodo).toBe(600);
+  });
+});
+
+describe("buildInformeReport — cuentas sin Rubro", () => {
+  it("Cuenta sin Rubro ni Subrubro: no entra al balance y queda en cuentasSinRubro", () => {
+    const empresas = [
+      empresa(
+        [saldo("SIN CLASIFICAR", 0, 0, 100, 0)],
+        [plan({ cuenta: "SIN CLASIFICAR", rubroId: null, nomRubro: null, tipoRol: null })]
+      ),
+    ];
+
+    const report = buildInformeReport(PERIODO, empresas);
+
+    expect(report.balance.activo).toHaveLength(0);
+    expect(report.cuentasSinRubro).toHaveLength(1);
+    expect(report.cuentasSinRubro[0].cuenta).toBe("SIN CLASIFICAR");
+  });
+
+  it("Cuenta sin Rubro pero CON Subrubro: no genera aviso (es de Resultado a propósito)", () => {
+    const empresas = [
+      empresa(
+        [saldo("VENTAS", 0, 0, 0, 1000)],
+        [plan({ cuenta: "VENTAS", rubroId: null, nomRubro: null, tipoRol: null, subrubroId: 1 })]
+      ),
+    ];
+
+    const report = buildInformeReport(PERIODO, empresas);
+
+    expect(report.cuentasSinRubro).toHaveLength(0);
   });
 });
 

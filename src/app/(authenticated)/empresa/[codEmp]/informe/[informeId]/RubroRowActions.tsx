@@ -17,12 +17,14 @@ export function RubroRowActions({
   codRubro,
   bucketNOF,
   isAdmin,
+  soloLectura = false,
 }: {
   codEmp: string;
   informeId: string;
   codRubro: number;
   bucketNOF: "OPERATIVO" | "NO_OPERATIVO" | "FINANCIAMIENTO" | null;
   isAdmin: boolean;
+  soloLectura?: boolean;
 }) {
   const [pending, startTransition] = useTransition();
   const router = useRouter();
@@ -34,7 +36,7 @@ export function RubroRowActions({
         title="Ver cuentas que componen este rubro"
         onClick={() =>
           openInWindow(
-            `/empresa/${codEmp}/informe/${informeId}/rubro/${codRubro}`,
+            `/empresa/${codEmp}/informe/${informeId}/rubro/${codRubro}${soloLectura ? "?soloLectura=1" : ""}`,
             `rubro-${codRubro}`
           )
         }
@@ -42,7 +44,7 @@ export function RubroRowActions({
       >
         👁
       </button>
-      {isAdmin ? (
+      {isAdmin && !soloLectura ? (
         <select
           defaultValue={bucketNOF ?? ""}
           disabled={pending}

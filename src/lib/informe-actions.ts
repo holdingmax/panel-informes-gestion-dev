@@ -6,13 +6,27 @@ import { Prisma } from "@/generated/prisma/client";
 import { computeResultadoNominalMes } from "@/lib/resultado-nominal";
 import { buildEmpresaBalanceInputs, type InformeSnapshot } from "@/lib/balance-oya-report";
 import type { DeleteCheckResult } from "@/components/ConfirmDeleteButton";
-import { requireUser, requireAdmin } from "@/lib/authz";
+import { requireUser, requireAccesoUnidad } from "@/lib/authz";
 
 export async function listInformes(unidadNegocioId: number) {
   await requireUser();
   return prisma.informe.findMany({
     where: { unidadNegocioId },
-    orderBy: [{ periodoAnio: "desc" }, { periodoMes: "desc" }],
+    orderBy: [{ periodoAnio: "desc" }, { periodoMes: "desc" }, { version: "desc" }],
+  });
+}
+
+// Para la pantalla Consulta (todas las versiones, todos los períodos,
+// ordenado por fecha de confección) — incluye el resumen de adjuntos
+// (nunca `contenido`, ver /api/adjuntos/informe/[id] para la descarga).
+export async function listInformesParaConsulta(unidadNegocioId: number) {
+  await requireAccesoUnidad(unidadNegocioId);
+  return prisma.informe.findMany({
+    where: { unidadNegocioId },
+    include: {
+      adjuntos: { select: { id: true, nombreArchivo: true }, orderBy: { createdAt: "asc" } },
+    },
+    orderBy: { createdAt: "desc" },
   });
 }
 
@@ -21,8 +35,8 @@ export async function listInformes(unidadNegocioId: number) {
 // completó Resultados Históricos) borrarlo dejaría ese dato histórico
 // huérfano de su informe de origen.
 export async function checkDeleteInforme(informeId: string): Promise<DeleteCheckResult> {
-  await requireUser();
   const informe = await prisma.informe.findUniqueOrThrow({ where: { id: informeId } });
+  await requireAccesoUnidad(informe.unidadNegocioId);
   if (informe.estado !== "PROCESO") {
     return {
       blocked: true,
@@ -44,21 +58,23 @@ export async function deleteInforme(informeId: string) {
 const SIGUIENTE_ESTADO = {
   PROCESO: "EN_REVISION",
   EN_REVISION: "APROBADO",
-  APROBADO: "DEFINITIVO",
-  DEFINITIVO: null,
+  APROBADO: null,
 } as const;
 
 export async function avanzarEstadoInforme(informeId: string) {
-  await requireUser();
   const informe = await prisma.informe.findUniqueOrThrow({ where: { id: informeId } });
   const estadoActual = informe.estado;
   const siguiente = SIGUIENTE_ESTADO[estadoActual];
   if (!siguiente) return;
 
-  // Solo ADMIN puede aprobar o dar por definitivo un informe — un USER
-  // puede como mucho mandarlo a En Revisión.
-  if (siguiente === "APROBADO" || siguiente === "DEFINITIVO") {
-    await requireAdmin();
+  // Mandar a Revisión y Aprobar son permisos independientes por Unidad de
+  // Negocio (ver UserUnidadPermiso) — ADMIN los tiene siempre. Aprobado es
+  // el estado final: congela el informe para siempre (ver snapshot más
+  // abajo), no hay paso posterior.
+  if (siguiente === "EN_REVISION") {
+    await requireAccesoUnidad(informe.unidadNegocioId, "revisar");
+  } else if (siguiente === "APROBADO") {
+    await requireAccesoUnidad(informe.unidadNegocioId, "aprobar");
   }
 
   // Se calcula ANTES de la transacción (son lecturas puras) para no dejar
@@ -72,8 +88,8 @@ export async function avanzarEstadoInforme(informeId: string) {
   let snapshot: InformeSnapshot | null = null;
   if (siguiente === "APROBADO") {
     const [esp, er] = await Promise.all([
-      buildEmpresaBalanceInputs(informe.unidadNegocioId, informe.periodoMes, informe.periodoAnio),
-      computeResultadoNominalMes(informe.unidadNegocioId, informe.periodoMes, informe.periodoAnio),
+      buildEmpresaBalanceInputs(informe.id, informe.unidadNegocioId, informe.periodoMes, informe.periodoAnio),
+      computeResultadoNominalMes(informe.id, informe.unidadNegocioId, informe.periodoMes, informe.periodoAnio),
     ]);
     valores = er.valores;
     snapshot = {
@@ -91,6 +107,7 @@ export async function avanzarEstadoInforme(informeId: string) {
           otrasGananciasYPerdidas: 0,
         },
         cuentas: er.cuentas,
+        cuentasSinSubrubro: er.cuentasSinSubrubro,
       },
     };
   }
@@ -140,4 +157,5 @@ export async function avanzarEstadoInforme(informeId: string) {
 
   revalidatePath(`/empresa/${informe.unidadNegocioId}/informe/${informeId}`);
   revalidatePath(`/empresa/${informe.unidadNegocioId}/historico`);
+  revalidatePath(`/consulta/${informe.unidadNegocioId}`);
 }

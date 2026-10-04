@@ -10,6 +10,7 @@ type ImportState = {
   cuentasFaltantes?: string[];
   success?: true;
   informeId?: string;
+  version?: number;
   detalle?: { empresaNombre: string; cantidadMes: number; cantidadAcumulado: number }[];
 } | null;
 
@@ -177,6 +178,11 @@ export function BsysUploadForm({
 
       {state?.success && (
         <div className="flex flex-col gap-3 rounded border border-green-400 bg-green-50 p-3 text-sm text-green-800">
+          {state.version && state.version > 1 && (
+            <p className="font-medium">
+              Ya existía un informe Aprobado para este período — se creó la versión {state.version}.
+            </p>
+          )}
           <ul className="list-disc pl-5">
             {state.detalle?.map((d) => (
               <li key={d.empresaNombre}>

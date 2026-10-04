@@ -7,10 +7,12 @@ export function OjoCampoResultado({
   codEmp,
   informeId,
   campo,
+  soloLectura,
 }: {
   codEmp: string;
   informeId: string;
   campo: keyof ResultadoNominal;
+  soloLectura?: boolean;
 }) {
   return (
     <button
@@ -18,7 +20,7 @@ export function OjoCampoResultado({
       title="Ver cuentas que componen este campo"
       onClick={() =>
         openInWindow(
-          `/empresa/${codEmp}/informe/${informeId}/er-y-cuadros/campo/${campo}`,
+          `/empresa/${codEmp}/informe/${informeId}/er-y-cuadros/campo/${campo}${soloLectura ? "?soloLectura=1" : ""}`,
           `campo-${campo}`
         )
       }

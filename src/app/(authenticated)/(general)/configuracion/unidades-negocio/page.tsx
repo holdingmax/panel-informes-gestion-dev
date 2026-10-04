@@ -1,6 +1,7 @@
 import { auth } from "@/auth";
 import { listUnidadesNegocioConEmpresas, createUnidadNegocio } from "@/lib/unidad-negocio-actions";
 import { listEmpresas } from "@/lib/empresa-actions";
+import { permisosDeUnidad } from "@/lib/authz";
 import { CollapsibleAdd } from "@/components/CollapsibleAdd";
 import { UnidadNegocioRow } from "./UnidadNegocioRow";
 
@@ -13,6 +14,11 @@ export default async function UnidadesNegocioPage() {
   ]);
   const session = await auth();
   const isAdmin = session?.user.role === "ADMIN";
+  const permisosPorUnidad = Object.fromEntries(
+    await Promise.all(
+      unidades.map(async (u) => [u.codUnidad, await permisosDeUnidad(u.codUnidad)] as const)
+    )
+  );
 
   return (
     <main className="flex w-full flex-col gap-8 p-8">
@@ -75,7 +81,7 @@ export default async function UnidadesNegocioPage() {
                 imagenMime={unidad.imagenMime}
                 empresas={empresas}
                 vinculadasIds={unidad.empresas.map((e) => e.codEmp)}
-                isAdmin={isAdmin}
+                puedeConfiguracion={permisosPorUnidad[unidad.codUnidad].puedeConfiguracion}
               />
             ))}
           </tbody>

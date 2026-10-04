@@ -93,6 +93,7 @@ export type ResultadoCuadro = {
   unidadNegocioNombre: string;
   periodoMes: number;
   periodoAnio: number;
+  version: number;
   monedaPrimariaNombre: string | null;
   presentaEnMiles: boolean;
   monedaSecundariaNombre: string | null;
@@ -143,6 +144,7 @@ export async function computeResultadoCuadro(informeId: string): Promise<Resulta
     actual = snapshot.erActual.valores;
   } else {
     const { valores: actualRaw, advertencias: advertenciasMes } = await computeResultadoNominalMes(
+      informe.id,
       unidadNegocioId,
       periodoMes,
       periodoAnio
@@ -297,6 +299,7 @@ export async function computeResultadoCuadro(informeId: string): Promise<Resulta
     unidadNegocioNombre: informe.unidadNegocio.nombreUnidad,
     periodoMes,
     periodoAnio,
+    version: informe.version,
     monedaPrimariaNombre,
     presentaEnMiles,
     monedaSecundariaNombre: monedaSecundaria?.nomMoneda ?? null,

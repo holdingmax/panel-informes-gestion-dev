@@ -6,7 +6,7 @@ import { parseBsysRawFile, type BsysRawRow } from "@/lib/bsys-raw-parser";
 import { normalizeCuenta } from "@/lib/cuenta-normalize";
 import { verificarSeriesCompletaHasta } from "@/lib/series-e-indices-actions";
 import { aplicarRefundicion } from "@/lib/refundicion";
-import { requireUser } from "@/lib/authz";
+import { requireAccesoUnidad } from "@/lib/authz";
 
 function primerDiaDelMes(mes: number, anio: number): Date {
   return new Date(Date.UTC(anio, mes - 1, 1));
@@ -53,6 +53,7 @@ type ImportBsysResult =
   | {
       success: true;
       informeId: string;
+      version: number;
       detalle: { empresaNombre: string; cantidadMes: number; cantidadAcumulado: number }[];
     }
   | { error: string; empresaNombre?: string; cuentasFaltantes?: string[] };
@@ -63,8 +64,8 @@ type ImportBsysResult =
 // Informe. Los archivos llegan con nombres de campo "archivoMes_<codEmp>" y
 // "archivoAcumulado_<codEmp>" por cada empresa vinculada.
 export async function importBsysCombinado(formData: FormData): Promise<ImportBsysResult> {
-  await requireUser();
   const unidadNegocioId = Number(formData.get("unidadNegocioId"));
+  await requireAccesoUnidad(unidadNegocioId);
   const periodoMes = Number(formData.get("periodoMes"));
   const periodoAnio = Number(formData.get("periodoAnio"));
   const empresaIds = formData.getAll("empresaId").map(Number);
@@ -85,16 +86,18 @@ export async function importBsysCombinado(formData: FormData): Promise<ImportBsy
 
   const unidad = await prisma.unidadNegocio.findUniqueOrThrow({ where: { codUnidad: unidadNegocioId } });
 
-  // Si el informe de este período ya avanzó de estado, recargar el BSyS
-  // cambiaría números que ya se dieron por cerrados (y, si ya está
-  // Aprobado, Resultados Históricos quedaría desincronizado). Un informe
-  // que todavía no existe para este período sí se puede cargar sin
-  // restricción — es la primera carga.
-  const informeExistente = await prisma.informe.findUnique({
-    where: { unidadNegocioId_periodoMes_periodoAnio: { unidadNegocioId, periodoMes, periodoAnio } },
+  // Si el informe de este período está En Revisión, recargar el BSyS le
+  // cambiaría los números a quien lo está revisando — se bloquea, igual que
+  // siempre. Si ya está Aprobado (congelado, con snapshot propio), en vez
+  // de bloquear se crea una versión nueva más abajo — el aprobado anterior
+  // no se toca. Un informe que todavía no existe para este período se
+  // carga sin restricción, como versión 1.
+  const informeExistente = await prisma.informe.findFirst({
+    where: { unidadNegocioId, periodoMes, periodoAnio },
+    orderBy: { version: "desc" },
   });
-  if (informeExistente && informeExistente.estado !== "PROCESO") {
-    return { error: "El informe de este período ya no está En proceso. No se puede recargar el BSyS." };
+  if (informeExistente?.estado === "EN_REVISION") {
+    return { error: "El informe de este período está En revisión. No se puede recargar el BSyS." };
   }
 
   const empresas = await prisma.empresa.findMany({
@@ -242,7 +245,7 @@ export async function importBsysCombinado(formData: FormData): Promise<ImportBsy
       saldoCierreHaber: r.saldoCierreHaber,
     }));
 
-  const informeId = await prisma.$transaction(async (tx) => {
+  const informe = await prisma.$transaction(async (tx) => {
     for (const p of parsedPorEmpresa) {
       // Reemplaza la carga anterior de este mismo período (si la había) en
       // vez de apilarla — el informe siempre lee "la carga de este
@@ -260,12 +263,24 @@ export async function importBsysCombinado(formData: FormData): Promise<ImportBsy
         data: toData(p.rowsAcumulado, "ACUMULADO", p.empresaId),
       });
     }
-    const informe = await tx.informe.upsert({
-      where: { unidadNegocioId_periodoMes_periodoAnio: { unidadNegocioId, periodoMes, periodoAnio } },
-      update: {},
-      create: { unidadNegocioId, periodoMes, periodoAnio },
+    // Re-chequeado dentro de la transacción (no solo arriba) para que dos
+    // cargas simultáneas del mismo período no terminen creando dos
+    // versiones nuevas a la vez.
+    const actual = await tx.informe.findFirst({
+      where: { unidadNegocioId, periodoMes, periodoAnio },
+      orderBy: { version: "desc" },
     });
-    return informe.id;
+    let informe: { id: string; version: number };
+    if (!actual) {
+      informe = await tx.informe.create({ data: { unidadNegocioId, periodoMes, periodoAnio } });
+    } else if (actual.estado !== "APROBADO") {
+      informe = actual;
+    } else {
+      informe = await tx.informe.create({
+        data: { unidadNegocioId, periodoMes, periodoAnio, version: actual.version + 1 },
+      });
+    }
+    return informe;
   });
 
   revalidatePath(`/empresa/${unidadNegocioId}/confeccionar-informe`);
@@ -273,7 +288,8 @@ export async function importBsysCombinado(formData: FormData): Promise<ImportBsy
 
   return {
     success: true,
-    informeId,
+    informeId: informe.id,
+    version: informe.version,
     detalle: parsedPorEmpresa.map((p) => ({
       empresaNombre: p.empresaNombre,
       cantidadMes: p.rowsMes.length,
