@@ -206,12 +206,19 @@ enum RolTipoPartida {
 // marcarse "exigeSaldoCero": son partidas que por diseño siempre deben
 // netear a cero (ej. Cuenta de Orden) — el motor de informes avisa al
 // operador si alguna vez no es así, en vez de dejarlo pasar en silencio.
+// "exposicionCambiante" es la otra alternativa a un rol fijo: sin un Rol
+// asignado (rol null), el motor decide cada período si el Rubro va al
+// Activo o al Pasivo según el signo del saldo final (Debe = Activo, Haber
+// = Pasivo) — ver resolverTipoPartida en balance-oya-report.ts. Mutuamente
+// excluyente en la práctica con exigeSaldoCero (una partida no puede a la
+// vez "siempre netear cero" y "exponerse según el signo").
 model TipoPartida {
-  codTipo        Int                  @id @default(autoincrement())
-  nomTipo        String               @unique @db.VarChar(40)
-  rol            RolTipoPartida?
-  exigeSaldoCero Boolean              @default(false)
-  partidas       PartidaPatrimonial[]
+  codTipo             Int                  @id @default(autoincrement())
+  nomTipo             String               @unique @db.VarChar(40)
+  rol                 RolTipoPartida?
+  exigeSaldoCero      Boolean              @default(false)
+  exposicionCambiante Boolean              @default(false)
+  partidas            PartidaPatrimonial[]
 }
 
 model PartidaPatrimonial {

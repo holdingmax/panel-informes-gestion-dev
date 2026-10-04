@@ -25,8 +25,9 @@ export async function createTipoPartida(formData: FormData) {
 
   const rol = parseRol(String(formData.get("rol") ?? ""));
   const exigeSaldoCero = formData.get("exigeSaldoCero") === "on";
+  const exposicionCambiante = formData.get("exposicionCambiante") === "on";
 
-  await prisma.tipoPartida.create({ data: { nomTipo, rol, exigeSaldoCero } });
+  await prisma.tipoPartida.create({ data: { nomTipo, rol, exigeSaldoCero, exposicionCambiante } });
   revalidatePath("/configuracion/tipo-partida");
   revalidatePath("/configuracion/partida-patrimonial");
 }
@@ -52,6 +53,15 @@ export async function updateTipoPartidaRol(codTipo: number, value: string) {
 export async function updateTipoPartidaExigeSaldoCero(codTipo: number, exigeSaldoCero: boolean) {
   await requireAdmin();
   await prisma.tipoPartida.update({ where: { codTipo }, data: { exigeSaldoCero } });
+  revalidatePath("/configuracion/tipo-partida");
+}
+
+export async function updateTipoPartidaExposicionCambiante(
+  codTipo: number,
+  exposicionCambiante: boolean
+) {
+  await requireAdmin();
+  await prisma.tipoPartida.update({ where: { codTipo }, data: { exposicionCambiante } });
   revalidatePath("/configuracion/tipo-partida");
 }
 

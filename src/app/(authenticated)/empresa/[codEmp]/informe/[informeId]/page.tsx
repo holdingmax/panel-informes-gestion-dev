@@ -177,13 +177,13 @@ export default async function InformeDetallePage({
         <h3 className="p-4 pb-0 text-base font-medium">
           Estado Patrimonial - Origen y Aplicación de Fondos
         </h3>
-        <table className="mt-2 w-full text-left text-sm">
+        <table className="mt-2 table-fixed text-left text-sm">
           <thead>
             <tr className="bg-[#1f3864] text-white">
-              <th className="py-2 pl-4 font-semibold">Rubro</th>
-              <th className="py-2 text-right font-semibold">{report.periodoLabel}</th>
-              <th className="py-2 text-right font-semibold">{report.periodoAnteriorLabel}</th>
-              <th className="py-2 pr-4 text-right font-semibold">Origen (Aplicación)</th>
+              <th className="w-56 py-2 pl-4 font-semibold">Rubro</th>
+              <th className="w-28 py-2 text-right font-semibold">{report.periodoLabel}</th>
+              <th className="w-28 py-2 text-right font-semibold">{report.periodoAnteriorLabel}</th>
+              <th className="w-32 py-2 pr-4 text-right font-semibold">Origen (Aplicación)</th>
             </tr>
           </thead>
           <tbody>

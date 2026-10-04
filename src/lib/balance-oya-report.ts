@@ -136,6 +136,9 @@ type RubroAgg = {
   // de siempre) de "clasificado a propósito como fuera del Balance".
   tieneTipo: boolean;
   exigeSaldoCero: boolean;
+  // Ver resolverTipoPartida: cuando es true, `tipoPartida` llega acá en
+  // null y se resuelve a ACTIVO o PASIVO según el signo de `saldoFinal`.
+  exposicionCambiante: boolean;
   saldoInicio: Prisma.Decimal;
   saldoFinal: Prisma.Decimal;
 };
@@ -166,6 +169,25 @@ function sum(values: number[]) {
 // signo mostrado.
 function origenAplicacionDe(saldoInicio: Prisma.Decimal, saldoFinal: Prisma.Decimal): Prisma.Decimal {
   return saldoInicio.minus(saldoFinal);
+}
+
+// Un Tipo de Partida "exposición cambiante" manda por sobre cualquier Rol
+// fijo que tenga configurado (el Rol queda ignorado a propósito — no tiene
+// sentido "Activo fijo" y "cambiante" a la vez): el Rubro va a Activo o
+// Pasivo según el signo del saldo final de ESTE período (Debe/positivo =
+// Activo, Haber/negativo = Pasivo, igual convención que "Origen de
+// Fondos" en origenAplicacionDe). Sin la marca, se devuelve el Rol tal
+// cual (no-op para el resto de los Rubros). Un saldo final exactamente
+// cero queda en Activo por convención (no tiene efecto en ningún total).
+function resolverTipoPartida(
+  tipoRol: "ACTIVO" | "PASIVO" | "PATRIMONIO_NETO" | "RESULTADO" | null,
+  exposicionCambiante: boolean,
+  saldoFinal: Prisma.Decimal
+): "ACTIVO" | "PASIVO" | "PATRIMONIO_NETO" | "RESULTADO" | null {
+  if (exposicionCambiante) {
+    return saldoFinal.greaterThanOrEqualTo(0) ? "ACTIVO" : "PASIVO";
+  }
+  return tipoRol;
 }
 
 function toLine(r: RubroAgg): RubroLine {
@@ -313,6 +335,7 @@ export type PlanCuentaInput = {
   tipoRol: "ACTIVO" | "PASIVO" | "PATRIMONIO_NETO" | "RESULTADO" | null;
   tieneTipo: boolean;
   exigeSaldoCero: boolean;
+  exposicionCambiante: boolean;
   categoriaOyAId: number | null;
   categoriaOyABucketNOF: "OPERATIVO" | "NO_OPERATIVO" | "FINANCIAMIENTO" | null;
   // Independiente de rubroId — decide si la cuenta aporta al "Resultado del
@@ -438,6 +461,7 @@ export function buildInformeReport(
           tipoPartida: plan.tipoRol,
           tieneTipo: plan.tieneTipo,
           exigeSaldoCero: plan.exigeSaldoCero,
+          exposicionCambiante: plan.exposicionCambiante,
           saldoInicio: new Prisma.Decimal(0),
           saldoFinal: new Prisma.Decimal(0),
         };
@@ -471,6 +495,15 @@ export function buildInformeReport(
 
   const rubros = [...rubroMap.values()];
 
+  // Resuelve los Rubros de "exposición cambiante" (Tipo sin rol fijo) a
+  // ACTIVO o PASIVO según el signo de su saldo final de este período —
+  // antes de las advertencias de abajo, para que un Rubro resuelto no
+  // dispare la de "sin Partida clasificada", y antes de armar los grupos
+  // del Balance más abajo.
+  for (const r of rubros) {
+    r.tipoPartida = resolverTipoPartida(r.tipoPartida, r.exposicionCambiante, r.saldoFinal);
+  }
+
   const EPSILON_SALDO_CERO = new Prisma.Decimal(0.01);
   for (const r of rubros) {
     if (r.tipoPartida) continue;
@@ -499,8 +532,11 @@ export function buildInformeReport(
   // Orden de exposición del ESP (Configuración → Rubro → Orden): de menor a
   // mayor, con los rubros sin orden asignado al final en el orden en que se
   // insertaron. Solo afecta el orden visual del Balance — el resto del
-  // informe no depende de esto.
+  // informe no depende de esto. Los Rubros de "exposición cambiante" van
+  // siempre al final de su bucket (Activo o Pasivo), sea cual sea su
+  // Orden configurado.
   function porOrdenDeExposicion(a: RubroAgg, b: RubroAgg): number {
+    if (a.exposicionCambiante !== b.exposicionCambiante) return a.exposicionCambiante ? 1 : -1;
     if (a.orden !== null && b.orden !== null) return a.orden - b.orden;
     if (a.orden !== null) return -1;
     if (b.orden !== null) return 1;
@@ -745,6 +781,7 @@ export async function buildEmpresaBalanceInputs(
         tipoRol: p.rubro?.partidaPatrimonial?.tipo?.rol ?? null,
         tieneTipo: p.rubro?.partidaPatrimonial?.tipo != null,
         exigeSaldoCero: p.rubro?.partidaPatrimonial?.tipo?.exigeSaldoCero ?? false,
+        exposicionCambiante: p.rubro?.partidaPatrimonial?.tipo?.exposicionCambiante ?? false,
         categoriaOyAId: p.categoriaOyAId,
         categoriaOyABucketNOF: p.categoriaOyA?.bucketNOF ?? null,
         subrubroId: p.subrubroId,
@@ -854,33 +891,48 @@ export async function getDetalleRubro(informeId: string, codRubro: number): Prom
 
   if (informe.snapshot) {
     const snapshot = informe.snapshot as unknown as InformeSnapshot;
-    let tipoPartida: "ACTIVO" | "PASIVO" | "PATRIMONIO_NETO" | "RESULTADO" | null = null;
-    const cuentas: DetalleRubroCuenta[] = [];
+    let tipoRolEstatico: "ACTIVO" | "PASIVO" | "PATRIMONIO_NETO" | "RESULTADO" | null = null;
+    let exposicionCambiante = false;
+    let totalRawFinal = new Prisma.Decimal(0);
+    const crudas: (Omit<DetalleRubroCuenta, "saldoInicio" | "saldoFinal"> & {
+      saldoInicioRaw: number;
+      saldoFinalRaw: number;
+    })[] = [];
 
     for (const empresa of snapshot.esp.empresas) {
       const porCuenta = new Map(empresa.planDeCuentas.map((p) => [normalizeCuenta(p.cuenta), p]));
       for (const b of empresa.balances) {
         const plan = porCuenta.get(normalizeCuenta(b.cuenta));
         if (!plan || plan.rubroId !== codRubro) continue;
-        if (!tipoPartida) tipoPartida = plan.tipoRol;
+        // Mismo Rubro → misma Partida → mismo Tipo para todas las cuentas
+        // acá adentro, así que da igual de cuál se toma.
+        tipoRolEstatico = plan.tipoRol;
+        exposicionCambiante = plan.exposicionCambiante;
 
-        cuentas.push({
+        const saldoFinalRaw = round2(new Prisma.Decimal(b.saldoCierreDebe).minus(b.saldoCierreHaber));
+        totalRawFinal = totalRawFinal.plus(saldoFinalRaw);
+        crudas.push({
           planDeCuentaId: null,
           empresaNombre: empresa.nombreEmp,
           cuenta: b.cuenta,
-          saldoInicio: exponerSegunTipo(
-            tipoPartida,
-            round2(new Prisma.Decimal(b.saldoIniDebe).minus(b.saldoIniHaber))
-          ),
-          saldoFinal: exponerSegunTipo(
-            tipoPartida,
-            round2(new Prisma.Decimal(b.saldoCierreDebe).minus(b.saldoCierreHaber))
-          ),
+          saldoInicioRaw: round2(new Prisma.Decimal(b.saldoIniDebe).minus(b.saldoIniHaber)),
+          saldoFinalRaw,
           rubroId: plan.rubroId!,
           nomRubro: plan.nomRubro!,
         });
       }
     }
+
+    const tipoPartida = resolverTipoPartida(tipoRolEstatico, exposicionCambiante, totalRawFinal);
+    const cuentas: DetalleRubroCuenta[] = crudas.map((c) => ({
+      planDeCuentaId: c.planDeCuentaId,
+      empresaNombre: c.empresaNombre,
+      cuenta: c.cuenta,
+      saldoInicio: exponerSegunTipo(tipoPartida, c.saldoInicioRaw),
+      saldoFinal: exponerSegunTipo(tipoPartida, c.saldoFinalRaw),
+      rubroId: c.rubroId,
+      nomRubro: c.nomRubro,
+    }));
 
     return {
       codRubro,
@@ -895,7 +947,9 @@ export async function getDetalleRubro(informeId: string, codRubro: number): Prom
   const empresas = await prisma.empresa.findMany({ where: { unidadNegocioId: informe.unidadNegocioId } });
 
   const cuentas: DetalleRubroCuenta[] = [];
-  let tipoPartida: "ACTIVO" | "PASIVO" | "PATRIMONIO_NETO" | "RESULTADO" | null = null;
+  let tipoRolEstatico: "ACTIVO" | "PASIVO" | "PATRIMONIO_NETO" | "RESULTADO" | null = null;
+  let exposicionCambiante = false;
+  let totalRawFinal = new Prisma.Decimal(0);
 
   for (const empresa of empresas) {
     const ultimoAcumulado = await prisma.balanceSumasYSaldos.findFirst({
@@ -930,20 +984,26 @@ export async function getDetalleRubro(informeId: string, codRubro: number): Prom
     for (const b of balances) {
       const plan = porCuenta.get(normalizeCuenta(b.cuenta));
       if (!plan) continue;
-      if (!tipoPartida) tipoPartida = plan.rubro!.partidaPatrimonial?.tipo?.rol ?? null;
+      // Mismo Rubro → misma Partida → mismo Tipo para todas las cuentas
+      // acá adentro, así que da igual de cuál se toma.
+      tipoRolEstatico = plan.rubro!.partidaPatrimonial?.tipo?.rol ?? null;
+      exposicionCambiante = plan.rubro!.partidaPatrimonial?.tipo?.exposicionCambiante ?? false;
 
+      const saldoFinal = round2(new Prisma.Decimal(b.saldoCierreDebe).minus(b.saldoCierreHaber));
+      totalRawFinal = totalRawFinal.plus(saldoFinal);
       cuentas.push({
         planDeCuentaId: plan.id,
         empresaNombre: empresa.nombreEmp,
         cuenta: b.cuenta,
         saldoInicio: round2(new Prisma.Decimal(b.saldoIniDebe).minus(b.saldoIniHaber)),
-        saldoFinal: round2(new Prisma.Decimal(b.saldoCierreDebe).minus(b.saldoCierreHaber)),
+        saldoFinal,
         rubroId: plan.rubroId!,
         nomRubro: plan.rubro!.nomRubro,
       });
     }
   }
 
+  const tipoPartida = resolverTipoPartida(tipoRolEstatico, exposicionCambiante, totalRawFinal);
   const cuentasExpuestas = cuentas.map((c) => ({
     ...c,
     saldoInicio: exponerSegunTipo(tipoPartida, c.saldoInicio),

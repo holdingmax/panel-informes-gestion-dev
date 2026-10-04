@@ -95,16 +95,16 @@ function CuadroResultado({
   return (
     <section className="rounded-lg bg-white shadow">
       <h3 className="p-4 pb-0 text-base font-medium">{titulo}</h3>
-      <table className="mt-2 w-full text-left text-sm">
+      <table className="mt-2 table-fixed text-left text-sm">
         <thead>
           <tr className="bg-[#1f3864] text-white">
-            <th className="py-2 pl-4 font-semibold">Rubro</th>
+            <th className="w-44 py-2 pl-4 font-semibold">Rubro</th>
             {columnas.map((c) => (
-              <th key={c.label} className="py-2 text-right font-semibold">
+              <th key={c.label} className="w-24 py-2 text-right font-semibold">
                 {c.label}
               </th>
             ))}
-            <th className="py-2 pr-4 text-center font-semibold">Tend.</th>
+            <th className="w-16 py-2 pr-4 text-center font-semibold">Tend.</th>
           </tr>
         </thead>
         <tbody>

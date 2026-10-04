@@ -25,6 +25,7 @@ function plan(overrides: Partial<PlanCuentaInput> & Pick<PlanCuentaInput, "cuent
     rubroOrden: null,
     tieneTipo: true,
     exigeSaldoCero: false,
+    exposicionCambiante: false,
     categoriaOyAId: null,
     categoriaOyABucketNOF: null,
     subrubroId: null,
@@ -232,6 +233,112 @@ describe("buildInformeReport — advertencias", () => {
     expect(
       report.advertencias.some((a) => a.includes("no está clasificada en el Plan de Cuentas"))
     ).toBe(true);
+  });
+});
+
+describe("buildInformeReport — exposición cambiante", () => {
+  it("Tipo sin rol con exposición cambiante y saldo deudor: el Rubro cae en Activo", () => {
+    const empresas = [
+      empresa(
+        [saldo("SALDO A FAVOR", 0, 0, 100, 0)],
+        [
+          plan({
+            cuenta: "SALDO A FAVOR",
+            rubroId: 10,
+            nomRubro: "IVA Neto",
+            tipoRol: null,
+            exposicionCambiante: true,
+          }),
+        ]
+      ),
+    ];
+
+    const report = buildInformeReport(PERIODO, empresas);
+
+    expect(report.balance.activo).toHaveLength(1);
+    expect(report.balance.activo[0].nombre).toBe("IVA Neto");
+    expect(report.balance.activo[0].saldoFinal).toBe(100);
+    expect(report.balance.pasivo).toHaveLength(0);
+  });
+
+  it("Tipo sin rol con exposición cambiante y saldo acreedor: el Rubro cae en Pasivo", () => {
+    const empresas = [
+      empresa(
+        [saldo("SALDO A FAVOR", 0, 0, 0, 100)],
+        [
+          plan({
+            cuenta: "SALDO A FAVOR",
+            rubroId: 10,
+            nomRubro: "IVA Neto",
+            tipoRol: null,
+            exposicionCambiante: true,
+          }),
+        ]
+      ),
+    ];
+
+    const report = buildInformeReport(PERIODO, empresas);
+
+    expect(report.balance.pasivo).toHaveLength(1);
+    expect(report.balance.pasivo[0].nombre).toBe("IVA Neto");
+    expect(report.balance.pasivo[0].saldoFinal).toBe(100);
+    expect(report.balance.activo).toHaveLength(0);
+  });
+
+  it("exposición cambiante ignora cualquier Rol fijo configurado (ej. Intercompanies con Rol=ACTIVO)", () => {
+    const empresas = [
+      empresa(
+        [saldo("INTERCOMPANIES", 0, 0, 0, 5869)],
+        [
+          plan({
+            cuenta: "INTERCOMPANIES",
+            rubroId: 11,
+            nomRubro: "Intercompanies",
+            tipoRol: "ACTIVO",
+            exposicionCambiante: true,
+          }),
+        ]
+      ),
+    ];
+
+    const report = buildInformeReport(PERIODO, empresas);
+
+    expect(report.balance.activo).toHaveLength(0);
+    expect(report.balance.pasivo).toHaveLength(1);
+    expect(report.balance.pasivo[0].nombre).toBe("Intercompanies");
+    expect(report.balance.pasivo[0].saldoFinal).toBe(5869);
+  });
+
+  it("Rubro de exposición cambiante: queda al final del bucket aunque su Orden sea menor", () => {
+    const empresas = [
+      empresa(
+        [
+          saldo("CAJA", 100, 0, 150, 0),
+          saldo("SALDO A FAVOR", 0, 0, 50, 0),
+        ],
+        [
+          plan({
+            cuenta: "CAJA",
+            rubroId: 1,
+            nomRubro: "Disponibilidades",
+            tipoRol: "ACTIVO",
+            rubroOrden: 5,
+          }),
+          plan({
+            cuenta: "SALDO A FAVOR",
+            rubroId: 10,
+            nomRubro: "IVA Neto",
+            tipoRol: null,
+            exposicionCambiante: true,
+            rubroOrden: 1,
+          }),
+        ]
+      ),
+    ];
+
+    const report = buildInformeReport(PERIODO, empresas);
+
+    expect(report.balance.activo.map((l) => l.nombre)).toEqual(["Disponibilidades", "IVA Neto"]);
   });
 });
 

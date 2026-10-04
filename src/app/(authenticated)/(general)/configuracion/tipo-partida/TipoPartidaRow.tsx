@@ -5,6 +5,7 @@ import {
   updateTipoPartidaNombre,
   updateTipoPartidaRol,
   updateTipoPartidaExigeSaldoCero,
+  updateTipoPartidaExposicionCambiante,
   checkDeleteTipoPartida,
   deleteTipoPartida,
 } from "@/lib/tipo-partida-actions";
@@ -15,12 +16,14 @@ export function TipoPartidaRow({
   nomTipo,
   rol,
   exigeSaldoCero,
+  exposicionCambiante,
   isAdmin,
 }: {
   codTipo: number;
   nomTipo: string;
   rol: string | null;
   exigeSaldoCero: boolean;
+  exposicionCambiante: boolean;
   isAdmin: boolean;
 }) {
   const [pending, startTransition] = useTransition();
@@ -75,6 +78,17 @@ export function TipoPartidaRow({
           disabled={pending || !isAdmin}
           onChange={(e) =>
             startTransition(() => updateTipoPartidaExigeSaldoCero(codTipo, e.target.checked))
+          }
+          className="h-5 w-5"
+        />
+      </td>
+      <td className="py-2 pr-4">
+        <input
+          type="checkbox"
+          defaultChecked={exposicionCambiante}
+          disabled={pending || !isAdmin}
+          onChange={(e) =>
+            startTransition(() => updateTipoPartidaExposicionCambiante(codTipo, e.target.checked))
           }
           className="h-5 w-5"
         />
