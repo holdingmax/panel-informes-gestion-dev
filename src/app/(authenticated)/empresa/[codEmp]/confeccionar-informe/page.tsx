@@ -1,12 +1,19 @@
 import { prisma } from "@/lib/prisma";
 import { listEmpresasDeUnidad } from "@/lib/empresa-actions";
 import { listPlanDeCuentasPorEmpresas } from "@/lib/plan-de-cuentas-actions";
+import { getUltimoInformeDePeriodo } from "@/lib/informe-actions";
 import { BsysUploadForm } from "../BsysUploadForm";
+import { AuditadoToggle } from "./AuditadoToggle";
 
 export const dynamic = "force-dynamic";
 
 const MESES_ABREV = [
   "ene", "feb", "mar", "abr", "may", "jun", "jul", "ago", "sep", "oct", "nov", "dic",
+];
+
+const MESES = [
+  "Enero", "Febrero", "Marzo", "Abril", "Mayo", "Junio",
+  "Julio", "Agosto", "Septiembre", "Octubre", "Noviembre", "Diciembre",
 ];
 
 async function ultimaCargaInfo(empresaId: number, tipo: "MES" | "ACUMULADO") {
@@ -25,11 +32,18 @@ async function ultimaCargaInfo(empresaId: number, tipo: "MES" | "ACUMULADO") {
 
 export default async function ConfeccionarInformePage({
   params,
+  searchParams,
 }: {
   params: Promise<{ codEmp: string }>;
+  searchParams: Promise<{ auditadoMes?: string; auditadoAnio?: string }>;
 }) {
   const { codEmp } = await params;
   const unidadNegocioId = Number(codEmp);
+  const now0 = new Date();
+  const sp = await searchParams;
+  const auditadoMes = Number(sp.auditadoMes) || now0.getMonth() + 1;
+  const auditadoAnio = Number(sp.auditadoAnio) || now0.getFullYear();
+  const informeDelPeriodo = await getUltimoInformeDePeriodo(unidadNegocioId, auditadoMes, auditadoAnio);
 
   const empresas = await listEmpresasDeUnidad(unidadNegocioId);
 
@@ -83,6 +97,47 @@ export default async function ConfeccionarInformePage({
           contable (Mes y Acumulado) de cada empresa vinculada a esta unidad de negocio para ese
           período. Cada cuenta se valida contra el Plan de Cuentas de su propia empresa.
         </p>
+      </div>
+
+      <div className="rounded border border-slate-200 p-3">
+        <p className="mb-2 text-sm font-medium">Auditado (controla el recuadro del PDF)</p>
+        <form method="GET" className="flex items-end gap-3">
+          <label className="flex flex-col gap-1">
+            <span className="text-sm">Mes</span>
+            <select name="auditadoMes" defaultValue={auditadoMes} className="rounded border px-3 py-2">
+              {MESES.map((m, i) => (
+                <option key={i + 1} value={i + 1}>
+                  {m}
+                </option>
+              ))}
+            </select>
+          </label>
+          <label className="flex flex-col gap-1">
+            <span className="text-sm">Año</span>
+            <input
+              name="auditadoAnio"
+              type="number"
+              defaultValue={auditadoAnio}
+              className="w-24 rounded border px-3 py-2"
+            />
+          </label>
+          <button
+            type="submit"
+            className="rounded-md border border-slate-300 px-3 py-2 text-sm text-slate-700 hover:bg-slate-50"
+          >
+            Ver
+          </button>
+        </form>
+
+        {informeDelPeriodo ? (
+          <div className="mt-3">
+            <AuditadoToggle informeId={informeDelPeriodo.id} auditado={informeDelPeriodo.auditado} />
+          </div>
+        ) : (
+          <p className="mt-3 text-sm text-zinc-500">
+            Todavía no hay un informe para {MESES[auditadoMes - 1]} {auditadoAnio}.
+          </p>
+        )}
       </div>
 
       {periodosQueVersionarian.length > 0 && (

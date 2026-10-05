@@ -72,6 +72,9 @@ export type InformeReport = {
   // 1 = original, nunca se muestra en la UI; 2+ se muestra como "versión X"
   // (ver bsys-import.ts).
   version: number;
+  // Independiente de `estado` (ver Informe.auditado en el schema) — mientras
+  // sea false, el PDF muestra el recuadro "INFORME PROVISORIO" en cada hoja.
+  auditado: boolean;
   fechaCargaAcumulado: Date | null;
   balance: {
     activo: RubroLine[];
@@ -356,7 +359,13 @@ export type EmpresaBalanceInput = {
 
 export type InformeReportCore = Omit<
   InformeReport,
-  "informeId" | "unidadNegocioId" | "unidadNegocioNombre" | "estado" | "version" | "fechaCargaAcumulado"
+  | "informeId"
+  | "unidadNegocioId"
+  | "unidadNegocioNombre"
+  | "estado"
+  | "version"
+  | "auditado"
+  | "fechaCargaAcumulado"
 >;
 
 // Lo que se congela al aprobar un informe (avanzarEstadoInforme) — una sola
@@ -814,6 +823,7 @@ export async function computeInformeReport(informeId: string): Promise<InformeRe
       unidadNegocioNombre: informe.unidadNegocio.nombreUnidad,
       estado: informe.estado,
       version: informe.version,
+      auditado: informe.auditado,
       fechaCargaAcumulado: snapshot.esp.fechaCargaAcumulado
         ? new Date(snapshot.esp.fechaCargaAcumulado)
         : null,
@@ -839,6 +849,7 @@ export async function computeInformeReport(informeId: string): Promise<InformeRe
     unidadNegocioNombre: informe.unidadNegocio.nombreUnidad,
     estado: informe.estado,
     version: informe.version,
+    auditado: informe.auditado,
     fechaCargaAcumulado,
     ...core,
   };

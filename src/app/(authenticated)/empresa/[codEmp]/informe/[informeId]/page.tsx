@@ -113,6 +113,40 @@ function OrigenAplicacionRows({ rows }: { rows: RubroLine[] }) {
   );
 }
 
+// "Resultados Acumulados" (resultadoDelPeriodo + resultadoInicioNoDistribuido,
+// siempre un Origen — ver origenAplicacionDe en balance-oya-report.ts) tiene
+// que quedar en la MISMA columna que el resto de los Orígenes, para que su
+// importe esté en línea vertical con los que arman el Total de Orígenes de
+// abajo — antes se mostraba en una tabla aparte, desalineada de esa columna.
+function ResultadosAcumuladosRows({
+  resultadoDelPeriodo,
+  resultadoInicioNoDistribuido,
+  resultadosAcumuladosSDifPatrimonial,
+}: {
+  resultadoDelPeriodo: number;
+  resultadoInicioNoDistribuido: number;
+  resultadosAcumuladosSDifPatrimonial: number;
+}) {
+  return (
+    <>
+      <tr className="bg-blue-50">
+        <td className="py-1">Resultados Acumulados S/Indicadores</td>
+        <td className="py-1 text-right">{fmtParen(resultadoDelPeriodo)}</td>
+      </tr>
+      {resultadoInicioNoDistribuido !== 0 && (
+        <tr className="bg-blue-50">
+          <td className="py-1">Resultado no distribuido al inicio del ejercicio</td>
+          <td className="py-1 text-right">{fmtParen(resultadoInicioNoDistribuido)}</td>
+        </tr>
+      )}
+      <tr className="border-t border-zinc-400 bg-blue-50 font-semibold">
+        <td className="py-1">Resultados Acumulados S/Dif. Patrimonial</td>
+        <td className="py-1 text-right">{fmtParen(resultadosAcumuladosSDifPatrimonial)}</td>
+      </tr>
+    </>
+  );
+}
+
 export default async function InformeDetallePage({
   params,
   searchParams,
@@ -221,32 +255,16 @@ export default async function InformeDetallePage({
       <section className="rounded-lg bg-white p-4 shadow">
         <h3 className="text-base font-medium">Estado de Origen y Aplicación de Fondos</h3>
 
-        <table className="mt-3 w-full max-w-md text-left text-sm">
-          <tbody>
-            <tr className="bg-blue-50">
-              <td className="py-1 pl-2 font-medium">Resultados Acumulados S/Indicadores</td>
-              <td className="py-1 pr-2 text-right font-medium">{fmtParen(resultadoDelPeriodo)}</td>
-            </tr>
-            {resultadoInicioNoDistribuido !== 0 && (
-              <tr className="bg-blue-50">
-                <td className="py-1 pl-2">Resultado no distribuido al inicio del ejercicio</td>
-                <td className="py-1 pr-2 text-right">{fmtParen(resultadoInicioNoDistribuido)}</td>
-              </tr>
-            )}
-            <tr className="border-t border-zinc-400 bg-blue-50 font-semibold">
-              <td className="py-1 pl-2">Resultados Acumulados S/Dif. Patrimonial</td>
-              <td className="py-1 pr-2 text-right">
-                {fmtParen(resultadosAcumuladosSDifPatrimonial)}
-              </td>
-            </tr>
-          </tbody>
-        </table>
-
         <div className="mt-4 grid grid-cols-1 gap-8 md:grid-cols-2">
           <div>
             <h4 className="border-b pb-1 text-sm font-medium">Orígenes de Fondos</h4>
             <table className="w-full text-left text-sm">
               <tbody>
+                <ResultadosAcumuladosRows
+                  resultadoDelPeriodo={resultadoDelPeriodo}
+                  resultadoInicioNoDistribuido={resultadoInicioNoDistribuido}
+                  resultadosAcumuladosSDifPatrimonial={resultadosAcumuladosSDifPatrimonial}
+                />
                 <OrigenAplicacionRows rows={origenAplicacion.origenes} />
               </tbody>
             </table>

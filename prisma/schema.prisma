@@ -142,6 +142,11 @@ model Informe {
   // UI; 2+ se muestra como "versión X".
   version         Int           @default(1)
   estado          EstadoInforme @default(PROCESO)
+  // Independiente de `estado`: un informe puede estar Aprobado pero todavía
+  // no pasó la auditoría externa. Mientras sea false, el PDF muestra el
+  // recuadro "INFORME PROVISORIO" en todas las hojas (ver informe-pdf.tsx).
+  // Default false — el operador lo marca manualmente una vez que audita.
+  auditado        Boolean       @default(false)
   // Se completa al pasar a APROBADO (ver avanzarEstadoInforme) y nunca se
   // vuelve a tocar — null significa que el informe todavía se recalcula en
   // vivo contra el Plan de Cuentas actual. Ver computeInformeReport.

@@ -2,6 +2,7 @@ import { renderToBuffer } from "@react-pdf/renderer";
 import { auth } from "@/auth";
 import { prisma } from "@/lib/prisma";
 import { computeInformeReport } from "@/lib/balance-oya-report";
+import { computeResultadoCuadro } from "@/lib/resultado-cuadro";
 import { InformePDF } from "@/lib/informe-pdf";
 
 export async function GET(
@@ -20,8 +21,11 @@ export async function GET(
     return new Response("El informe todavía no fue aprobado.", { status: 403 });
   }
 
-  const report = await computeInformeReport(informeId);
-  const buffer = await renderToBuffer(InformePDF({ report }));
+  const [report, cuadro] = await Promise.all([
+    computeInformeReport(informeId),
+    computeResultadoCuadro(informeId),
+  ]);
+  const buffer = await renderToBuffer(InformePDF({ report, cuadro }));
 
   return new Response(new Uint8Array(buffer), {
     headers: {
