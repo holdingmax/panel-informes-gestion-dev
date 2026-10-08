@@ -3,7 +3,9 @@ import { normalizeCuenta } from "@/lib/cuenta-normalize";
 
 const EPSILON = 0.02;
 
-export type RefundicionResult = { success: true; rows: BsysRawRow[] } | { error: string };
+export type RefundicionResult =
+  | { success: true; rows: BsysRawRow[]; advertencia?: string }
+  | { error: string };
 
 function netoInicio(r: BsysRawRow): number {
   return r.saldoIniDebe - r.saldoIniHaber;
@@ -54,8 +56,17 @@ export function aplicarRefundicion(rows: BsysRawRow[], cuentaRNA: string): Refun
     r.saldoCierreHaber = haber;
   }
 
+  // No es un error: el sistema contable de origen ya pudo haber posteado el
+  // asiento de cierre antes de exportar (todas las 4.x/5.x ya en cero) — la
+  // refundición simplemente no tiene nada para mover. Se informa y se deja
+  // avanzar la carga tal cual vino el archivo, sin tocar la cuenta de RNA.
   if (totalNetOriginal === 0) {
-    return { error: "No se encontraron cuentas de Ingresos (4.x) o Egresos (5.x) con saldo de inicio distinto de cero — no hay nada para refundir." };
+    return {
+      success: true,
+      rows,
+      advertencia:
+        "No se encontraron cuentas de Ingresos (4.x) o Egresos (5.x) con saldo de inicio distinto de cero — el asiento de cierre ya estaba posteado, no había nada para refundir.",
+    };
   }
 
   let filaRNA = resultado.find((r) => normalizeCuenta(r.cuenta) === cuentaRNANormalizada);

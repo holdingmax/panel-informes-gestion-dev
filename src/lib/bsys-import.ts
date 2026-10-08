@@ -55,6 +55,7 @@ type ImportBsysResult =
       informeId: string;
       version: number;
       detalle: { empresaNombre: string; cantidadMes: number; cantidadAcumulado: number }[];
+      advertencias?: string[];
     }
   | { error: string; empresaNombre?: string; cuentasFaltantes?: string[] };
 
@@ -70,6 +71,11 @@ export async function importBsysCombinado(formData: FormData): Promise<ImportBsy
   const periodoAnio = Number(formData.get("periodoAnio"));
   const empresaIds = formData.getAll("empresaId").map(Number);
   const refundicionPendiente = formData.get("refundicionPendiente") === "on";
+  // Independiente del estado del informe — ver Informe.auditado. Default
+  // "No" si el operador no tocó el control (mismo criterio que
+  // refundicionPendiente): cada carga de BSyS vuelve a fijar este valor,
+  // no es un interruptor que se mantenga solo.
+  const auditado = formData.get("auditadoChoice") === "si";
 
   if (!Number.isInteger(periodoMes) || periodoMes < 1 || periodoMes > 12) {
     return { error: "Mes inválido." };
@@ -131,6 +137,7 @@ export async function importBsysCombinado(formData: FormData): Promise<ImportBsy
     rowsAcumulado: BsysRawRow[];
   };
   const parsedPorEmpresa: Parsed[] = [];
+  const advertencias: string[] = [];
 
   for (const empresa of empresas) {
     const archivoMes = formData.get(`archivoMes_${empresa.codEmp}`);
@@ -190,6 +197,9 @@ export async function importBsysCombinado(formData: FormData): Promise<ImportBsy
         return { error: `Refundición de "${empresa.nombreEmp}": ${refundicion.error}` };
       }
       rowsAcumulado = refundicion.rows;
+      if (refundicion.advertencia) {
+        advertencias.push(`Refundición de "${empresa.nombreEmp}": ${refundicion.advertencia}`);
+      }
     }
 
     // Se compara por forma normalizada (mayúsculas/espacios): el mismo nombre
@@ -272,12 +282,12 @@ export async function importBsysCombinado(formData: FormData): Promise<ImportBsy
     });
     let informe: { id: string; version: number };
     if (!actual) {
-      informe = await tx.informe.create({ data: { unidadNegocioId, periodoMes, periodoAnio } });
+      informe = await tx.informe.create({ data: { unidadNegocioId, periodoMes, periodoAnio, auditado } });
     } else if (actual.estado !== "APROBADO") {
-      informe = actual;
+      informe = await tx.informe.update({ where: { id: actual.id }, data: { auditado } });
     } else {
       informe = await tx.informe.create({
-        data: { unidadNegocioId, periodoMes, periodoAnio, version: actual.version + 1 },
+        data: { unidadNegocioId, periodoMes, periodoAnio, version: actual.version + 1, auditado },
       });
     }
     return informe;
@@ -295,5 +305,6 @@ export async function importBsysCombinado(formData: FormData): Promise<ImportBsy
       cantidadMes: p.rowsMes.length,
       cantidadAcumulado: p.rowsAcumulado.length,
     })),
+    ...(advertencias.length > 0 ? { advertencias } : {}),
   };
 }

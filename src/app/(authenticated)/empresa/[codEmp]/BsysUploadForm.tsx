@@ -12,6 +12,7 @@ type ImportState = {
   informeId?: string;
   version?: number;
   detalle?: { empresaNombre: string; cantidadMes: number; cantidadAcumulado: number }[];
+  advertencias?: string[];
 } | null;
 
 type EmpresaDeUnidad = { codEmp: number; nombreEmp: string };
@@ -30,6 +31,7 @@ export function BsysUploadForm({
     null
   );
   const [refundicionPendiente, setRefundicionPendiente] = useState(false);
+  const [auditado, setAuditado] = useState(false);
 
   const now = new Date();
 
@@ -167,6 +169,37 @@ export function BsysUploadForm({
           )}
         </fieldset>
 
+        <fieldset className="flex flex-col gap-3 rounded border border-slate-200 p-3">
+          <legend className="px-1 text-sm font-medium">Auditado</legend>
+          <p className="text-xs text-zinc-500">
+            Mientras esté en &quot;No&quot;, el PDF del informe muestra el recuadro
+            &quot;INFORME PROVISORIO&quot; en todas las hojas. Marcá &quot;Sí&quot; una vez que el
+            informe de Auditoría ya revisó este período.
+          </p>
+          <div className="flex items-center gap-4">
+            <label className="flex items-center gap-2 text-sm">
+              <input
+                type="radio"
+                name="auditadoChoice"
+                value="no"
+                checked={!auditado}
+                onChange={() => setAuditado(false)}
+              />
+              <span>No</span>
+            </label>
+            <label className="flex items-center gap-2 text-sm">
+              <input
+                type="radio"
+                name="auditadoChoice"
+                value="si"
+                checked={auditado}
+                onChange={() => setAuditado(true)}
+              />
+              <span>Sí</span>
+            </label>
+          </div>
+        </fieldset>
+
         <button
           type="submit"
           disabled={pending}
@@ -191,6 +224,13 @@ export function BsysUploadForm({
               </li>
             ))}
           </ul>
+          {state.advertencias && state.advertencias.length > 0 && (
+            <ul className="list-disc rounded border border-amber-400 bg-amber-50 p-3 pl-8 text-amber-800">
+              {state.advertencias.map((a, i) => (
+                <li key={i}>{a}</li>
+              ))}
+            </ul>
+          )}
           <div className="flex items-center gap-3">
             <button
               type="button"

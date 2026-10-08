@@ -107,8 +107,10 @@ const styles = StyleSheet.create({
   erRowLabel: { flex: 2 },
   erRowValue: { flex: 1, textAlign: "right" },
   erRowNegrita: { fontWeight: 700 },
-  erTendenciaSube: { color: COLOR_TENDENCIA_SUBE },
-  erTendenciaBaja: { color: COLOR_TENDENCIA_BAJA },
+  // 40% más grande que el texto base de la fila (9pt) para que se note más
+  // a simple vista.
+  erTendenciaSube: { color: COLOR_TENDENCIA_SUBE, fontSize: 13 },
+  erTendenciaBaja: { color: COLOR_TENDENCIA_BAJA, fontSize: 13 },
 });
 
 function fmt(n: number) {

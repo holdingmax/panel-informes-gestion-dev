@@ -16,37 +16,6 @@ export async function listInformes(unidadNegocioId: number) {
   });
 }
 
-// Busca la última versión del informe de un período puntual (para la
-// pantalla Confeccionar Informe → control "Auditado", que necesita saber
-// si ya existe un informe para el período elegido antes de poder tocarlo).
-export async function getUltimoInformeDePeriodo(
-  unidadNegocioId: number,
-  periodoMes: number,
-  periodoAnio: number
-) {
-  await requireUser();
-  return prisma.informe.findFirst({
-    where: { unidadNegocioId, periodoMes, periodoAnio },
-    orderBy: { version: "desc" },
-    select: { id: true, version: true, estado: true, auditado: true },
-  });
-}
-
-// "Auditado" es independiente del estado (Proceso/En Revisión/Aprobado):
-// un informe Aprobado puede seguir "provisorio" (sin auditar) hasta que la
-// auditoría externa lo confirme — ver el recuadro "INFORME PROVISORIO" en
-// informe-pdf.tsx. Default false al crear el informe; el operador lo
-// marca "Sí" manualmente desde Confeccionar Informe cuando corresponde.
-export async function updateInformeAuditado(informeId: string, auditado: boolean) {
-  const informe = await prisma.informe.findUniqueOrThrow({ where: { id: informeId } });
-  await requireAccesoUnidad(informe.unidadNegocioId);
-
-  await prisma.informe.update({ where: { id: informeId }, data: { auditado } });
-  revalidatePath(`/empresa/${informe.unidadNegocioId}/confeccionar-informe`);
-  revalidatePath(`/empresa/${informe.unidadNegocioId}/informe/${informeId}`);
-  revalidatePath(`/consulta/${informe.unidadNegocioId}`);
-}
-
 // Para la pantalla Consulta (todas las versiones, todos los períodos,
 // ordenado por fecha de confección) — incluye el resumen de adjuntos
 // (nunca `contenido`, ver /api/adjuntos/informe/[id] para la descarga).
