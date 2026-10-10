@@ -4,6 +4,7 @@ import { permisosDeUnidad } from "@/lib/authz";
 import { InformeActions } from "./InformeActions";
 import { RubroRowActions } from "./RubroRowActions";
 import { AvisoCuentasSinClasificar } from "./AvisoCuentasSinClasificar";
+import { ActualizarButton } from "@/components/ActualizarButton";
 
 export const dynamic = "force-dynamic";
 
@@ -178,13 +179,16 @@ export default async function InformeDetallePage({
           Informe {MESES[report.periodoMes - 1]} {report.periodoAnio}
           {report.version > 1 && ` — versión ${report.version}`} — {report.unidadNegocioNombre}
         </h2>
-        <InformeActions
-          informeId={report.informeId}
-          estado={report.estado}
-          puedeRevisar={permisos.puedeRevisar}
-          puedeAprobar={permisos.puedeAprobar}
-          soloLectura={soloLectura}
-        />
+        <div className="flex items-center gap-4">
+          <ActualizarButton />
+          <InformeActions
+            informeId={report.informeId}
+            estado={report.estado}
+            puedeRevisar={permisos.puedeRevisar}
+            puedeAprobar={permisos.puedeAprobar}
+            soloLectura={soloLectura}
+          />
+        </div>
       </div>
 
       {report.advertencias.length > 0 && (

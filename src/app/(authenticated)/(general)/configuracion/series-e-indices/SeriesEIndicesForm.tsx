@@ -32,25 +32,27 @@ export function SeriesEIndicesForm({
         />
       </label>
       <label className="flex flex-col gap-1">
-        <span className="text-lg">Índice</span>
+        <span className="text-lg">Índice (opcional — solo si alguna Empresa tiene &quot;Actualiza&quot; en Sí)</span>
         <input
           name="indice"
           type="number"
           step="0.000001"
-          required
           className="rounded border px-3 py-2 text-lg"
         />
       </label>
       <label className="flex flex-col gap-1">
-        <span className="text-lg">Dólar</span>
+        <span className="text-lg">Dólar (opcional — solo si alguna Empresa tiene Moneda secundaria)</span>
         <input
           name="dolar"
           type="number"
           step="0.0001"
-          required
           className="rounded border px-3 py-2 text-lg"
         />
       </label>
+      <p className="text-sm text-zinc-500">
+        Si ya hay otros períodos con Índice o Dólar cargado, tenés que completarlo acá también —
+        o dejarlo vacío en todos los períodos de la tabla si no corresponde usarlo.
+      </p>
 
       <button
         type="submit"

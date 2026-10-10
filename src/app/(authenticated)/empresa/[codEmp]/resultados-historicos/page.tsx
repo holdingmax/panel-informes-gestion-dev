@@ -24,7 +24,7 @@ export default async function ResultadosHistoricosPage({
       <div>
         <h2 className="text-lg font-medium">Resultados Históricos</h2>
         <p className="mt-1 text-sm text-zinc-600">
-          Valores nominales por mes que alimentan los cuadros de ER y Cuadros (Ventas, Costos
+          Valores nominales por mes que alimentan los cuadros de ER y de Cuadros (Ventas, Costos
           Directos, Gastos Operativos, Expensas y Otras Ganancias y Pérdidas). Se cargan a mano
           para períodos anteriores al sistema, y automáticamente al aprobar cada informe.
           &quot;Resultado Neto&quot; es la suma de los 5 campos, solo a modo de control visual.

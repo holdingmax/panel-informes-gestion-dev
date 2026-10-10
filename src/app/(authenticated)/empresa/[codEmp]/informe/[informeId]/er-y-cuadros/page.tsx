@@ -3,6 +3,7 @@ import { formatPeriodoAbrev } from "@/lib/balance-oya-report";
 import { getCuentasSinSubrubro, type ResultadoNominal } from "@/lib/resultado-nominal";
 import { OjoCampoResultado } from "./OjoCampoResultado";
 import { AvisoCuentasSinClasificar } from "../AvisoCuentasSinClasificar";
+import { ActualizarButton } from "@/components/ActualizarButton";
 
 export const dynamic = "force-dynamic";
 
@@ -166,10 +167,13 @@ export default async function ErYCuadrosPage({
 
   return (
     <div className="flex flex-col gap-8">
-      <h2 className="text-lg font-medium">
-        ER y Cuadros — {periodoLabel}
-        {report.version > 1 && ` — versión ${report.version}`} — {report.unidadNegocioNombre}
-      </h2>
+      <div className="flex items-center justify-between">
+        <h2 className="text-lg font-medium">
+          ER — {periodoLabel}
+          {report.version > 1 && ` — versión ${report.version}`} — {report.unidadNegocioNombre}
+        </h2>
+        <ActualizarButton />
+      </div>
 
       {sinSubrubro.cuentas.length > 0 && (
         <AvisoCuentasSinClasificar

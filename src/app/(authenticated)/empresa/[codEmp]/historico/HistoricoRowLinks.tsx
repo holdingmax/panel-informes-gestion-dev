@@ -19,7 +19,14 @@ export function HistoricoRowLinks({ codEmp, informeId }: { codEmp: string; infor
         }
         className="rounded-md border border-slate-300 px-2.5 py-1 text-xs text-slate-700 hover:bg-slate-50 focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-accent focus-visible:ring-offset-2"
       >
-        ER y Cuadros
+        ER
+      </button>
+      <button
+        type="button"
+        onClick={() => openInWindow(`/empresa/${codEmp}/informe/${informeId}/cuadros`, "cuadros")}
+        className="rounded-md border border-slate-300 px-2.5 py-1 text-xs text-slate-700 hover:bg-slate-50 focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-accent focus-visible:ring-offset-2"
+      >
+        Cuadros
       </button>
     </div>
   );

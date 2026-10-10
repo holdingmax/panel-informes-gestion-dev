@@ -317,13 +317,20 @@ model SeriesEIndicesTabla {
   unidades  UnidadNegocio[]
 }
 
+// Índice y Dólar son opcionales: Índice solo hace falta si alguna Empresa
+// que usa esta tabla tiene "Actualiza" en Sí (ajuste por inflación), Dólar
+// solo si alguna tiene Moneda secundaria configurada — una tabla puede no
+// necesitar ninguno de los dos, o solo uno. Lo que no se admite es una
+// mezcla dentro de la misma columna (algunos períodos con valor y otros
+// sin él): o está completa para todos los períodos, o vacía para todos —
+// ver verificarConsistenciaColumnas en series-e-indices-actions.ts.
 model SeriesEIndices {
   id      String              @id @default(cuid())
   tablaId Int
   tabla   SeriesEIndicesTabla @relation(fields: [tablaId], references: [codTabla])
   periodo DateTime            @db.Date
-  indice  Decimal             @db.Decimal(18, 6)
-  dolar   Decimal             @db.Decimal(18, 4)
+  indice  Decimal?            @db.Decimal(18, 6)
+  dolar   Decimal?            @db.Decimal(18, 4)
 
   @@unique([tablaId, periodo])
 }

@@ -21,18 +21,22 @@ export function SeriesEIndicesRow({
 }: {
   id: string;
   periodo: Date;
-  indice: number;
-  dolar: number;
+  indice: number | null;
+  dolar: number | null;
   isAdmin: boolean;
 }) {
   const [editing, setEditing] = useState(false);
-  const [indiceValue, setIndiceValue] = useState(String(indice));
-  const [dolarValue, setDolarValue] = useState(String(dolar));
+  const [indiceValue, setIndiceValue] = useState(indice === null ? "" : String(indice));
+  const [dolarValue, setDolarValue] = useState(dolar === null ? "" : String(dolar));
   const [pending, startTransition] = useTransition();
 
   function guardar() {
     startTransition(async () => {
-      await updateSeriesEIndicesValores(id, Number(indiceValue), Number(dolarValue));
+      await updateSeriesEIndicesValores(
+        id,
+        indiceValue.trim() === "" ? null : Number(indiceValue),
+        dolarValue.trim() === "" ? null : Number(dolarValue)
+      );
       setEditing(false);
     });
   }
@@ -50,8 +54,10 @@ export function SeriesEIndicesRow({
             disabled={pending}
             className="w-32 rounded border px-2 py-1"
           />
-        ) : (
+        ) : indice !== null ? (
           indice.toLocaleString("es-AR")
+        ) : (
+          <span className="text-zinc-400">—</span>
         )}
       </td>
       <td className="py-1.5 pr-4">
@@ -64,8 +70,10 @@ export function SeriesEIndicesRow({
             disabled={pending}
             className="w-32 rounded border px-2 py-1"
           />
-        ) : (
+        ) : dolar !== null ? (
           dolar.toLocaleString("es-AR")
+        ) : (
+          <span className="text-zinc-400">—</span>
         )}
       </td>
       <td className="py-1.5 pr-4">
@@ -84,8 +92,8 @@ export function SeriesEIndicesRow({
                 <button
                   type="button"
                   onClick={() => {
-                    setIndiceValue(String(indice));
-                    setDolarValue(String(dolar));
+                    setIndiceValue(indice === null ? "" : String(indice));
+                    setDolarValue(dolar === null ? "" : String(dolar));
                     setEditing(false);
                   }}
                   disabled={pending}

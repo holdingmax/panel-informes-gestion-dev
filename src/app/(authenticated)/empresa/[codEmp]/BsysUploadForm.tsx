@@ -251,7 +251,16 @@ export function BsysUploadForm({
               }
               className="w-fit rounded-md bg-accent px-4 py-2 text-sm text-white transition-colors hover:bg-accent-hover focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-accent focus-visible:ring-offset-2"
             >
-              ER y Cuadros
+              ER
+            </button>
+            <button
+              type="button"
+              onClick={() =>
+                openInWindow(`/empresa/${unidadNegocioId}/informe/${state.informeId}/cuadros`, "cuadros")
+              }
+              className="w-fit rounded-md bg-accent px-4 py-2 text-sm text-white transition-colors hover:bg-accent-hover focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-accent focus-visible:ring-offset-2"
+            >
+              Cuadros
             </button>
           </div>
         </div>

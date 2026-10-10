@@ -117,11 +117,14 @@ export async function importBsysCombinado(formData: FormData): Promise<ImportBsy
   // por inflación o tiene moneda secundaria configurada (ver Configuración →
   // Empresas) — el ESP y el OyAF siempre van en la moneda primaria nominal,
   // sin necesitar ninguna serie.
-  const necesitaSeries = empresas.some((e) => e.actualiza || e.monedaSecundariaId);
+  const necesitaIndice = empresas.some((e) => e.actualiza);
+  const necesitaDolar = empresas.some((e) => e.monedaSecundariaId);
+  const necesitaSeries = necesitaIndice || necesitaDolar;
   if (necesitaSeries) {
     const seriesError = await verificarSeriesCompletaHasta(
       unidad.seriesTablaId,
-      new Date(Date.UTC(periodoAnio, periodoMes - 1, 1))
+      new Date(Date.UTC(periodoAnio, periodoMes - 1, 1)),
+      { indice: necesitaIndice, dolar: necesitaDolar }
     );
     if (seriesError) {
       return {

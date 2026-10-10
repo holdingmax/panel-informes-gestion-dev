@@ -7,6 +7,7 @@ import {
 } from "@/lib/series-e-indices-actions";
 import { CollapsibleAdd } from "@/components/CollapsibleAdd";
 import { SeriesEIndicesForm } from "../SeriesEIndicesForm";
+import { SeriesEIndicesExcelForm } from "../SeriesEIndicesExcelForm";
 import { VincularUnidadesForm } from "../VincularUnidadesForm";
 import { SeriesEIndicesRow } from "./SeriesEIndicesRow";
 
@@ -68,9 +69,14 @@ export default async function SeriesEIndicesTablaPage({
       </section>
 
       {isAdmin && (
-        <CollapsibleAdd label={ultimo ? `Agregar período (siguiente: ${proximo})` : "Agregar primer período"}>
-          <SeriesEIndicesForm tablaId={codTabla} proximoPeriodo={proximo} />
-        </CollapsibleAdd>
+        <div className="flex flex-wrap items-start gap-3">
+          <CollapsibleAdd label={ultimo ? `Agregar período (siguiente: ${proximo})` : "Agregar primer período"}>
+            <SeriesEIndicesForm tablaId={codTabla} proximoPeriodo={proximo} />
+          </CollapsibleAdd>
+          <CollapsibleAdd label="Carga de archivo">
+            <SeriesEIndicesExcelForm tablaId={codTabla} proximoPeriodo={proximo} />
+          </CollapsibleAdd>
+        </div>
       )}
 
       <div className="max-h-96 overflow-auto rounded-lg bg-white p-4 shadow">
@@ -89,8 +95,8 @@ export default async function SeriesEIndicesTablaPage({
                 key={s.id}
                 id={s.id}
                 periodo={s.periodo}
-                indice={Number(s.indice)}
-                dolar={Number(s.dolar)}
+                indice={s.indice !== null ? Number(s.indice) : null}
+                dolar={s.dolar !== null ? Number(s.dolar) : null}
                 isAdmin={isAdmin}
               />
             ))}

@@ -1,6 +1,6 @@
 import { prisma } from "@/lib/prisma";
 import { computeResultadoNominalMes, type ResultadoNominal } from "@/lib/resultado-nominal";
-import type { InformeSnapshot } from "@/lib/balance-oya-report";
+import { formatPeriodoAbrev, type InformeSnapshot } from "@/lib/balance-oya-report";
 
 const CAMPOS: (keyof ResultadoNominal)[] = [
   "ventas",
@@ -41,6 +41,14 @@ export function inicioEjercicio(mes: number, anio: number) {
 
 function mesesTranscurridosEnEjercicio(mes: number) {
   return mes >= 7 ? mes - 6 : mes + 6;
+}
+
+// Para la ventana "Cuadros" (evolución de los últimos 12 meses, siempre
+// terminando en el período del informe) — a diferencia de inicioEjercicio,
+// esto es una ventana móvil, no el inicio del ejercicio económico.
+function restarMeses(mes: number, anio: number, n: number): { mes: number; anio: number } {
+  const total = anio * 12 + (mes - 1) - n;
+  return { anio: Math.floor(total / 12), mes: (((total % 12) + 12) % 12) + 1 };
 }
 
 function claveMes(mes: number, anio: number) {
@@ -87,6 +95,16 @@ export type ResultadoBloque = {
   mesesTranscurridos: number;
 };
 
+// Un mes de la ventana "Evolución últimos 12 meses" (ventana "Cuadros") —
+// null cuando falta el dato (no hay Resultados Históricos para ese mes, o
+// falta el índice/dólar de Series e Índices para convertirlo).
+export type MesEvolucion = {
+  mes: number;
+  anio: number;
+  label: string;
+  valores: ResultadoColumna | null;
+};
+
 export type ResultadoCuadro = {
   informeId: string;
   unidadNegocioId: number;
@@ -105,6 +123,16 @@ export type ResultadoCuadro = {
   nominal: ResultadoBloque;
   ajustadoPorInflacion: ResultadoBloque | null;
   usd: ResultadoBloque | null;
+  // Para la ventana "Cuadros": ER mes a mes de los últimos 12 meses
+  // (terminando en el período del informe). "Principal" sigue la regla
+  // 2.4.1 — Ajustado por Inflación si la Empresa lo tiene marcado, Nominal
+  // si no — nunca se muestran los dos. "Secundaria" solo si la Empresa
+  // tiene Moneda secundaria configurada.
+  evolucion12Meses: {
+    principalCondicion: "Nominal" | "Ajustado por Inflación";
+    principalPorMes: MesEvolucion[];
+    secundariaPorMes: MesEvolucion[] | null;
+  };
   advertencias: string[];
 };
 
@@ -176,11 +204,15 @@ export async function computeResultadoCuadro(informeId: string): Promise<Resulta
   const series = seriesTablaId
     ? await prisma.seriesEIndices.findMany({ where: { tablaId: seriesTablaId } })
     : [];
-  const seriesMap = new Map<string, { indice: number; dolar: number }>();
+  // indice/dolar son opcionales en el modelo (ver schema.prisma) — una fila
+  // presente con el campo en null tiene que tratarse igual que "no hay datos
+  // para ese mes" (null), nunca como 0 (Number(null) da 0, un valor válido
+  // que arruinaría el cálculo en silencio).
+  const seriesMap = new Map<string, { indice: number | null; dolar: number | null }>();
   for (const s of series) {
     seriesMap.set(claveMes(s.periodo.getUTCMonth() + 1, s.periodo.getUTCFullYear()), {
-      indice: Number(s.indice),
-      dolar: Number(s.dolar),
+      indice: s.indice !== null ? Number(s.indice) : null,
+      dolar: s.dolar !== null ? Number(s.dolar) : null,
     });
   }
 
@@ -281,7 +313,9 @@ export async function computeResultadoCuadro(informeId: string): Promise<Resulta
     ? construirBloque((mes, anio) => {
         const indiceInforme = seriesMap.get(claveMes(periodoMes, periodoAnio))?.indice;
         const indiceMes = seriesMap.get(claveMes(mes, anio))?.indice;
-        if (indiceInforme === undefined || indiceMes === undefined) return null;
+        if (indiceInforme === undefined || indiceInforme === null || indiceMes === undefined || indiceMes === null) {
+          return null;
+        }
         return indiceInforme / indiceMes;
       }, "Ajustado por Inflación")
     : null;
@@ -291,6 +325,43 @@ export async function computeResultadoCuadro(informeId: string): Promise<Resulta
         const dolarMes = seriesMap.get(claveMes(mes, anio))?.dolar;
         return dolarMes ? 1 / dolarMes : null;
       }, monedaSecundaria?.nomMoneda ?? "moneda secundaria")
+    : null;
+
+  // Ventana "Cuadros" — doce meses terminando en el período del informe,
+  // cada uno convertido individualmente (no acumulado, a diferencia de los
+  // cuadros de arriba).
+  const desdeEvolucion = restarMeses(periodoMes, periodoAnio, 11);
+  const mesesEvolucion = periodosDelRango(desdeEvolucion, { mes: periodoMes, anio: periodoAnio });
+
+  function construirEvolucion(factorPorMes: (mes: number, anio: number) => number | null): MesEvolucion[] {
+    return mesesEvolucion.map((p) => {
+      const valores = valorDeMes(p.mes, p.anio);
+      const factor = factorPorMes(p.mes, p.anio);
+      const convertido =
+        valores && factor !== null
+          ? derivar(Object.fromEntries(CAMPOS.map((c) => [c, valores[c] * factor])) as ResultadoNominal)
+          : null;
+      return { mes: p.mes, anio: p.anio, label: formatPeriodoAbrev(p.mes, p.anio), valores: convertido };
+    });
+  }
+
+  const principalCondicion: "Nominal" | "Ajustado por Inflación" = tieneAjustePorInflacion
+    ? "Ajustado por Inflación"
+    : "Nominal";
+  const principalPorMes = construirEvolucion(
+    tieneAjustePorInflacion
+      ? (mes, anio) => {
+          const indiceInforme = seriesMap.get(claveMes(periodoMes, periodoAnio))?.indice;
+          const indiceMes = seriesMap.get(claveMes(mes, anio))?.indice;
+          return indiceInforme != null && indiceMes != null ? indiceInforme / indiceMes : null;
+        }
+      : () => 1
+  );
+  const secundariaPorMes = tieneMonedaSecundaria
+    ? construirEvolucion((mes, anio) => {
+        const dolarMes = seriesMap.get(claveMes(mes, anio))?.dolar;
+        return dolarMes ? 1 / dolarMes : null;
+      })
     : null;
 
   return {
@@ -308,6 +379,7 @@ export async function computeResultadoCuadro(informeId: string): Promise<Resulta
     nominal,
     ajustadoPorInflacion,
     usd,
+    evolucion12Meses: { principalCondicion, principalPorMes, secundariaPorMes },
     advertencias,
   };
 }
