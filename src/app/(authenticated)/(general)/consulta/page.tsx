@@ -7,7 +7,7 @@ export const dynamic = "force-dynamic";
 export default async function ConsultaPage() {
   const [todasLasUnidades, accesibles] = await Promise.all([
     listUnidadesNegocio(),
-    unidadesAccesibles(),
+    unidadesAccesibles("consulta"),
   ]);
   const unidades =
     accesibles === "todas"
@@ -21,7 +21,11 @@ export default async function ConsultaPage() {
         Elegí una unidad de negocio para ver el histórico completo de sus informes.
       </p>
 
-      <UnidadNegocioGrid unidades={unidades} basePath="/consulta" />
+      <UnidadNegocioGrid
+        unidades={unidades}
+        basePath="/consulta"
+        sinAcceso={todasLasUnidades.length > 0}
+      />
     </main>
   );
 }

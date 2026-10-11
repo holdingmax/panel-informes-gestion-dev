@@ -38,22 +38,31 @@ model User {
   permisosUnidad UserUnidadPermiso[]
 }
 
-// Acceso de un usuario (no-ADMIN, que ve/edita todo igual que hoy) a una
-// Unidad de Negocio puntual — unidadNegocioId null = aplica a TODAS las
-// unidades (incluidas las que se creen después), para no tener que mantener
-// una fila por unidad en el caso "acceso a todas". La sola existencia de la
-// fila ya da acceso de lectura (ver la unidad en los paneles); los booleanos
-// dan las capacidades extra dentro de esa unidad.
+// Permisos de un usuario (no-ADMIN, que ve/edita todo) sobre una Unidad de
+// Negocio puntual — unidadNegocioId null = aplica a TODAS las unidades
+// (incluidas las que se creen después), para no tener que mantener una fila
+// por unidad. Dos árboles independientes, uno por ventana del sistema:
+//  - CONSULTA (/consulta): puedeConsultar (acceso a la ventana) y, dentro,
+//    revisar / aprobar / adjuntar.
+//  - CONFECCIÓN (/preparacion-informes): puedeConfeccionar (acceso a la
+//    ventana, cargar BSyS y crear informes) y, dentro, configuración /
+//    reclasificar / eliminar.
+// Los hijos solo valen si está el booleano de acceso de su árbol (lo fuerza
+// setPermisoUnidad). Una fila sin ningún booleano en true no se guarda.
 model UserUnidadPermiso {
   id                 String         @id @default(cuid())
   userId             String
   user               User           @relation(fields: [userId], references: [id])
   unidadNegocioId    Int?
   unidadNegocio      UnidadNegocio? @relation(fields: [unidadNegocioId], references: [codUnidad])
-  puedeConfiguracion Boolean        @default(false)
+  puedeConsultar     Boolean        @default(false)
   puedeRevisar       Boolean        @default(false)
   puedeAprobar       Boolean        @default(false)
   puedeAdjuntar      Boolean        @default(false)
+  puedeConfeccionar  Boolean        @default(false)
+  puedeConfiguracion Boolean        @default(false)
+  puedeReclasificar  Boolean        @default(false)
+  puedeEliminar      Boolean        @default(false)
 
   @@unique([userId, unidadNegocioId])
 }

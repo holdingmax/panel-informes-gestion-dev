@@ -4,6 +4,7 @@ import { listPermisosDeUsuario } from "@/lib/permiso-unidad-actions";
 import { createUserAction } from "./actions";
 import { ToggleActiveButton } from "./ToggleActiveButton";
 import { UserRowActions } from "./UserRowActions";
+import { EditDeleteUser } from "./EditDeleteUser";
 import { PermisosUnidadPanel } from "./PermisosUnidadPanel";
 import { CollapsibleAdd } from "@/components/CollapsibleAdd";
 
@@ -37,13 +38,23 @@ export default async function AdminUsersPage() {
               <td className="py-2">
                 <div className="flex flex-col items-start gap-2">
                   <ToggleActiveButton id={u.id} active={u.active} />
+                  <EditDeleteUser id={u.id} username={u.username} role={u.role} />
                   <UserRowActions id={u.id} />
-                  {u.role === "USER" && (
-                    <PermisosUnidadPanel
-                      userId={u.id}
-                      unidades={unidades}
-                      permisos={permisosPorUsuario[u.id]}
-                    />
+                  {u.role === "USER" ? (
+                    <>
+                      {permisosPorUsuario[u.id].length === 0 && (
+                        <p className="text-sm text-amber-700">
+                          Sin permisos: todavía no ve ninguna unidad de negocio.
+                        </p>
+                      )}
+                      <PermisosUnidadPanel
+                        userId={u.id}
+                        unidades={unidades}
+                        permisos={permisosPorUsuario[u.id]}
+                      />
+                    </>
+                  ) : (
+                    <p className="text-sm text-zinc-500">Admin: acceso total a todas las unidades.</p>
                   )}
                 </div>
               </td>

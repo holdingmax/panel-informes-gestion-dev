@@ -1,5 +1,5 @@
 import { renderToBuffer } from "@react-pdf/renderer";
-import { auth } from "@/auth";
+import { requireAccesoUnidad } from "@/lib/authz";
 import { prisma } from "@/lib/prisma";
 import { computeInformeReport } from "@/lib/balance-oya-report";
 import { computeResultadoCuadro } from "@/lib/resultado-cuadro";
@@ -9,13 +9,16 @@ export async function GET(
   _request: Request,
   { params }: { params: Promise<{ informeId: string }> }
 ) {
-  const session = await auth();
-  if (!session?.user) return new Response(null, { status: 401 });
-
   const { informeId } = await params;
 
   const informe = await prisma.informe.findUnique({ where: { id: informeId } });
   if (!informe) return new Response(null, { status: 404 });
+
+  try {
+    await requireAccesoUnidad(informe.unidadNegocioId, "consultar");
+  } catch {
+    return new Response(null, { status: 403 });
+  }
 
   if (informe.estado !== "APROBADO") {
     return new Response("El informe todavía no fue aprobado.", { status: 403 });

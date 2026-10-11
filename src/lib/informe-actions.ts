@@ -20,7 +20,7 @@ export async function listInformes(unidadNegocioId: number) {
 // ordenado por fecha de confección) — incluye el resumen de adjuntos
 // (nunca `contenido`, ver /api/adjuntos/informe/[id] para la descarga).
 export async function listInformesParaConsulta(unidadNegocioId: number) {
-  await requireAccesoUnidad(unidadNegocioId);
+  await requireAccesoUnidad(unidadNegocioId, "consultar");
   return prisma.informe.findMany({
     where: { unidadNegocioId },
     include: {
@@ -36,7 +36,7 @@ export async function listInformesParaConsulta(unidadNegocioId: number) {
 // huérfano de su informe de origen.
 export async function checkDeleteInforme(informeId: string): Promise<DeleteCheckResult> {
   const informe = await prisma.informe.findUniqueOrThrow({ where: { id: informeId } });
-  await requireAccesoUnidad(informe.unidadNegocioId);
+  await requireAccesoUnidad(informe.unidadNegocioId, "eliminar");
   if (informe.estado !== "PROCESO") {
     return {
       blocked: true,

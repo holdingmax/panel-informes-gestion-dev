@@ -1,4 +1,5 @@
 import { listInformes } from "@/lib/informe-actions";
+import { permisosDeUnidad } from "@/lib/authz";
 import { HistoricoRowLinks } from "./HistoricoRowLinks";
 import { InformeAcciones } from "./InformeAcciones";
 
@@ -31,7 +32,10 @@ export default async function HistoricoPage({
   params: Promise<{ codEmp: string }>;
 }) {
   const { codEmp } = await params;
-  const informes = await listInformes(Number(codEmp));
+  const [informes, permisos] = await Promise.all([
+    listInformes(Number(codEmp)),
+    permisosDeUnidad(Number(codEmp)),
+  ]);
 
   return (
     <div>
@@ -67,6 +71,8 @@ export default async function HistoricoPage({
                       informeId={informe.id}
                       estado={informe.estado}
                       periodoLabel={periodoLabel}
+                      puedeEditar={permisos.puedeConfeccionar}
+                      puedeEliminar={permisos.puedeEliminar}
                     />
                   </td>
                 </tr>

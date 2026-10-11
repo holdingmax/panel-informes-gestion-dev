@@ -11,14 +11,20 @@ type UnidadNegocioTile = {
 export function UnidadNegocioGrid({
   unidades,
   basePath = "/empresa",
+  sinAcceso = false,
 }: {
   unidades: UnidadNegocioTile[];
   basePath?: string;
+  // true cuando hay unidades cargadas pero el usuario no tiene acceso a
+  // ninguna: el mensaje de "agregalas" no le sirve (no es admin).
+  sinAcceso?: boolean;
 }) {
   if (unidades.length === 0) {
     return (
       <p className="text-sm text-zinc-500">
-        Todavía no hay unidades de negocio configuradas. Agregalas desde Opciones → Configuración.
+        {sinAcceso
+          ? "No tenés acceso a ninguna unidad de negocio en esta ventana. Pedile al administrador que te asigne permisos."
+          : "Todavía no hay unidades de negocio configuradas. Agregalas desde Opciones → Configuración."}
       </p>
     );
   }

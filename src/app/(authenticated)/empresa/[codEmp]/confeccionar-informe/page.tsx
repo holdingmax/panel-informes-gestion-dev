@@ -1,4 +1,6 @@
+import { notFound } from "next/navigation";
 import { prisma } from "@/lib/prisma";
+import { requireAccesoUnidad } from "@/lib/authz";
 import { listEmpresasDeUnidad } from "@/lib/empresa-actions";
 import { listPlanDeCuentasPorEmpresas } from "@/lib/plan-de-cuentas-actions";
 import { BsysUploadForm } from "../BsysUploadForm";
@@ -30,6 +32,12 @@ export default async function ConfeccionarInformePage({
 }) {
   const { codEmp } = await params;
   const unidadNegocioId = Number(codEmp);
+
+  try {
+    await requireAccesoUnidad(unidadNegocioId, "confeccionar");
+  } catch {
+    notFound();
+  }
 
   const empresas = await listEmpresasDeUnidad(unidadNegocioId);
 

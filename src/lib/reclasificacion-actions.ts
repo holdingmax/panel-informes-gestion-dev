@@ -55,7 +55,7 @@ export async function listReclasificacionesDeEmpresa(empresaId: number) {
 // fija — su efecto ya quedó congelado en el snapshot al aprobar.
 export async function checkEditableReclasificacion(informeId: string): Promise<DeleteCheckResult> {
   const informe = await prisma.informe.findUniqueOrThrow({ where: { id: informeId } });
-  await requireAccesoUnidad(informe.unidadNegocioId);
+  await requireAccesoUnidad(informe.unidadNegocioId, "reclasificar");
   if (informe.estado !== "PROCESO") {
     return {
       blocked: true,

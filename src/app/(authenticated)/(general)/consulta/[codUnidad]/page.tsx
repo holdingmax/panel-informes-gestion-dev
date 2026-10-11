@@ -30,7 +30,7 @@ export default async function ConsultaUnidadPage({
   if (!unidad) notFound();
 
   try {
-    await requireAccesoUnidad(codUnidad);
+    await requireAccesoUnidad(codUnidad, "consultar");
   } catch {
     notFound();
   }

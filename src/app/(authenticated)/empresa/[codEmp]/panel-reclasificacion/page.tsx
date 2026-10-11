@@ -1,4 +1,5 @@
 import { prisma } from "@/lib/prisma";
+import { permisosDeUnidad } from "@/lib/authz";
 import { listEmpresasDeUnidad } from "@/lib/empresa-actions";
 import { listPlanDeCuentasPorEmpresas } from "@/lib/plan-de-cuentas-actions";
 import { listReclasificacionesDeInforme } from "@/lib/reclasificacion-actions";
@@ -45,7 +46,8 @@ export default async function PanelReclasificacionPage({
   });
 
   const reclasificaciones = informe ? await listReclasificacionesDeInforme(informe.id) : [];
-  const puedeEditar = informe?.estado === "PROCESO";
+  const permisos = await permisosDeUnidad(unidadNegocioId);
+  const puedeEditar = informe?.estado === "PROCESO" && permisos.puedeReclasificar;
 
   return (
     <div className="flex flex-col gap-6">

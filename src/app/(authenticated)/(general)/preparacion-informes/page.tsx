@@ -9,7 +9,7 @@ export default async function PreparacionInformesPage() {
   const session = await auth();
   const [todasLasUnidades, accesibles] = await Promise.all([
     listUnidadesNegocio(),
-    unidadesAccesibles(),
+    unidadesAccesibles("confeccion"),
   ]);
   const unidades =
     accesibles === "todas"
@@ -27,7 +27,7 @@ export default async function PreparacionInformesPage() {
         {session?.user.role})
       </p>
 
-      <UnidadNegocioGrid unidades={unidades} />
+      <UnidadNegocioGrid unidades={unidades} sinAcceso={todasLasUnidades.length > 0} />
     </main>
   );
 }

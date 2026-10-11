@@ -66,7 +66,7 @@ type ImportBsysResult =
 // "archivoAcumulado_<codEmp>" por cada empresa vinculada.
 export async function importBsysCombinado(formData: FormData): Promise<ImportBsysResult> {
   const unidadNegocioId = Number(formData.get("unidadNegocioId"));
-  await requireAccesoUnidad(unidadNegocioId);
+  await requireAccesoUnidad(unidadNegocioId, "confeccionar");
   const periodoMes = Number(formData.get("periodoMes"));
   const periodoAnio = Number(formData.get("periodoAnio"));
   const empresaIds = formData.getAll("empresaId").map(Number);
