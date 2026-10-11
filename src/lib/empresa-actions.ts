@@ -3,7 +3,7 @@
 import { revalidatePath } from "next/cache";
 import { prisma } from "@/lib/prisma";
 import type { DeleteCheckResult } from "@/components/ConfirmDeleteButton";
-import { requireUser, requireAdmin, requireAccesoUnidad } from "@/lib/authz";
+import { requireUser, requireAdmin, requireAccesoUnidad, unidadesAccesibles } from "@/lib/authz";
 
 // La Empresa es el recurso, pero el permiso se concede por Unidad de
 // Negocio (ver UserUnidadPermiso). Una Empresa sin vincular todavía
@@ -20,9 +20,17 @@ async function requireAccesoConfiguracionEmpresa(codEmp: number) {
   await requireAccesoUnidad(empresa.unidadNegocioId, "configuracion");
 }
 
+// Un USER solo ve las Empresas de las Unidades a las que tiene acceso, más
+// las todavía sin vincular (sin datos propios, hay que poder elegirlas al
+// armar una Unidad).
 export async function listEmpresas() {
   await requireUser();
+  const accesibles = await unidadesAccesibles("cualquiera");
   return prisma.empresa.findMany({
+    where:
+      accesibles === "todas"
+        ? undefined
+        : { OR: [{ unidadNegocioId: { in: accesibles } }, { unidadNegocioId: null }] },
     orderBy: { codEmp: "asc" },
     include: {
       unidadNegocio: { select: { codUnidad: true, nombreUnidad: true } },
@@ -34,7 +42,7 @@ export async function listEmpresas() {
 }
 
 export async function listEmpresasDeUnidad(unidadNegocioId: number) {
-  await requireUser();
+  await requireAccesoUnidad(unidadNegocioId);
   return prisma.empresa.findMany({
     where: { unidadNegocioId },
     orderBy: { nombreEmp: "asc" },
@@ -43,7 +51,11 @@ export async function listEmpresasDeUnidad(unidadNegocioId: number) {
 
 export async function getEmpresa(codEmp: number) {
   await requireUser();
-  return prisma.empresa.findUnique({ where: { codEmp } });
+  const empresa = await prisma.empresa.findUnique({ where: { codEmp } });
+  if (empresa?.unidadNegocioId != null) {
+    await requireAccesoUnidad(empresa.unidadNegocioId);
+  }
+  return empresa;
 }
 
 function optionalMonedaId(formData: FormData, field: string): number | null {

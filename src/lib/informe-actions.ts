@@ -9,7 +9,7 @@ import type { DeleteCheckResult } from "@/components/ConfirmDeleteButton";
 import { requireUser, requireAccesoUnidad } from "@/lib/authz";
 
 export async function listInformes(unidadNegocioId: number) {
-  await requireUser();
+  await requireAccesoUnidad(unidadNegocioId);
   return prisma.informe.findMany({
     where: { unidadNegocioId },
     orderBy: [{ periodoAnio: "desc" }, { periodoMes: "desc" }, { version: "desc" }],

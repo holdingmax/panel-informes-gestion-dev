@@ -33,6 +33,16 @@ const INCLUDE = {
 
 export async function listPlanDeCuentasPorEmpresas(empresaIds: number[]) {
   await requireUser();
+  const empresas = await prisma.empresa.findMany({
+    where: { codEmp: { in: empresaIds } },
+    select: { unidadNegocioId: true },
+  });
+  const unidadIds = new Set(empresas.map((e) => e.unidadNegocioId));
+  for (const unidadId of unidadIds) {
+    // Empresa sin Unidad: no hay a quién delegarle el permiso (ver arriba).
+    if (unidadId === null) await requireAdmin();
+    else await requireAccesoUnidad(unidadId);
+  }
   return prisma.planDeCuentas.findMany({
     where: { empresaId: { in: empresaIds } },
     include: INCLUDE,

@@ -120,15 +120,22 @@ export async function permisosDeInforme(informeId: string): Promise<PermisosUnid
 // "todas" = sin restricción (ADMIN, o un USER con un permiso "para todas
 // las unidades" cargado) — para filtrar grids de unidades de cada ventana
 // (consulta, preparación de informes) sin resolver unidad por unidad.
+// "cualquiera" = acceso a alguna de las dos ventanas (el piso para entrar a
+// la unidad, igual que requireAccesoUnidad sin permiso).
 export async function unidadesAccesibles(
-  ventana: "consulta" | "confeccion"
+  ventana: "consulta" | "confeccion" | "cualquiera"
 ): Promise<"todas" | number[]> {
   const session = await requireUser();
   if (session.user.role === "ADMIN") return "todas";
 
-  const campo = ventana === "consulta" ? "puedeConsultar" : "puedeConfeccionar";
+  const filtro =
+    ventana === "consulta"
+      ? { puedeConsultar: true }
+      : ventana === "confeccion"
+        ? { puedeConfeccionar: true }
+        : { OR: [{ puedeConsultar: true }, { puedeConfeccionar: true }] };
   const filas = await prisma.userUnidadPermiso.findMany({
-    where: { userId: session.user.id, [campo]: true },
+    where: { userId: session.user.id, ...filtro },
     select: { unidadNegocioId: true },
   });
   if (filas.some((f) => f.unidadNegocioId === null)) return "todas";

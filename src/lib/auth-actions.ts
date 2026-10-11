@@ -91,6 +91,23 @@ async function quedaOtroAdminActivo(excluyendoId: string) {
   return otros > 0;
 }
 
+// Desactivar bloquea el login de ese usuario: no se permite desactivarse a uno
+// mismo ni al último Admin activo, para no quedar sin nadie que administre.
+export async function setUserActive(id: string, active: boolean): Promise<ResultadoUsuario> {
+  const session = await requireAdmin();
+
+  if (!active) {
+    if (id === session.user.id) return { error: "No podés desactivar tu propio usuario." };
+    const actual = await prisma.user.findUnique({ where: { id }, select: { role: true } });
+    if (actual?.role === "ADMIN" && !(await quedaOtroAdminActivo(id))) {
+      return { error: "Tiene que quedar al menos un Admin activo." };
+    }
+  }
+
+  await prisma.user.update({ where: { id }, data: { active } });
+  return { success: true };
+}
+
 // Corrige un usuario mal cargado: nombre de usuario y rol. La contraseña y la
 // pregunta de seguridad tienen sus propios botones (updateUser).
 export async function editUser(

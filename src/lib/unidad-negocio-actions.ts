@@ -3,7 +3,7 @@
 import { revalidatePath } from "next/cache";
 import { prisma } from "@/lib/prisma";
 import type { DeleteCheckResult } from "@/components/ConfirmDeleteButton";
-import { requireUser, requireAdmin, requireAccesoUnidad } from "@/lib/authz";
+import { requireUser, requireAdmin, requireAccesoUnidad, unidadesAccesibles } from "@/lib/authz";
 
 const ALLOWED_MIME = [
   "image/jpeg",
@@ -24,7 +24,9 @@ export async function listUnidadesNegocio() {
 
 export async function listUnidadesNegocioConEmpresas() {
   await requireUser();
+  const accesibles = await unidadesAccesibles("cualquiera");
   return prisma.unidadNegocio.findMany({
+    where: accesibles === "todas" ? undefined : { codUnidad: { in: accesibles } },
     orderBy: { codUnidad: "asc" },
     include: { empresas: { orderBy: { nombreEmp: "asc" } } },
   });

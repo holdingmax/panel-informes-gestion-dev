@@ -3,7 +3,7 @@
 import { revalidatePath } from "next/cache";
 import { prisma } from "@/lib/prisma";
 import type { DeleteCheckResult } from "@/components/ConfirmDeleteButton";
-import { requireUser, requireAccesoUnidad } from "@/lib/authz";
+import { requireUser, requireAdmin, requireAccesoUnidad } from "@/lib/authz";
 
 const MAX_ADJUNTOS = 3;
 const MAX_ADJUNTO_BYTES = 10 * 1024 * 1024; // 10MB — ver plan: tope acordado para Reclasificación/Informe.
@@ -28,7 +28,11 @@ const INCLUDE_COMPLETO = {
 } as const;
 
 export async function listReclasificacionesDeInforme(informeId: string) {
-  await requireUser();
+  const informe = await prisma.informe.findUniqueOrThrow({
+    where: { id: informeId },
+    select: { unidadNegocioId: true },
+  });
+  await requireAccesoUnidad(informe.unidadNegocioId);
   return prisma.reclasificacion.findMany({
     where: { informeId },
     include: INCLUDE_COMPLETO,
@@ -39,7 +43,12 @@ export async function listReclasificacionesDeInforme(informeId: string) {
 // Para la ventana "Recuperar Reclasificación" — todas las de esta Empresa,
 // en cualquier informe/período, para poder copiar una a el informe actual.
 export async function listReclasificacionesDeEmpresa(empresaId: number) {
-  await requireUser();
+  const empresa = await prisma.empresa.findUniqueOrThrow({
+    where: { codEmp: empresaId },
+    select: { unidadNegocioId: true },
+  });
+  if (empresa.unidadNegocioId === null) await requireAdmin();
+  else await requireAccesoUnidad(empresa.unidadNegocioId);
   return prisma.reclasificacion.findMany({
     where: { empresaId },
     include: {

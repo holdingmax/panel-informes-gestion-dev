@@ -1,7 +1,7 @@
 "use server";
 
 import { revalidatePath } from "next/cache";
-import { createUser, updateUser, editUser, deleteUser } from "@/lib/auth-actions";
+import { createUser, updateUser, editUser, deleteUser, setUserActive } from "@/lib/auth-actions";
 
 export async function createUserAction(formData: FormData) {
   await createUser({
@@ -15,8 +15,9 @@ export async function createUserAction(formData: FormData) {
 }
 
 export async function toggleActiveAction(id: string, active: boolean) {
-  await updateUser(id, { active });
+  const result = await setUserActive(id, active);
   revalidatePath("/admin/users");
+  return result;
 }
 
 export async function resetPasswordAction(id: string, newPassword: string) {
