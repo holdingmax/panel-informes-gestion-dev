@@ -483,11 +483,14 @@ export async function importarSeriesEIndicesExcel(formData: FormData): Promise<I
     };
   }
 
-  await prisma.$transaction(
-    filas.map((f) =>
-      prisma.seriesEIndices.create({ data: { tablaId, periodo: f.periodo, indice: f.indice, dolar: f.dolar } })
-    )
-  );
+  // createMany en vez de $transaction(filas.map(create)): una sola sentencia
+  // SQL (sigue siendo atómica — si falla una fila, falla todo el insert) en
+  // vez de N round-trips a la base contra la que corre esto (hosteada, no
+  // local) — con un archivo grande, N creates secuenciales dentro de un
+  // $transaction superaban el timeout default de 5s de Prisma.
+  await prisma.seriesEIndices.createMany({
+    data: filas.map((f) => ({ tablaId, periodo: f.periodo, indice: f.indice, dolar: f.dolar })),
+  });
 
   revalidatePath(`/configuracion/series-e-indices/${tablaId}`);
   return { creados: filas.length };
