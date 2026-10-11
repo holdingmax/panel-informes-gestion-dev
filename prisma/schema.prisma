@@ -365,15 +365,15 @@ model ResultadosHistoricos {
 }
 
 model PlanDeCuentas {
-  id        String   @id @default(cuid())
-  empresa   Empresa  @relation(fields: [empresaId], references: [codEmp])
-  empresaId Int
-  cuenta    String   @db.VarChar(90)
+  id             String        @id @default(cuid())
+  empresa        Empresa       @relation(fields: [empresaId], references: [codEmp])
+  empresaId      Int
+  cuenta         String        @db.VarChar(90)
   // Opcional — decide si la cuenta entra al ESP (y con qué Partida) y en
   // qué posición. Una cuenta de Resultado (Ingresos/Egresos) no lleva
   // Rubro: el ESP se arma exclusivamente con las cuentas que sí lo tienen.
-  rubro     Rubro?   @relation(fields: [rubroId], references: [codRubro])
-  rubroId   Int?
+  rubro          Rubro?        @relation(fields: [rubroId], references: [codRubro])
+  rubroId        Int?
   // Opcional — decide si la cuenta entra al ER (cuadro Nominal) y a qué
   // campo aporta. Independiente de Rubro: una cuenta puede tener uno,
   // el otro, ambos o ninguno todavía (ver los avisos "HAY CUENTAS SIN
@@ -392,23 +392,32 @@ model PlanDeCuentas {
   @@unique([empresaId, cuenta])
 }
 
+// A qué saldo del BSyS Acumulado se aplica una Reclasificación: FINAL (el
+// saldo de cierre, lo habitual) o INICIAL (solo el saldo de inicio — corrige
+// la columna "Saldo inicio" del ESP, sin tocar el saldo final ni el ER).
+enum SaldoReclasificacion {
+  FINAL
+  INICIAL
+}
+
 // Ajuste extracontable, momentáneo, solo para la exposición de ESTE informe
 // — nunca toca BalanceSumasYSaldos ni el Plan de Cuentas. Mueve saldo entre
 // cuentas de la misma Empresa; sus líneas deben sumar cero (debe = haber en
 // total) para poder guardarse. Se aplica tanto al ESP (BSyS Acumulado) como
 // al ER (BSyS Mes) — ver buildEmpresaBalanceInputs / computeResultadoNominalMesDeEmpresa.
 model Reclasificacion {
-  id        String   @id @default(cuid())
-  informe   Informe  @relation(fields: [informeId], references: [id], onDelete: Cascade)
-  informeId String
-  empresa   Empresa  @relation(fields: [empresaId], references: [codEmp])
-  empresaId Int
-  detalle   String   @db.VarChar(500)
+  id              String               @id @default(cuid())
+  informe         Informe              @relation(fields: [informeId], references: [id], onDelete: Cascade)
+  informeId       String
+  empresa         Empresa              @relation(fields: [empresaId], references: [codEmp])
+  empresaId       Int
+  detalle         String               @db.VarChar(500)
+  saldoAfectado   SaldoReclasificacion @default(FINAL)
   // Null si el usuario que la cargó se borró después — no se pierde la
   // reclasificación por eso.
   createdByUserId String?
-  createdAt       DateTime @default(now())
-  updatedAt       DateTime @updatedAt
+  createdAt       DateTime             @default(now())
+  updatedAt       DateTime             @updatedAt
 
   lineas   ReclasificacionLinea[]
   adjuntos ReclasificacionAdjunto[]

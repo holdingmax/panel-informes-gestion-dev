@@ -260,70 +260,100 @@ export type CuentaSaldoInput = {
 // Overlay de Reclasificación (ver prisma.Reclasificacion): un ajuste
 // extracontable, momentáneo, solo para la exposición de ESTE informe —
 // mueve saldo entre cuentas de una misma Empresa sin tocar nunca
-// BalanceSumasYSaldos. Se aplica tanto al ESP (BSyS Acumulado, acá) como al
-// ER (BSyS Mes, resultado-nominal.ts) porque ambos comparten exactamente la
-// misma forma de balance — solo el "saldo final" (saldoCierreDebe/Haber) se
-// toca, nunca el saldo de inicio.
+// BalanceSumasYSaldos. Cada reclasificación declara a qué saldo se aplica
+// (saldoAfectado): FINAL toca solo el saldo de cierre (saldoCierreDebe/Haber)
+// y INICIAL solo el de inicio (saldoIniDebe/Haber). Las FINAL se aplican
+// tanto al ESP (BSyS Acumulado, ámbito "ESP") como al ER (BSyS Mes,
+// resultado-nominal.ts, ámbito "ER") porque ambos comparten la misma forma de
+// balance; las INICIAL corrigen la columna de saldo inicio del ESP y por eso
+// el ER las ignora.
 export async function aplicarReclasificaciones(
   informeId: string,
   empresaId: number,
-  balances: CuentaSaldoInput[]
+  balances: CuentaSaldoInput[],
+  ambito: "ESP" | "ER" = "ESP"
 ): Promise<CuentaSaldoInput[]> {
   const lineas = await prisma.reclasificacionLinea.findMany({
-    where: { reclasificacion: { informeId, empresaId } },
-    include: { planDeCuenta: { select: { cuenta: true } } },
+    where: {
+      reclasificacion: {
+        informeId,
+        empresaId,
+        ...(ambito === "ER" ? { saldoAfectado: "FINAL" } : {}),
+      },
+    },
+    include: {
+      planDeCuenta: { select: { cuenta: true } },
+      reclasificacion: { select: { saldoAfectado: true } },
+    },
   });
   if (lineas.length === 0) return balances;
 
-  const deltaPorCuenta = new Map<string, Prisma.Decimal>();
+  type Saldo = "FINAL" | "INICIAL";
+  const deltas: Record<Saldo, Map<string, Prisma.Decimal>> = {
+    FINAL: new Map(),
+    INICIAL: new Map(),
+  };
   for (const l of lineas) {
+    const mapa = deltas[l.reclasificacion.saldoAfectado];
     const key = normalizeCuenta(l.planDeCuenta.cuenta);
-    const actual = deltaPorCuenta.get(key) ?? new Prisma.Decimal(0);
-    deltaPorCuenta.set(key, actual.plus(l.debe).minus(l.haber));
+    const actual = mapa.get(key) ?? new Prisma.Decimal(0);
+    mapa.set(key, actual.plus(l.debe).minus(l.haber));
   }
 
-  const resultado = balances.map((b) => {
-    const delta = deltaPorCuenta.get(normalizeCuenta(b.cuenta));
-    if (!delta || delta.isZero()) return b;
-    deltaPorCuenta.delete(normalizeCuenta(b.cuenta));
-    return aplicarDeltaASaldoFinal(b, delta);
-  });
+  const aplicar = (entry: CuentaSaldoInput): CuentaSaldoInput => {
+    const key = normalizeCuenta(entry.cuenta);
+    let resultado = entry;
+    for (const saldo of ["FINAL", "INICIAL"] as const) {
+      const delta = deltas[saldo].get(key);
+      if (!delta) continue;
+      deltas[saldo].delete(key);
+      if (!delta.isZero()) resultado = aplicarDelta(resultado, delta, saldo);
+    }
+    return resultado;
+  };
+
+  const resultado = balances.map(aplicar);
 
   // Cuentas que la reclasificación tocó pero no tenían saldo este período
   // (sin fila en balances todavía) — se agregan sintéticas, solo con el
   // delta.
-  for (const [cuentaNormalizada, delta] of deltaPorCuenta) {
-    if (delta.isZero()) continue;
+  const pendientes = new Set([...deltas.FINAL.keys(), ...deltas.INICIAL.keys()]);
+  for (const cuentaNormalizada of pendientes) {
     const original = lineas.find((l) => normalizeCuenta(l.planDeCuenta.cuenta) === cuentaNormalizada);
     if (!original) continue;
-    resultado.push(
-      aplicarDeltaASaldoFinal(
-        {
-          cuenta: original.planDeCuenta.cuenta,
-          saldoIniDebe: 0,
-          saldoIniHaber: 0,
-          saldoCierreDebe: 0,
-          saldoCierreHaber: 0,
-        },
-        delta
-      )
-    );
+    const sintetica = aplicar({
+      cuenta: original.planDeCuenta.cuenta,
+      saldoIniDebe: 0,
+      saldoIniHaber: 0,
+      saldoCierreDebe: 0,
+      saldoCierreHaber: 0,
+    });
+    if (
+      sintetica.saldoIniDebe !== 0 ||
+      sintetica.saldoIniHaber !== 0 ||
+      sintetica.saldoCierreDebe !== 0 ||
+      sintetica.saldoCierreHaber !== 0
+    ) {
+      resultado.push(sintetica);
+    }
   }
 
   return resultado;
 }
 
-function aplicarDeltaASaldoFinal(entry: CuentaSaldoInput, delta: Prisma.Decimal): CuentaSaldoInput {
+function aplicarDelta(
+  entry: CuentaSaldoInput,
+  delta: Prisma.Decimal,
+  saldo: "FINAL" | "INICIAL"
+): CuentaSaldoInput {
+  const [campoDebe, campoHaber] =
+    saldo === "FINAL"
+      ? (["saldoCierreDebe", "saldoCierreHaber"] as const)
+      : (["saldoIniDebe", "saldoIniHaber"] as const);
   if (delta.isPositive()) {
-    return {
-      ...entry,
-      saldoCierreDebe: round2(new Prisma.Decimal(entry.saldoCierreDebe).plus(delta)),
-    };
+    return { ...entry, [campoDebe]: round2(new Prisma.Decimal(entry[campoDebe]).plus(delta)) };
   }
-  return {
-    ...entry,
-    saldoCierreHaber: round2(new Prisma.Decimal(entry.saldoCierreHaber).plus(delta.abs())),
-  };
+  return { ...entry, [campoHaber]: round2(new Prisma.Decimal(entry[campoHaber]).plus(delta.abs())) };
 }
 
 export type PlanCuentaInput = {

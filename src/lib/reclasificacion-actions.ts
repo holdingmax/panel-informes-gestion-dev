@@ -130,6 +130,12 @@ async function leerAdjuntosNuevos(
   return resultado;
 }
 
+// "Saldo de reclasifica": FINAL por defecto (también si el campo no viene),
+// INICIAL solo si el formulario lo pide explícitamente.
+function leerSaldoAfectado(formData: FormData): "FINAL" | "INICIAL" {
+  return formData.get("saldoAfectado") === "INICIAL" ? "INICIAL" : "FINAL";
+}
+
 function leerDetalle(formData: FormData): string {
   const detalle = String(formData.get("detalle") ?? "").trim();
   if (!detalle) throw new Error("El detalle es obligatorio.");
@@ -163,6 +169,7 @@ export async function createReclasificacion(
       informeId,
       empresaId,
       detalle,
+      saldoAfectado: leerSaldoAfectado(formData),
       createdByUserId: session.user.id,
       lineas: { create: lineas },
       adjuntos: { create: adjuntos },
@@ -191,6 +198,7 @@ export async function updateReclasificacion(id: string, formData: FormData) {
       where: { id },
       data: {
         detalle,
+        saldoAfectado: leerSaldoAfectado(formData),
         lineas: { create: lineas },
         adjuntos: { create: adjuntosNuevos },
       },
@@ -250,6 +258,7 @@ export async function copiarReclasificacion(reclasificacionId: string, informeDe
       informeId: informeDestinoId,
       empresaId: origen.empresaId,
       detalle: origen.detalle,
+      saldoAfectado: origen.saldoAfectado,
       createdByUserId: session.user.id,
       lineas: {
         create: origen.lineas.map((l) => ({

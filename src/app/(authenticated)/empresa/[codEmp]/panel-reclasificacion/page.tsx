@@ -148,6 +148,7 @@ export default async function PanelReclasificacionPage({
                       empresaId={r.empresaId}
                       nombreEmpresa={r.empresa.nombreEmp}
                       detalle={r.detalle}
+                      saldoAfectado={r.saldoAfectado}
                       createdAt={r.createdAt.toISOString()}
                       lineas={r.lineas.map((l) => ({
                         planDeCuentaId: l.planDeCuentaId,

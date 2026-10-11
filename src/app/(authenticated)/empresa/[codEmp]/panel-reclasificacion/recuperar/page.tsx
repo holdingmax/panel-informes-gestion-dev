@@ -29,6 +29,7 @@ export default async function RecuperarReclasificacionPage({
         r.informe.version > 1 ? ` v${r.informe.version}` : ""
       }`,
       detalle: r.detalle,
+      saldoAfectado: r.saldoAfectado,
       lineas: r.lineas.map((l) => ({
         planDeCuenta: { cuenta: l.planDeCuenta.cuenta },
         debe: l.debe.toString(),

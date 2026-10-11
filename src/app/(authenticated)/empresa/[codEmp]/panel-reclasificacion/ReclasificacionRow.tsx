@@ -14,6 +14,7 @@ export function ReclasificacionRow({
   empresaId,
   nombreEmpresa,
   detalle,
+  saldoAfectado,
   createdAt,
   lineas,
   adjuntos,
@@ -26,6 +27,7 @@ export function ReclasificacionRow({
   empresaId: number;
   nombreEmpresa: string;
   detalle: string;
+  saldoAfectado: "FINAL" | "INICIAL";
   createdAt: string;
   lineas: { planDeCuentaId: string; planDeCuenta: { cuenta: string }; debe: string; haber: string }[];
   adjuntos: { id: string; nombreArchivo: string }[];
@@ -53,6 +55,7 @@ export function ReclasificacionRow({
                 id,
                 empresaId,
                 detalle,
+                saldoAfectado,
                 lineas: lineas.map((l) => ({
                   planDeCuentaId: l.planDeCuentaId,
                   debe: l.debe,
@@ -78,7 +81,14 @@ export function ReclasificacionRow({
     <tr className="border-t align-top">
       <td className="py-2 pr-3">{new Date(createdAt).toLocaleString("es-AR")}</td>
       <td className="py-2 pr-3">{nombreEmpresa}</td>
-      <td className="py-2 pr-3">{detalle}</td>
+      <td className="py-2 pr-3">
+        {detalle}
+        {saldoAfectado === "INICIAL" && (
+          <span className="ml-2 rounded bg-amber-100 px-1.5 py-0.5 text-xs text-amber-800">
+            Saldo Inicial
+          </span>
+        )}
+      </td>
       <td className="py-2 pr-3">
         <ul className="text-xs">
           {lineas.map((l, i) => (

@@ -8,6 +8,7 @@ type ReclasificacionItem = {
   numero: number;
   periodoLabel: string;
   detalle: string;
+  saldoAfectado: "FINAL" | "INICIAL";
   lineas: { planDeCuenta: { cuenta: string }; debe: string; haber: string }[];
   adjuntos: { nombreArchivo: string }[];
 };
@@ -64,7 +65,14 @@ export function RecuperarList({
                 #{item.numero} — {item.periodoLabel}
               </span>
             </div>
-            <p className="pl-6 text-zinc-700">{item.detalle}</p>
+            <p className="pl-6 text-zinc-700">
+              {item.detalle}
+              {item.saldoAfectado === "INICIAL" && (
+                <span className="ml-2 rounded bg-amber-100 px-1.5 py-0.5 text-xs text-amber-800">
+                  Saldo Inicial
+                </span>
+              )}
+            </p>
             <ul className="pl-6 text-xs text-zinc-500">
               {item.lineas.map((l, i) => (
                 <li key={i}>

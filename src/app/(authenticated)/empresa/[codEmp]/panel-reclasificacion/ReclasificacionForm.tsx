@@ -1,10 +1,11 @@
 "use client";
 
-import { useActionState, useState } from "react";
+import { useActionState, useRef, useState } from "react";
 import { createReclasificacion, updateReclasificacion } from "@/lib/reclasificacion-actions";
 
 type CuentaOpcion = { id: string; cuenta: string };
 type Fila = { planDeCuentaId: string; debe: string; haber: string };
+type SaldoAfectado = "FINAL" | "INICIAL";
 
 function filaVacia(): Fila {
   return { planDeCuentaId: "", debe: "", haber: "" };
@@ -27,12 +28,19 @@ export function ReclasificacionForm({
     id: string;
     empresaId: number;
     detalle: string;
+    saldoAfectado: SaldoAfectado;
     lineas: Fila[];
     cantidadAdjuntosExistentes: number;
   };
 }) {
   const [empresaId, setEmpresaId] = useState(editar?.empresaId ?? empresas[0]?.codEmp ?? 0);
   const [filas, setFilas] = useState<Fila[]>(editar?.lineas ?? [filaVacia(), filaVacia()]);
+  // Siempre arranca en "Saldo Final" al cargar una nueva; al editar, en el
+  // valor que ya tenía.
+  const [saldoAfectado, setSaldoAfectado] = useState<SaldoAfectado>(editar?.saldoAfectado ?? "FINAL");
+  const [confirmandoInicial, setConfirmandoInicial] = useState(false);
+  const inicialConfirmadoRef = useRef(false);
+  const formRef = useRef<HTMLFormElement>(null);
 
   const [state, formAction, pending] = useActionState<{ error?: string } | null, FormData>(
     async (_prev, formData) => {
@@ -42,6 +50,7 @@ export function ReclasificacionForm({
         } else {
           await createReclasificacion(informeId, empresaId, formData);
           setFilas([filaVacia(), filaVacia()]);
+          setSaldoAfectado("FINAL");
         }
         onDone?.();
         return null;
@@ -62,8 +71,25 @@ export function ReclasificacionForm({
     setFilas((prev) => prev.map((f, idx) => (idx === i ? { ...f, [campo]: valor } : f)));
   }
 
+  // Con "Saldo Inicial" el guardado se frena hasta que el usuario confirma en
+  // el cartel de advertencia; "Cancelar" lo deja en esta misma ventana.
+  function alEnviar(e: React.FormEvent<HTMLFormElement>) {
+    if (saldoAfectado === "INICIAL" && !inicialConfirmadoRef.current) {
+      e.preventDefault();
+      setConfirmandoInicial(true);
+      return;
+    }
+    inicialConfirmadoRef.current = false;
+  }
+
+  function confirmarInicial() {
+    inicialConfirmadoRef.current = true;
+    setConfirmandoInicial(false);
+    formRef.current?.requestSubmit();
+  }
+
   return (
-    <form action={formAction} className="flex flex-col gap-4">
+    <form ref={formRef} action={formAction} onSubmit={alEnviar} className="flex flex-col gap-4">
       {editar || empresas.length <= 1 ? (
         <p className="text-sm">
           <span className="font-medium">Empresa:</span> {nombreEmpresa}
@@ -87,6 +113,19 @@ export function ReclasificacionForm({
           </select>
         </label>
       )}
+
+      <label className="flex flex-col gap-1">
+        <span className="text-sm">Saldo de reclasifica</span>
+        <select
+          name="saldoAfectado"
+          value={saldoAfectado}
+          onChange={(e) => setSaldoAfectado(e.target.value === "INICIAL" ? "INICIAL" : "FINAL")}
+          className="w-fit rounded border px-3 py-2 text-sm"
+        >
+          <option value="FINAL">Saldo Final</option>
+          <option value="INICIAL">Saldo Inicial</option>
+        </select>
+      </label>
 
       <div className="flex flex-col gap-2">
         <div className="grid grid-cols-[1fr_110px_110px_auto] gap-2 text-xs font-medium text-zinc-600">
@@ -192,6 +231,34 @@ export function ReclasificacionForm({
       >
         {pending ? "Guardando..." : editar ? "GUARDAR CAMBIOS" : "GUARDAR"}
       </button>
+
+      {confirmandoInicial && (
+        <div className="fixed inset-0 z-50 flex items-center justify-center bg-black/40 p-4">
+          <div role="alertdialog" aria-modal="true" className="w-full max-w-md rounded-lg bg-white p-6 shadow-xl">
+            <p className="text-lg font-medium">Reclasificación sobre Saldo Inicial</p>
+            <p className="mt-2 text-sm text-zinc-600">
+              Esta reclasificación afectará únicamente a los saldos iniciales de los informes. El
+              saldo final no se modifica. ¿Querés guardarla igual?
+            </p>
+            <div className="mt-5 flex justify-end gap-3">
+              <button
+                type="button"
+                onClick={() => setConfirmandoInicial(false)}
+                className="rounded-md bg-red-600 px-4 py-2 text-sm text-white transition-colors hover:bg-red-700 focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-accent focus-visible:ring-offset-2"
+              >
+                Cancelar
+              </button>
+              <button
+                type="button"
+                onClick={confirmarInicial}
+                className="rounded-md bg-emerald-600 px-4 py-2 text-sm text-white transition-colors hover:bg-emerald-700 focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-accent focus-visible:ring-offset-2"
+              >
+                Confirmar
+              </button>
+            </div>
+          </div>
+        </div>
+      )}
     </form>
   );
 }

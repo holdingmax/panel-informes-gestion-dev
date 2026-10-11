@@ -211,7 +211,8 @@ async function computeResultadoNominalMesDeEmpresa(
       saldoIniHaber: Number(b.saldoIniHaber),
       saldoCierreDebe: Number(b.saldoCierreDebe),
       saldoCierreHaber: Number(b.saldoCierreHaber),
-    }))
+    })),
+    "ER"
   );
 
   const { valores, cuentas, cuentasSinSubrubro, advertencias } = computeResultadoNominalDeEmpresaPure(
