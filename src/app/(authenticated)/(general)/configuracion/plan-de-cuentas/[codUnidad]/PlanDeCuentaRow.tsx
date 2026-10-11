@@ -56,11 +56,17 @@ export function PlanDeCuentaRow({
   const [editing, setEditing] = useState(false);
   const [cuentaValue, setCuentaValue] = useState(cuenta);
   const [pending, startTransition] = useTransition();
+  const [error, setError] = useState<string | null>(null);
 
   function guardar(formData: FormData) {
     formData.set("cuenta", cuentaValue);
     startTransition(async () => {
-      await updatePlanDeCuentas(id, formData);
+      const result = await updatePlanDeCuentas(id, formData);
+      if (result?.error) {
+        setError(result.error);
+        return;
+      }
+      setError(null);
       setEditing(false);
     });
   }
@@ -182,6 +188,7 @@ export function PlanDeCuentaRow({
               </button>
             </div>
           </form>
+          {error && <p className="mt-1 text-sm text-red-700">{error}</p>}
         </td>
       </tr>
     );

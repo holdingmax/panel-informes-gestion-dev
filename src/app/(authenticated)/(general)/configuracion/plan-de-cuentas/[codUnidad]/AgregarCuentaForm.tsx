@@ -1,5 +1,6 @@
 "use client";
 
+import { useState } from "react";
 import { createPlanDeCuentas } from "@/lib/plan-de-cuentas-actions";
 
 type Opcion = { id: number; nombre: string };
@@ -19,8 +20,15 @@ export function AgregarCuentaForm({
   subrubros3: Opcion[];
   categorias: Opcion[];
 }) {
+  const [error, setError] = useState<string | null>(null);
+
+  async function agregar(formData: FormData) {
+    const result = await createPlanDeCuentas(formData);
+    setError(result?.error ?? null);
+  }
+
   return (
-    <form action={createPlanDeCuentas} className="flex flex-col gap-3">
+    <form action={agregar} className="flex flex-col gap-3">
       <label className="flex flex-col gap-1">
         <span className="text-lg">Empresa</span>
         <select name="empresaId" required className="rounded border px-3 py-2 text-lg">
@@ -97,6 +105,8 @@ export function AgregarCuentaForm({
           ))}
         </select>
       </label>
+
+      {error && <p className="text-sm text-red-700">{error}</p>}
 
       <button
         type="submit"

@@ -2,6 +2,7 @@
 
 import { revalidatePath } from "next/cache";
 import { prisma } from "@/lib/prisma";
+import { Prisma } from "@/generated/prisma/client";
 import type { DeleteCheckResult } from "@/components/ConfirmDeleteButton";
 import { requireUser, requireAdmin, requireAccesoUnidad } from "@/lib/authz";
 
@@ -75,25 +76,44 @@ function readCampos(formData: FormData) {
   };
 }
 
-export async function createPlanDeCuentas(formData: FormData) {
+const ERROR_CUENTA_DUPLICADA = "Ya existe una cuenta con ese nombre en esta empresa.";
+
+function esCuentaDuplicada(e: unknown) {
+  return e instanceof Prisma.PrismaClientKnownRequestError && e.code === "P2002";
+}
+
+export async function createPlanDeCuentas(formData: FormData): Promise<{ error: string } | undefined> {
   const empresaId = Number(formData.get("empresaId"));
   if (!Number.isInteger(empresaId)) throw new Error("Completá la Empresa");
   await requireAccesoConfiguracionEmpresa(empresaId);
 
   const campos = readCampos(formData);
 
-  await prisma.planDeCuentas.create({ data: { empresaId, ...campos } });
+  try {
+    await prisma.planDeCuentas.create({ data: { empresaId, ...campos } });
+  } catch (e) {
+    if (esCuentaDuplicada(e)) return { error: ERROR_CUENTA_DUPLICADA };
+    throw e;
+  }
 
   revalidatePath("/configuracion/plan-de-cuentas");
 }
 
-export async function updatePlanDeCuentas(id: string, formData: FormData) {
+export async function updatePlanDeCuentas(
+  id: string,
+  formData: FormData
+): Promise<{ error: string } | undefined> {
   const existente = await prisma.planDeCuentas.findUniqueOrThrow({ where: { id }, select: { empresaId: true } });
   await requireAccesoConfiguracionEmpresa(existente.empresaId);
 
   const campos = readCampos(formData);
 
-  await prisma.planDeCuentas.update({ where: { id }, data: campos });
+  try {
+    await prisma.planDeCuentas.update({ where: { id }, data: campos });
+  } catch (e) {
+    if (esCuentaDuplicada(e)) return { error: ERROR_CUENTA_DUPLICADA };
+    throw e;
+  }
 
   revalidatePath("/configuracion/plan-de-cuentas");
 }
