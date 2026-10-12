@@ -192,16 +192,15 @@ export function CargaMasivaPlanDeCuentas({ codUnidad }: { codUnidad: number }) {
         <p className="text-sm text-zinc-600">
           Sube un Excel con las columnas <strong>Empresa, Cuenta, Partida, Rubro, Subrubro, Subrubro 2,
           Subrubro 3</strong> (todas pueden estar vacías menos Cuenta, que tiene que empezar con la secuencia
-          de números del sistema contable). Solo se cargan las cuentas que todavía no existen. Descargá el
-          Excel de referencia para armar el archivo: trae las instrucciones y los valores vigentes de cada
-          tabla.
+          de números del sistema contable). Solo se cargan las cuentas que todavía no existen. Descargá
+          tablas-actuales para armar el archivo: trae los valores vigentes de cada tabla.
         </p>
 
         <a
           href={`/api/plan-de-cuentas/${codUnidad}/referencia`}
           className="w-fit rounded-md border border-slate-300 px-4 py-2 text-sm text-slate-700 hover:bg-slate-50 focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-accent focus-visible:ring-offset-2"
         >
-          Descargar Excel de referencia
+          Descargar tablas-actuales
         </a>
 
         <label className="flex flex-col gap-1">

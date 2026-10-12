@@ -114,6 +114,13 @@ export default async function PlanDeCuentasUnidadPage({
                 />
               </CollapsibleAdd>
               <CargaMasivaPlanDeCuentas codUnidad={codUnidad} />
+              <a
+                href={`/api/plan-de-cuentas/${codUnidad}/referencia`}
+                title="Excel con los valores vigentes de cada tabla (Empresa, Cuenta, Partida, Rubro, Subrubro...) para armar la carga masiva"
+                className="w-fit rounded-md border border-slate-300 bg-white px-4 py-2 text-sm font-semibold uppercase tracking-wide text-slate-700 transition-colors hover:bg-slate-50 focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-accent focus-visible:ring-offset-2"
+              >
+                Descargar tablas-actuales
+              </a>
             </div>
           )}
 

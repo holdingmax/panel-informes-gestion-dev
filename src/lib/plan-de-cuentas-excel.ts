@@ -5,16 +5,6 @@ import { normalizarTexto, type FilaCarga } from "@/lib/plan-de-cuentas-carga-mas
 // Sin "use server": helpers de Excel que se llaman desde la acción de carga
 // masiva y desde la ruta que descarga el archivo de referencia.
 
-export const ENCABEZADOS_CARGA = [
-  "Empresa",
-  "Cuenta",
-  "Partida",
-  "Rubro",
-  "Subrubro",
-  "Subrubro 2",
-  "Subrubro 3",
-] as const;
-
 const HOJA_CARGA = "Carga masiva";
 
 type Fila = Record<string, string | number | boolean | Date | null>;
@@ -40,46 +30,16 @@ function agregarHoja(wb: ExcelJS.Workbook, nombre: string, columnas: string[], f
 
 const ABREV_NOF: Record<string, string> = { OPERATIVO: "CTO", NO_OPERATIVO: "ONP", FINANCIAMIENTO: "ARS" };
 
-// Excel de referencia para armar el archivo de la carga masiva (a mano o con
-// una IA): las instrucciones, una hoja "Carga masiva" con los encabezados que
-// la carga espera, y una hoja por tabla con TODOS sus valores vigentes. Las
-// hojas Empresa y Cuenta se limitan a las Empresas de esta Unidad.
-export async function generarExcelReferencia(codUnidad: number): Promise<Buffer> {
+// "tablas-actuales": una hoja por tabla (Empresa, Cuenta, Partida, Rubro,
+// Subrubro, Subrubro 2, Subrubro 3) con TODOS sus campos y los valores de ese
+// momento, de todas las Empresas — sin importar desde qué unidad se descarga.
+// Es el archivo de referencia para armar la carga masiva (a mano o con una IA).
+export async function generarTablasActuales(): Promise<Buffer> {
   const wb = new ExcelJS.Workbook();
   wb.creator = "Panel de Informes de Gestión";
   wb.created = new Date();
 
-  const instrucciones = wb.addWorksheet("Instrucciones");
-  instrucciones.getColumn(1).width = 110;
-  [
-    "CARGA MASIVA DEL PLAN DE CUENTAS",
-    "",
-    'Completá la hoja "Carga masiva" con una fila por cuenta y subila desde Configuración → Plan de Cuentas → Carga masiva.',
-    "",
-    "Columnas: Empresa, Cuenta, Partida, Rubro, Subrubro, Subrubro 2, Subrubro 3.",
-    "• Cuenta es obligatoria y SIEMPRE tiene que empezar con la secuencia de números del sistema contable (ej. 5.00.29.06 - MOVILIDAD Y VIATICO). Una cuenta sin números al comienzo se descarta.",
-    "• Las demás columnas pueden quedar vacías. Si las completás, el valor tiene que ser uno de los que figuran en la hoja de esa tabla (Empresa, Partida, Rubro, Subrubro, Subrubro 2, Subrubro 3), escrito igual.",
-    "• Empresa: si la unidad tiene una sola empresa se puede dejar vacía; si tiene varias, hay que indicarla.",
-    "• Partida: no se guarda en la cuenta (sale del Rubro). Si completás Partida y Rubro, el rubro tiene que pertenecer a esa partida.",
-    "• Si una cuenta ya existe en el plan de la empresa (mismos números al comienzo del nombre, aunque el resto del texto sea distinto), se descarta: los cambios se hacen a mano con Editar/Eliminar.",
-    "• Las hojas Empresa y Cuenta (limitadas a las empresas de esta unidad), Partida, Rubro y Subrubro muestran los valores vigentes al momento de descargar este archivo.",
-  ].forEach((texto, i) => {
-    const celda = instrucciones.getCell(i + 1, 1);
-    celda.value = texto;
-    celda.alignment = { wrapText: true, vertical: "top" };
-    if (i === 0) celda.font = { bold: true, size: 14 };
-  });
-
-  agregarHoja(wb, HOJA_CARGA, [...ENCABEZADOS_CARGA], []);
-
-  const vinculos = await prisma.empresaUnidad.findMany({
-    where: { unidadNegocioId: codUnidad },
-    select: { empresaId: true },
-  });
-  const empresaIds = vinculos.map((v) => v.empresaId);
-
   const empresas = await prisma.empresa.findMany({
-    where: { codEmp: { in: empresaIds } },
     orderBy: { codEmp: "asc" },
     include: {
       unidades: { select: { unidadNegocio: { select: { codUnidad: true, nombreUnidad: true } } } },
@@ -119,7 +79,6 @@ export async function generarExcelReferencia(codUnidad: number): Promise<Buffer>
   );
 
   const cuentas = await prisma.planDeCuentas.findMany({
-    where: { empresaId: { in: empresaIds } },
     orderBy: [{ empresaId: "asc" }, { cuenta: "asc" }],
     include: {
       empresa: { select: { nombreEmp: true } },
@@ -177,14 +136,14 @@ export async function generarExcelReferencia(codUnidad: number): Promise<Buffer>
     orderBy: { codRubro: "asc" },
     include: {
       partidaPatrimonial: { select: { nomPartida: true } },
-      nofPorUnidad: { where: { unidadNegocioId: codUnidad } },
+      nofPorUnidad: { include: { unidadNegocio: { select: { nombreUnidad: true } } } },
       _count: { select: { planes: true } },
     },
   });
   agregarHoja(
     wb,
     "Rubro",
-    ["codRubro", "nomRubro", "partidaPatrimonialId", "partida", "bucketNOF (default)", "orden", "CTO/ONP/ARS de esta unidad", "cantidad de cuentas"],
+    ["codRubro", "nomRubro", "partidaPatrimonialId", "partida", "bucketNOF (default)", "orden", "CTO/ONP/ARS elegido por unidad", "cantidad de cuentas"],
     rubros.map((r) => ({
       codRubro: r.codRubro,
       nomRubro: r.nomRubro,
@@ -192,9 +151,9 @@ export async function generarExcelReferencia(codUnidad: number): Promise<Buffer>
       partida: r.partidaPatrimonial?.nomPartida ?? null,
       "bucketNOF (default)": r.bucketNOF ? `${r.bucketNOF} (${ABREV_NOF[r.bucketNOF]})` : null,
       orden: r.orden,
-      "CTO/ONP/ARS de esta unidad": r.nofPorUnidad[0]
-        ? (r.nofPorUnidad[0].bucketNOF ? ABREV_NOF[r.nofPorUnidad[0].bucketNOF] : "sin clasificar")
-        : null,
+      "CTO/ONP/ARS elegido por unidad": r.nofPorUnidad
+        .map((n) => `${n.unidadNegocio.nombreUnidad}: ${n.bucketNOF ? ABREV_NOF[n.bucketNOF] : "sin clasificar"}`)
+        .join("; "),
       "cantidad de cuentas": r._count.planes,
     }))
   );
