@@ -8,6 +8,7 @@ import { requireAccesoUnidad } from "@/lib/authz";
 import { CollapsibleAdd } from "@/components/CollapsibleAdd";
 import { PlanDeCuentasTable } from "./PlanDeCuentasTable";
 import { AgregarCuentaForm } from "./AgregarCuentaForm";
+import { CargaMasivaPlanDeCuentas } from "./CargaMasivaPlanDeCuentas";
 
 export const dynamic = "force-dynamic";
 
@@ -101,16 +102,19 @@ export default async function PlanDeCuentasUnidadPage({
       ) : (
         <>
           {puedeConfiguracion && (
-          <CollapsibleAdd label="Agregar cuenta">
-            <AgregarCuentaForm
-              empresas={empresas}
-              rubros={rubrosOpc}
-              subrubros={subrubrosOpc}
-              subrubros2={subrubros2Opc}
-              subrubros3={subrubros3Opc}
-              unidadActualId={codUnidad}
-            />
-          </CollapsibleAdd>
+            <div className="flex flex-wrap items-start gap-4">
+              <CollapsibleAdd label="Agregar cuenta">
+                <AgregarCuentaForm
+                  empresas={empresas}
+                  rubros={rubrosOpc}
+                  subrubros={subrubrosOpc}
+                  subrubros2={subrubros2Opc}
+                  subrubros3={subrubros3Opc}
+                  unidadActualId={codUnidad}
+                />
+              </CollapsibleAdd>
+              <CargaMasivaPlanDeCuentas codUnidad={codUnidad} />
+            </div>
           )}
 
           <PlanDeCuentasTable
