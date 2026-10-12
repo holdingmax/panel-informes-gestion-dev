@@ -38,7 +38,8 @@ function MonedaSelect({
 export function EmpresaRow({
   codEmp,
   nombreEmp,
-  unidadNegocioNombre,
+  unidadesNombres,
+  comparteBsys,
   monedas,
   monedaPrimaria,
   presentaEnMiles,
@@ -49,7 +50,8 @@ export function EmpresaRow({
 }: {
   codEmp: number;
   nombreEmp: string;
-  unidadNegocioNombre: string | null;
+  unidadesNombres: string[];
+  comparteBsys: boolean;
   monedas: MonedaOpcion[];
   monedaPrimaria: MonedaRef;
   presentaEnMiles: boolean;
@@ -61,11 +63,17 @@ export function EmpresaRow({
   const [editing, setEditing] = useState(false);
   const [nombreValue, setNombreValue] = useState(nombreEmp);
   const [pending, startTransition] = useTransition();
+  const [error, setError] = useState<string | null>(null);
 
   function guardar(formData: FormData) {
     formData.set("nombreEmp", nombreValue);
     startTransition(async () => {
-      await updateEmpresa(codEmp, formData);
+      const result = await updateEmpresa(codEmp, formData);
+      if (result?.error) {
+        setError(result.error);
+        return;
+      }
+      setError(null);
       setEditing(false);
     });
   }
@@ -74,7 +82,7 @@ export function EmpresaRow({
     return (
       <tr className="border-t align-top">
         <td className="py-2 pr-4">{codEmp}</td>
-        <td className="py-2 pr-4" colSpan={5}>
+        <td className="py-2 pr-4" colSpan={6}>
           <form action={guardar} className="flex flex-wrap items-end gap-3">
             <label className="flex flex-col gap-1 text-sm">
               <span>Nombre</span>
@@ -118,6 +126,18 @@ export function EmpresaRow({
               <span>Actualiza</span>
             </label>
             <label className="flex flex-col gap-1 text-sm">
+              <span>Comparte BSyS</span>
+              <select
+                name="comparteBsys"
+                defaultValue={comparteBsys ? "si" : "no"}
+                disabled={pending}
+                className="rounded border px-2 py-1 text-sm"
+              >
+                <option value="no">No</option>
+                <option value="si">Sí</option>
+              </select>
+            </label>
+            <label className="flex flex-col gap-1 text-sm">
               <span>Moneda actualiza</span>
               <MonedaSelect
                 name="monedaActualizaId"
@@ -147,6 +167,7 @@ export function EmpresaRow({
               </button>
             </div>
           </form>
+          {error && <p className="mt-1 max-w-xl text-sm text-red-700">{error}</p>}
         </td>
       </tr>
     );
@@ -156,7 +177,8 @@ export function EmpresaRow({
     <tr className="border-t">
       <td className="py-2 pr-4">{codEmp}</td>
       <td className="py-2 pr-4">{nombreEmp}</td>
-      <td className="py-2 pr-4">{unidadNegocioNombre ?? "— sin vincular —"}</td>
+      <td className="py-2 pr-4">{unidadesNombres.length > 0 ? unidadesNombres.join(", ") : "— sin vincular —"}</td>
+      <td className="py-2 pr-4">{comparteBsys ? "Sí" : "No"}</td>
       <td className="py-2 pr-4">
         {monedaPrimaria ? `${monedaPrimaria.nomMoneda} (${monedaPrimaria.simbolo})` : "—"}
       </td>

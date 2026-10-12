@@ -22,8 +22,8 @@ export default async function RubroPage() {
       <p className="text-sm text-zinc-600">
         La Partida Patrimonial decide dónde cae este Rubro en el Estado de Situación Patrimonial
         (Activo/Pasivo/Patrimonio Neto) o si es de Resultado — uniforma la clasificación para
-        todas las cuentas que use este Rubro. La clasificación de Necesidades Operativas de
-        Fondos (NOF) se hace por cuenta en Configuración → Categoría OyA, no acá.
+        todas las cuentas que use este Rubro. La clasificación CTO/ONP/ARS de Necesidades
+        Operativas de Fondos (NOF) se elige en el ESP de cada informe, por unidad de negocio, no acá.
       </p>
 
       {isAdmin && (

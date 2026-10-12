@@ -432,10 +432,12 @@ const PLAN_CONFIGS: Record<string, PlanConfig> = {
       // Negocio y se crea si todavía no existe.
       const panini = await prisma.empresa.update({ where: { codEmp: 3 }, data: { nombreEmp: "PANINI" } });
       let tucson = await prisma.empresa.findFirst({
-        where: { unidadNegocioId: UNIDAD_NEGOCIO_ID, nombreEmp: "TUCSON" },
+        where: { unidades: { some: { unidadNegocioId: UNIDAD_NEGOCIO_ID } }, nombreEmp: "TUCSON" },
       });
       if (!tucson) {
-        tucson = await prisma.empresa.create({ data: { nombreEmp: "TUCSON", unidadNegocioId: UNIDAD_NEGOCIO_ID } });
+        tucson = await prisma.empresa.create({
+          data: { nombreEmp: "TUCSON", unidades: { create: { unidadNegocioId: UNIDAD_NEGOCIO_ID } } },
+        });
       }
       return new Map<string, number>([
         ["PANINI", panini.codEmp],
@@ -971,7 +973,9 @@ const BSYS_CONFIGS: Record<string, BsysConfig> = {
     startRowMes: 2,
     resolverEmpresaPorCodigo: async () => {
       const unidadNegocioId = 3;
-      const empresas = await prisma.empresa.findMany({ where: { unidadNegocioId } });
+      const empresas = await prisma.empresa.findMany({
+        where: { unidades: { some: { unidadNegocioId } } },
+      });
       const empresaPorCodigo = new Map<string, number>(empresas.map((e) => [e.nombreEmp, e.codEmp]));
       if (!empresaPorCodigo.has("PANINI") || !empresaPorCodigo.has("TUCSON")) {
         throw new Error(
@@ -1049,8 +1053,12 @@ async function importarBsys(empresaArg: string, filePath: string, periodo?: { me
   console.log(`Acumulado: ${filasAcumulado.length} filas. Mes: ${filasMes.length} filas.`);
 
   await prisma.$transaction(async (tx) => {
-    await tx.balanceSumasYSaldos.createMany({ data: filasAcumulado.map((f) => ({ ...f, periodoMes, periodoAnio })) });
-    await tx.balanceSumasYSaldos.createMany({ data: filasMes.map((f) => ({ ...f, periodoMes, periodoAnio })) });
+    await tx.balanceSumasYSaldos.createMany({
+      data: filasAcumulado.map((f) => ({ ...f, unidadNegocioId, periodoMes, periodoAnio })),
+    });
+    await tx.balanceSumasYSaldos.createMany({
+      data: filasMes.map((f) => ({ ...f, unidadNegocioId, periodoMes, periodoAnio })),
+    });
     // Mismo criterio que bsys-import.ts: un informe de un período ya
     // Aprobado no se pisa, se versiona.
     const actual = await tx.informe.findFirst({

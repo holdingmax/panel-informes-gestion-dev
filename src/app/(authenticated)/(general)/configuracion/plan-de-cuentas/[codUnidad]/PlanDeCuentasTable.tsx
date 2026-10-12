@@ -14,13 +14,20 @@ type Fila = {
   subrubroId: number | null;
   subrubro2Id: number | null;
   subrubro3Id: number | null;
-  categoriaOyAId: number | null;
+  unidadNegocioId: number | null;
   nombrePartida: string | null;
   nombreRubro: string | null;
   nombreSubrubro: string | null;
   nombreSubrubro2: string | null;
   nombreSubrubro3: string | null;
-  nombreCategoriaOyA: string | null;
+  nombreUnidadCuenta: string | null;
+};
+
+type EmpresaOpcion = {
+  codEmp: number;
+  nombreEmp: string;
+  comparteBsys: boolean;
+  unidades: Opcion[];
 };
 
 export function PlanDeCuentasTable({
@@ -30,23 +37,30 @@ export function PlanDeCuentasTable({
   subrubros,
   subrubros2,
   subrubros3,
-  categorias,
   puedeConfiguracion,
 }: {
   filas: Fila[];
-  empresas: { codEmp: number; nombreEmp: string }[];
+  empresas: EmpresaOpcion[];
   rubros: Opcion[];
   subrubros: Opcion[];
   subrubros2: Opcion[];
   subrubros3: Opcion[];
-  categorias: Opcion[];
   puedeConfiguracion: boolean;
 }) {
   const [filtroEmpresa, setFiltroEmpresa] = useState("");
   const [filtroCuenta, setFiltroCuenta] = useState("");
   const [filtroRubro, setFiltroRubro] = useState("");
   const [filtroSubrubro, setFiltroSubrubro] = useState("");
-  const [filtroCategoria, setFiltroCategoria] = useState("");
+  const [filtroUnidad, setFiltroUnidad] = useState("");
+
+  // La columna y el filtro "Cuit compartido" solo tienen sentido si alguna
+  // de las Empresas comparte BSyS.
+  const hayCompartidas = empresas.some((e) => e.comparteBsys);
+  const unidadesCompartidas = [
+    ...new Map(
+      empresas.filter((e) => e.comparteBsys).flatMap((e) => e.unidades).map((u) => [u.id, u])
+    ).values(),
+  ];
 
   const cuentaNormalizada = filtroCuenta.trim().toLowerCase();
 
@@ -55,19 +69,19 @@ export function PlanDeCuentasTable({
     if (cuentaNormalizada && !f.cuenta.toLowerCase().includes(cuentaNormalizada)) return false;
     if (filtroRubro && f.rubroId !== Number(filtroRubro)) return false;
     if (filtroSubrubro && f.subrubroId !== Number(filtroSubrubro)) return false;
-    if (filtroCategoria && f.categoriaOyAId !== Number(filtroCategoria)) return false;
+    if (filtroUnidad && f.unidadNegocioId !== Number(filtroUnidad)) return false;
     return true;
   });
 
   const hayFiltrosActivos =
-    filtroEmpresa || filtroCuenta || filtroRubro || filtroSubrubro || filtroCategoria;
+    filtroEmpresa || filtroCuenta || filtroRubro || filtroSubrubro || filtroUnidad;
 
   function limpiarFiltros() {
     setFiltroEmpresa("");
     setFiltroCuenta("");
     setFiltroRubro("");
     setFiltroSubrubro("");
-    setFiltroCategoria("");
+    setFiltroUnidad("");
   }
 
   return (
@@ -131,21 +145,23 @@ export function PlanDeCuentasTable({
           </select>
         </label>
 
-        <label className="flex w-fit flex-col gap-1">
-          <span className="text-sm">Filtrar por categoría OyA</span>
-          <select
-            value={filtroCategoria}
-            onChange={(e) => setFiltroCategoria(e.target.value)}
-            className="rounded border px-3 py-2 text-lg"
-          >
-            <option value="">Todas</option>
-            {categorias.map((c) => (
-              <option key={c.id} value={c.id}>
-                {c.nombre}
-              </option>
-            ))}
-          </select>
-        </label>
+        {hayCompartidas && (
+          <label className="flex w-fit flex-col gap-1">
+            <span className="text-sm">Filtrar por cuit compartido</span>
+            <select
+              value={filtroUnidad}
+              onChange={(e) => setFiltroUnidad(e.target.value)}
+              className="rounded border px-3 py-2 text-lg"
+            >
+              <option value="">Todos</option>
+              {unidadesCompartidas.map((u) => (
+                <option key={u.id} value={u.id}>
+                  {u.nombre}
+                </option>
+              ))}
+            </select>
+          </label>
+        )}
 
         {hayFiltrosActivos && (
           <button
@@ -173,12 +189,14 @@ export function PlanDeCuentasTable({
               <th className="py-1 pr-4">Subrubro</th>
               <th className="py-1 pr-4">Subrubro 2</th>
               <th className="py-1 pr-4">Subrubro 3</th>
-              <th className="py-1 pr-4">Categoría OyA</th>
+              {hayCompartidas && <th className="py-1 pr-4">Cuit compartido</th>}
               <th className="py-1 pr-4">Acciones</th>
             </tr>
           </thead>
           <tbody>
-            {filasFiltradas.map((f) => (
+            {filasFiltradas.map((f) => {
+              const empresa = empresas.find((e) => e.codEmp === f.empresaId);
+              return (
               <PlanDeCuentaRow
                 key={f.id}
                 id={f.id}
@@ -188,21 +206,24 @@ export function PlanDeCuentasTable({
                 subrubroId={f.subrubroId}
                 subrubro2Id={f.subrubro2Id}
                 subrubro3Id={f.subrubro3Id}
-                categoriaOyAId={f.categoriaOyAId}
+                unidadNegocioId={f.unidadNegocioId}
                 nombrePartida={f.nombrePartida}
                 nombreRubro={f.nombreRubro}
                 nombreSubrubro={f.nombreSubrubro}
                 nombreSubrubro2={f.nombreSubrubro2}
                 nombreSubrubro3={f.nombreSubrubro3}
-                nombreCategoriaOyA={f.nombreCategoriaOyA}
+                nombreUnidadCuenta={f.nombreUnidadCuenta}
                 rubros={rubros}
                 subrubros={subrubros}
                 subrubros2={subrubros2}
                 subrubros3={subrubros3}
-                categorias={categorias}
+                comparteBsys={empresa?.comparteBsys ?? false}
+                unidadesDeEmpresa={empresa?.unidades ?? []}
+                mostrarCuitCompartido={hayCompartidas}
                 puedeConfiguracion={puedeConfiguracion}
               />
-            ))}
+              );
+            })}
           </tbody>
         </table>
       </div>

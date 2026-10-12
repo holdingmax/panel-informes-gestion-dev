@@ -1,4 +1,4 @@
-import { listReclasificacionesDeEmpresa } from "@/lib/reclasificacion-actions";
+import { listReclasificacionesDeUnidad } from "@/lib/reclasificacion-actions";
 import { RecuperarList } from "./RecuperarList";
 
 export const dynamic = "force-dynamic";
@@ -8,16 +8,19 @@ const MESES_ABREV = [
 ];
 
 export default async function RecuperarReclasificacionPage({
+  params,
   searchParams,
 }: {
-  searchParams: Promise<{ empresaId?: string; informeDestinoId?: string }>;
+  params: Promise<{ codEmp: string }>;
+  searchParams: Promise<{ informeDestinoId?: string }>;
 }) {
-  const { empresaId, informeDestinoId } = await searchParams;
-  if (!empresaId || !informeDestinoId) {
+  const { codEmp } = await params;
+  const { informeDestinoId } = await searchParams;
+  if (!informeDestinoId) {
     return <p className="p-6 text-sm text-red-600">Faltan parámetros.</p>;
   }
 
-  const reclasificaciones = await listReclasificacionesDeEmpresa(Number(empresaId));
+  const reclasificaciones = await listReclasificacionesDeUnidad(Number(codEmp));
   // No tiene sentido copiarse a sí misma como "recuperada" — se excluye la
   // del informe que se está trabajando ahora mismo.
   const items = reclasificaciones
@@ -28,6 +31,7 @@ export default async function RecuperarReclasificacionPage({
       periodoLabel: `${MESES_ABREV[r.informe.periodoMes - 1]}-${String(r.informe.periodoAnio).slice(-2)}${
         r.informe.version > 1 ? ` v${r.informe.version}` : ""
       }`,
+      empresaNombre: r.empresa.nombreEmp,
       detalle: r.detalle,
       saldoAfectado: r.saldoAfectado,
       lineas: r.lineas.map((l) => ({
@@ -42,7 +46,7 @@ export default async function RecuperarReclasificacionPage({
     <div className="p-6">
       <h2 className="text-lg font-medium">Recuperar Reclasificación</h2>
       <p className="mt-1 text-sm text-zinc-600">
-        Elegí una reclasificación de otro período para copiarla completa (líneas y adjuntos) al
+        Elegí una reclasificación de otro período (de cualquier empresa de la unidad) para copiarla completa (líneas y adjuntos) al
         informe que estás trabajando ahora.
       </p>
       <div className="mt-4">

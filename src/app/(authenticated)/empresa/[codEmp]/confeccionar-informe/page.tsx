@@ -11,16 +11,17 @@ const MESES_ABREV = [
   "ene", "feb", "mar", "abr", "may", "jun", "jul", "ago", "sep", "oct", "nov", "dic",
 ];
 
-async function ultimaCargaInfo(empresaId: number, tipo: "MES" | "ACUMULADO") {
+// Solo la carga de ESTA unidad: una empresa que comparte BSyS tiene una por unidad.
+async function ultimaCargaInfo(empresaId: number, unidadNegocioId: number, tipo: "MES" | "ACUMULADO") {
   const ultimaCarga = await prisma.balanceSumasYSaldos.findFirst({
-    where: { empresaId, tipo },
+    where: { empresaId, unidadNegocioId, tipo },
     orderBy: { fechaCarga: "desc" },
     select: { fechaCarga: true },
   });
   if (!ultimaCarga) return null;
 
   const cantidad = await prisma.balanceSumasYSaldos.count({
-    where: { empresaId, tipo, fechaCarga: ultimaCarga.fechaCarga },
+    where: { empresaId, unidadNegocioId, tipo, fechaCarga: ultimaCarga.fechaCarga },
   });
   return { fecha: ultimaCarga.fechaCarga, cantidad };
 }
@@ -60,8 +61,8 @@ export default async function ConfeccionarInformePage({
   const ultimasCargas = await Promise.all(
     empresas.map(async (empresa) => ({
       empresa,
-      ultimoMes: await ultimaCargaInfo(empresa.codEmp, "MES"),
-      ultimoAcumulado: await ultimaCargaInfo(empresa.codEmp, "ACUMULADO"),
+      ultimoMes: await ultimaCargaInfo(empresa.codEmp, unidadNegocioId, "MES"),
+      ultimoAcumulado: await ultimaCargaInfo(empresa.codEmp, unidadNegocioId, "ACUMULADO"),
     }))
   );
 

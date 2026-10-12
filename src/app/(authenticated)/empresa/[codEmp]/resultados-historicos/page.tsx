@@ -26,7 +26,9 @@ export default async function ResultadosHistoricosPage({
         <p className="mt-1 text-sm text-zinc-600">
           Valores nominales por mes que alimentan los cuadros de ER y de Cuadros (Ventas, Costos
           Directos, Gastos Operativos, Expensas y Otras Ganancias y Pérdidas). Se cargan a mano
-          para períodos anteriores al sistema, y automáticamente al aprobar cada informe.
+          para períodos anteriores al sistema, y automáticamente al aprobar cada informe: esas
+          filas no se pueden editar ni eliminar, y una nueva versión aprobada del informe las
+          actualiza dejando constancia en Observaciones.
           &quot;Resultado Neto&quot; es la suma de los 5 campos, solo a modo de control visual.
         </p>
       </div>
@@ -101,6 +103,7 @@ export default async function ResultadosHistoricosPage({
                 <th className="py-2 pr-4 text-right">Expensas</th>
                 <th className="py-2 pr-4 text-right">Otras Ganancias y Pérdidas</th>
                 <th className="py-2 pr-4 text-right">Resultado Neto</th>
+                <th className="py-2 pr-4">Observaciones</th>
                 <th className="py-2 pr-4">Acciones</th>
               </tr>
             </thead>
@@ -117,6 +120,8 @@ export default async function ResultadosHistoricosPage({
                   expensas={Number(f.expensas)}
                   otrasGananciasYPerdidas={Number(f.otrasGananciasYPerdidas)}
                   isAdmin={isAdmin}
+                  deInforme={f.origen === "INFORME"}
+                  observaciones={f.observaciones}
                 />
               ))}
             </tbody>

@@ -55,7 +55,7 @@ export type RubroLine = {
   // sigue decidiendo en qué LISTA aparece (Orígenes, Aplicaciones o Ajustes
   // Ejercicios Anteriores) — no el signo, que ahora es siempre mecánico.
   origenAplicacion: number;
-  // Default de NOF a nivel Rubro (atajo CTO/ONP/ARS del ESP) — null en la
+  // CTO/ONP/ARS que esta Unidad eligió para el Rubro (selector del ESP) — null en la
   // línea sintética "Resultado del período" (codRubro -1, no es un Rubro real).
   bucketNOF: "OPERATIVO" | "NO_OPERATIVO" | "FINANCIAMIENTO" | null;
 };
@@ -356,6 +356,20 @@ function aplicarDelta(
   return { ...entry, [campoHaber]: round2(new Prisma.Decimal(entry[campoHaber]).plus(delta.abs())) };
 }
 
+// CTO/ONP/ARS que usa una Unidad para un Rubro: la elección de esa unidad
+// (RubroUnidadNOF, aunque sea "sin clasificar") o, si no eligió, el default del
+// Rubro.
+export function bucketNOFDeUnidad(
+  porDefecto: "OPERATIVO" | "NO_OPERATIVO" | "FINANCIAMIENTO" | null,
+  eleccionesDeLaUnidad: Map<number, "OPERATIVO" | "NO_OPERATIVO" | "FINANCIAMIENTO" | null>,
+  rubroId: number | null
+): "OPERATIVO" | "NO_OPERATIVO" | "FINANCIAMIENTO" | null {
+  if (rubroId !== null && eleccionesDeLaUnidad.has(rubroId)) {
+    return eleccionesDeLaUnidad.get(rubroId) ?? null;
+  }
+  return porDefecto;
+}
+
 export type PlanCuentaInput = {
   id: string;
   cuenta: string;
@@ -369,8 +383,10 @@ export type PlanCuentaInput = {
   tieneTipo: boolean;
   exigeSaldoCero: boolean;
   exposicionCambiante: boolean;
-  categoriaOyAId: number | null;
-  categoriaOyABucketNOF: "OPERATIVO" | "NO_OPERATIVO" | "FINANCIAMIENTO" | null;
+  // "Cuit compartido": Unidad de Negocio a la que pertenece la cuenta, solo
+  // en Empresas que comparten BSyS (null en el resto, y en los snapshots
+  // anteriores a esa función).
+  unidadNegocioId?: number | null;
   // Independiente de rubroId — decide si la cuenta aporta al "Resultado del
   // período" de este ESP (ver el loop principal) y al cuadro Nominal del ER
   // (resultado-nominal.ts). Null = esta cuenta no es de Resultado.
@@ -385,7 +401,36 @@ export type EmpresaBalanceInput = {
   tieneAcumulado: boolean;
   balances: CuentaSaldoInput[];
   planDeCuentas: PlanCuentaInput[];
+  // Empresa que comparte BSyS entre varias Unidades: el informe de
+  // `unidadActualId` usa solo las cuentas asignadas a ella (con su Rubro y
+  // Subrubro de siempre); las de las otras Unidades (`unidadesNombres`) se
+  // suman en una línea por Unidad, como un Intercompany. Ausentes en una
+  // Empresa que no comparte (y en los snapshots anteriores a esta función).
+  comparteBsys?: boolean;
+  unidadActualId?: number;
+  unidadesNombres?: Record<string, string>;
 };
+
+// Cuenta de una Empresa compartida que pertenece a otra Unidad: no sigue su
+// Rubro/Subrubro, entra al ESP como un Intercompany y no entra al ER.
+export function esCuentaDeOtraUnidad(
+  empresa: { comparteBsys?: boolean; unidadActualId?: number },
+  plan: { unidadNegocioId?: number | null }
+): boolean {
+  return (
+    !!empresa.comparteBsys &&
+    empresa.unidadActualId !== undefined &&
+    plan.unidadNegocioId != null &&
+    plan.unidadNegocioId !== empresa.unidadActualId
+  );
+}
+
+// Código de las líneas de Intercompany del ESP (no son un Rubro real): -1 ya
+// es la línea "Resultado del período", acá van todos por debajo de -1000.
+export const COD_RUBRO_INTERCOMPANY_BASE = -1000;
+export function esLineaIntercompany(codRubro: number): boolean {
+  return codRubro <= COD_RUBRO_INTERCOMPANY_BASE;
+}
 
 export type InformeReportCore = Omit<
   InformeReport,
@@ -436,9 +481,7 @@ export function buildInformeReport(
   }
 
   const rubroMap = new Map<number, RubroAgg>();
-  // Clasificado por cuenta (no por Rubro): dos cuentas de un mismo Rubro
-  // pueden caer en buckets de NOF distintos, así que se agrupa por la
-  // combinación Rubro + Categoría OyA.
+  // El bucket de NOF sale siempre del selector CTO/ONP/ARS del Rubro.
   const nofMap = new Map<string, NofAgg>();
   // "Resultado del período" ya no sale de Rubros de Partida Resultado (una
   // cuenta de Resultado no tiene Rubro) — se arma sumando directamente las
@@ -446,6 +489,14 @@ export function buildInformeReport(
   let resultadoDelPeriodoRawDec = new Prisma.Decimal(0);
   let resultadoDelPeriodoAnteriorRawDec = new Prisma.Decimal(0);
   const cuentasSinRubro: CuentaSinClasificar[] = [];
+  // Saldos de las cuentas que pertenecen a OTRA Unidad de una Empresa
+  // compartida, sumados por Unidad sin importar de qué tipo sean (Activo,
+  // Pasivo, PN o Resultado): corresponden a la parte del BSyS que va en la
+  // otra Unidad, y funcionan como un Intercompany.
+  const intercompany = new Map<
+    number,
+    { nombre: string; saldoInicio: Prisma.Decimal; saldoFinal: Prisma.Decimal }
+  >();
 
   for (const empresa of empresas) {
     if (!empresa.tieneAcumulado) {
@@ -471,6 +522,22 @@ export function buildInformeReport(
       // no arrastrar error de redondeo binario.
       const debeHaber = new Prisma.Decimal(b.saldoIniDebe).minus(b.saldoIniHaber);
       const debeHaberFinal = new Prisma.Decimal(b.saldoCierreDebe).minus(b.saldoCierreHaber);
+
+      if (esCuentaDeOtraUnidad(empresa, plan)) {
+        const otraUnidadId = plan.unidadNegocioId!;
+        let ic = intercompany.get(otraUnidadId);
+        if (!ic) {
+          ic = {
+            nombre: empresa.unidadesNombres?.[String(otraUnidadId)] ?? `Unidad ${otraUnidadId}`,
+            saldoInicio: new Prisma.Decimal(0),
+            saldoFinal: new Prisma.Decimal(0),
+          };
+          intercompany.set(otraUnidadId, ic);
+        }
+        ic.saldoInicio = ic.saldoInicio.plus(debeHaber);
+        ic.saldoFinal = ic.saldoFinal.plus(debeHaberFinal);
+        continue;
+      }
 
       if (plan.subrubroId != null) {
         resultadoDelPeriodoRawDec = resultadoDelPeriodoRawDec.plus(debeHaberFinal);
@@ -509,12 +576,9 @@ export function buildInformeReport(
       agg.saldoInicio = agg.saldoInicio.plus(debeHaber);
       agg.saldoFinal = agg.saldoFinal.plus(debeHaberFinal);
 
-      // La clasificación fina por cuenta (Configuración → Categoría OyA)
-      // gana si está seteada; si no, cae al default a nivel Rubro (atajo
-      // CTO/ONP/ARS cargado directo desde el ESP).
-      const bucketNOF = plan.categoriaOyABucketNOF ?? plan.rubroBucketNOF;
+      const bucketNOF = plan.rubroBucketNOF;
       if (bucketNOF) {
-        const key = `${plan.rubroId}:${plan.categoriaOyAId}`;
+        const key = `${plan.rubroId}`;
         let nofAgg = nofMap.get(key);
         if (!nofAgg) {
           nofAgg = {
@@ -530,6 +594,32 @@ export function buildInformeReport(
         nofAgg.saldoFinal = nofAgg.saldoFinal.plus(debeHaberFinal);
       }
     }
+  }
+
+  // Cada Unidad ajena entra al ESP como un "rubro" con su nombre, de exposición
+  // cambiante (Activo si el saldo final es deudor, Pasivo si es acreedor) y
+  // clasificado como No Operativo en la hoja NOF.
+  for (const [otraUnidadId, ic] of intercompany) {
+    const codRubro = COD_RUBRO_INTERCOMPANY_BASE - otraUnidadId;
+    rubroMap.set(codRubro, {
+      codRubro,
+      nomRubro: ic.nombre,
+      bucketNOF: "NO_OPERATIVO",
+      orden: null,
+      tipoPartida: null,
+      tieneTipo: true,
+      exigeSaldoCero: false,
+      exposicionCambiante: true,
+      saldoInicio: ic.saldoInicio,
+      saldoFinal: ic.saldoFinal,
+    });
+    nofMap.set(`ic:${otraUnidadId}`, {
+      codRubro,
+      nomRubro: ic.nombre,
+      bucketNOF: "NO_OPERATIVO",
+      saldoInicio: ic.saldoInicio,
+      saldoFinal: ic.saldoFinal,
+    });
   }
 
   const rubros = [...rubroMap.values()];
@@ -742,23 +832,36 @@ export async function buildEmpresaBalanceInputs(
   periodoMes: number,
   periodoAnio: number
 ): Promise<{ empresasInput: EmpresaBalanceInput[]; fechaCargaAcumulado: Date | null }> {
-  const empresasDb = await prisma.empresa.findMany({ where: { unidadNegocioId } });
+  const empresasDb = await prisma.empresa.findMany({
+    where: { unidades: { some: { unidadNegocioId } } },
+    include: { unidades: { select: { unidadNegocio: { select: { codUnidad: true, nombreUnidad: true } } } } },
+  });
 
   let fechaCargaAcumulado: Date | null = null;
   const empresasInput: EmpresaBalanceInput[] = [];
 
+  // Lo que esta Unidad eligió con el selector CTO/ONP/ARS del ESP. Queda
+  // resuelto en el input (y por lo tanto en el snapshot al aprobar).
+  const elecciones = new Map(
+    (await prisma.rubroUnidadNOF.findMany({ where: { unidadNegocioId } })).map((e) => [e.codRubro, e.bucketNOF])
+  );
+
   for (const empresa of empresasDb) {
+    // Cada Unidad lee SU carga del BSyS: una Empresa que comparte BSyS tiene
+    // una por Unidad (ver bsys-compartido.ts).
+    const cargaDe = {
+      empresaId: empresa.codEmp,
+      unidadNegocioId,
+      tipo: "ACUMULADO" as const,
+      periodoMes,
+      periodoAnio,
+    };
     // Filtrado por el período del informe, no por "la carga más reciente
     // entre todas" — así el informe de un período ya cerrado no cambia si
     // después se carga un período posterior. fechaCarga desc solo
     // desempata dentro del propio período.
     const ultimoAcumulado = await prisma.balanceSumasYSaldos.findFirst({
-      where: {
-        empresaId: empresa.codEmp,
-        tipo: "ACUMULADO",
-        periodoMes,
-        periodoAnio,
-      },
+      where: cargaDe,
       orderBy: { fechaCarga: "desc" },
       select: { fechaCarga: true },
     });
@@ -777,20 +880,15 @@ export async function buildEmpresaBalanceInputs(
     }
 
     const balances = await prisma.balanceSumasYSaldos.findMany({
-      where: {
-        empresaId: empresa.codEmp,
-        tipo: "ACUMULADO",
-        periodoMes,
-        periodoAnio,
-        fechaCarga: ultimoAcumulado.fechaCarga,
-      },
+      where: { ...cargaDe, fechaCarga: ultimoAcumulado.fechaCarga },
     });
 
+    // Todas las cuentas de la Empresa (también las de otras Unidades): las
+    // ajenas se necesitan para armar las líneas de Intercompany.
     const planDeCuentas = await prisma.planDeCuentas.findMany({
       where: { empresaId: empresa.codEmp },
       include: {
         rubro: { include: { partidaPatrimonial: { include: { tipo: true } } } },
-        categoriaOyA: true,
       },
     });
 
@@ -810,19 +908,27 @@ export async function buildEmpresaBalanceInputs(
       nombreEmp: empresa.nombreEmp,
       tieneAcumulado: true,
       balances: balancesConReclasificacion,
+      ...(empresa.comparteBsys
+        ? {
+            comparteBsys: true,
+            unidadActualId: unidadNegocioId,
+            unidadesNombres: Object.fromEntries(
+              empresa.unidades.map((u) => [String(u.unidadNegocio.codUnidad), u.unidadNegocio.nombreUnidad])
+            ),
+          }
+        : {}),
       planDeCuentas: planDeCuentas.map((p) => ({
         id: p.id,
         cuenta: p.cuenta,
         rubroId: p.rubroId,
         nomRubro: p.rubro?.nomRubro ?? null,
-        rubroBucketNOF: p.rubro?.bucketNOF ?? null,
+        rubroBucketNOF: bucketNOFDeUnidad(p.rubro?.bucketNOF ?? null, elecciones, p.rubroId),
         rubroOrden: p.rubro?.orden ?? null,
         tipoRol: p.rubro?.partidaPatrimonial?.tipo?.rol ?? null,
         tieneTipo: p.rubro?.partidaPatrimonial?.tipo != null,
         exigeSaldoCero: p.rubro?.partidaPatrimonial?.tipo?.exigeSaldoCero ?? false,
         exposicionCambiante: p.rubro?.partidaPatrimonial?.tipo?.exposicionCambiante ?? false,
-        categoriaOyAId: p.categoriaOyAId,
-        categoriaOyABucketNOF: p.categoriaOyA?.bucketNOF ?? null,
+        unidadNegocioId: p.unidadNegocioId,
         subrubroId: p.subrubroId,
       })),
     });
@@ -944,7 +1050,7 @@ export async function getDetalleRubro(informeId: string, codRubro: number): Prom
       const porCuenta = new Map(empresa.planDeCuentas.map((p) => [normalizeCuenta(p.cuenta), p]));
       for (const b of empresa.balances) {
         const plan = porCuenta.get(normalizeCuenta(b.cuenta));
-        if (!plan || plan.rubroId !== codRubro) continue;
+        if (!plan || plan.rubroId !== codRubro || esCuentaDeOtraUnidad(empresa, plan)) continue;
         // Mismo Rubro → misma Partida → mismo Tipo para todas las cuentas
         // acá adentro, así que da igual de cuál se toma.
         tipoRolEstatico = plan.tipoRol;
@@ -985,7 +1091,9 @@ export async function getDetalleRubro(informeId: string, codRubro: number): Prom
     };
   }
 
-  const empresas = await prisma.empresa.findMany({ where: { unidadNegocioId: informe.unidadNegocioId } });
+  const empresas = await prisma.empresa.findMany({
+    where: { unidades: { some: { unidadNegocioId: informe.unidadNegocioId } } },
+  });
 
   const cuentas: DetalleRubroCuenta[] = [];
   let tipoRolEstatico: "ACTIVO" | "PASIVO" | "PATRIMONIO_NETO" | "RESULTADO" | null = null;
@@ -996,6 +1104,7 @@ export async function getDetalleRubro(informeId: string, codRubro: number): Prom
     const ultimoAcumulado = await prisma.balanceSumasYSaldos.findFirst({
       where: {
         empresaId: empresa.codEmp,
+        unidadNegocioId: informe.unidadNegocioId,
         tipo: "ACUMULADO",
         periodoMes: informe.periodoMes,
         periodoAnio: informe.periodoAnio,
@@ -1005,8 +1114,14 @@ export async function getDetalleRubro(informeId: string, codRubro: number): Prom
     });
     if (!ultimoAcumulado) continue;
 
+    // Las cuentas de otra Unidad (Empresa compartida) no entran a ningún
+    // Rubro de este informe: van al Intercompany.
     const planDeCuentas = await prisma.planDeCuentas.findMany({
-      where: { empresaId: empresa.codEmp, rubroId: codRubro },
+      where: {
+        empresaId: empresa.codEmp,
+        rubroId: codRubro,
+        OR: [{ unidadNegocioId: null }, { unidadNegocioId: informe.unidadNegocioId }],
+      },
       include: { rubro: { include: { partidaPatrimonial: { include: { tipo: true } } } } },
     });
     if (planDeCuentas.length === 0) continue;
@@ -1015,6 +1130,7 @@ export async function getDetalleRubro(informeId: string, codRubro: number): Prom
     const balances = await prisma.balanceSumasYSaldos.findMany({
       where: {
         empresaId: empresa.codEmp,
+        unidadNegocioId: informe.unidadNegocioId,
         tipo: "ACUMULADO",
         periodoMes: informe.periodoMes,
         periodoAnio: informe.periodoAnio,

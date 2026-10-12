@@ -34,8 +34,18 @@ export function ResultadoHistoricoRow({
   periodoMes,
   periodoAnio,
   isAdmin,
+  deInforme,
+  observaciones,
   ...valoresIniciales
-}: { id: string; periodoMes: number; periodoAnio: number; isAdmin: boolean } & Valores) {
+}: {
+  id: string;
+  periodoMes: number;
+  periodoAnio: number;
+  isAdmin: boolean;
+  // Generada por la aprobación de un informe: solo lectura.
+  deInforme: boolean;
+  observaciones: string | null;
+} & Valores) {
   const [editing, setEditing] = useState(false);
   const [valores, setValores] = useState<Valores>(valoresIniciales);
   const [pending, startTransition] = useTransition();
@@ -63,7 +73,7 @@ export function ResultadoHistoricoRow({
       </td>
       {CAMPOS.map(({ key }) => (
         <td key={key} className="py-1.5 pr-4 text-right">
-          {editing && isAdmin ? (
+          {editing && isAdmin && !deInforme ? (
             <input
               type="number"
               step="0.01"
@@ -78,8 +88,10 @@ export function ResultadoHistoricoRow({
         </td>
       ))}
       <td className="py-1.5 pr-4 text-right font-medium">{fmt(resultadoNeto)}</td>
+      <td className="py-1.5 pr-4 text-xs text-zinc-600">{observaciones}</td>
       <td className="py-1.5 pr-4">
-        {isAdmin && (
+        {deInforme && <span className="text-xs text-zinc-500">De informe aprobado</span>}
+        {isAdmin && !deInforme && (
           <div className="flex gap-2">
             {editing ? (
               <>
@@ -114,7 +126,7 @@ export function ResultadoHistoricoRow({
                 </button>
                 <ConfirmDeleteButton
                   itemLabel={`el período "${String(periodoMes).padStart(2, "0")}-${periodoAnio}"`}
-                  check={() => checkDeleteResultadoHistorico()}
+                  check={() => checkDeleteResultadoHistorico(id)}
                   onConfirm={() => deleteResultadoHistorico(id)}
                 />
               </>

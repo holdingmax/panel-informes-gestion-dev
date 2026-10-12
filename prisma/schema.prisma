@@ -79,7 +79,10 @@ model UnidadNegocio {
   createdAt    DateTime @default(now())
   updatedAt    DateTime @updatedAt
 
-  empresas             Empresa[]
+  empresas             EmpresaUnidad[]
+  cuentas              PlanDeCuentas[]
+  balances             BalanceSumasYSaldos[]
+  nofPorRubro          RubroUnidadNOF[]
   informes             Informe[]
   resultadosHistoricos ResultadosHistoricos[]
   permisos             UserUnidadPermiso[]
@@ -90,15 +93,19 @@ model UnidadNegocio {
 
 // La entidad contable real: tiene su propio Plan de Cuentas y su propio BSyS
 // (Mes y Acumulado). Se vincula a una Unidad de Negocio desde la pantalla de
-// configuración de esta última.
+// configuración de esta última. Normalmente está en una sola Unidad; si
+// `comparteBsys` es true puede estar en varias (ver EmpresaUnidad) y cada
+// cuenta de su Plan de Cuentas se asigna a una de ellas (PlanDeCuentas.unidadNegocioId).
 model Empresa {
   codEmp    Int      @id @default(autoincrement())
   nombreEmp String   @db.VarChar(60)
   createdAt DateTime @default(now())
   updatedAt DateTime @updatedAt
 
-  unidadNegocioId Int?
-  unidadNegocio   UnidadNegocio? @relation(fields: [unidadNegocioId], references: [codUnidad])
+  // true = el BSyS de esta empresa lo comparten varias Unidades de Negocio:
+  // cada una carga el suyo y tienen que coincidir para poder aprobar.
+  comparteBsys Boolean         @default(false)
+  unidades     EmpresaUnidad[]
 
   monedaPrimariaId Int?
   monedaPrimaria   Moneda? @relation("EmpresaMonedaPrimaria", fields: [monedaPrimariaId], references: [codMoneda])
@@ -118,6 +125,18 @@ model Empresa {
   balances          BalanceSumasYSaldos[]
   planDeCuentas     PlanDeCuentas[]
   reclasificaciones Reclasificacion[]
+}
+
+// Vínculo Empresa ↔ Unidad de Negocio. Una Empresa con comparteBsys = false
+// tiene a lo sumo una fila; con comparteBsys = true puede tener varias.
+model EmpresaUnidad {
+  empresa         Empresa       @relation(fields: [empresaId], references: [codEmp], onDelete: Cascade)
+  empresaId       Int
+  unidadNegocio   UnidadNegocio @relation(fields: [unidadNegocioId], references: [codUnidad], onDelete: Cascade)
+  unidadNegocioId Int
+
+  @@id([empresaId, unidadNegocioId])
+  @@index([unidadNegocioId])
 }
 
 // Catálogo de monedas usado por Empresa para elegir su moneda primaria,
@@ -180,9 +199,13 @@ enum EstadoBSyS {
 }
 
 model BalanceSumasYSaldos {
-  id               String     @id @default(cuid())
-  empresa          Empresa    @relation(fields: [empresaId], references: [codEmp])
+  id               String         @id @default(cuid())
+  empresa          Empresa        @relation(fields: [empresaId], references: [codEmp])
   empresaId        Int
+  // Unidad de Negocio que cargó este BSyS. Una Empresa que comparte BSyS
+  // tiene una carga por cada Unidad, que tienen que coincidir entre sí.
+  unidadNegocio    UnidadNegocio? @relation(fields: [unidadNegocioId], references: [codUnidad])
+  unidadNegocioId  Int?
   tipo             TipoBSyS
   // Período que cubre esta carga (no el período en que se subió el
   // archivo): el motor de informes filtra por esto, no solo por
@@ -191,15 +214,15 @@ model BalanceSumasYSaldos {
   periodoMes       Int
   periodoAnio      Int
   fechaCarga       DateTime
-  cuenta           String     @db.VarChar(90)
-  saldoIniDebe     Decimal    @db.Decimal(18, 2)
-  saldoIniHaber    Decimal    @db.Decimal(18, 2)
-  sumasDebe        Decimal    @db.Decimal(18, 2)
-  sumasHaber       Decimal    @db.Decimal(18, 2)
-  saldoCierreDebe  Decimal    @db.Decimal(18, 2)
-  saldoCierreHaber Decimal    @db.Decimal(18, 2)
-  estado           EstadoBSyS @default(PROVISORIO)
-  createdAt        DateTime   @default(now())
+  cuenta           String         @db.VarChar(90)
+  saldoIniDebe     Decimal        @db.Decimal(18, 2)
+  saldoIniHaber    Decimal        @db.Decimal(18, 2)
+  sumasDebe        Decimal        @db.Decimal(18, 2)
+  sumasHaber       Decimal        @db.Decimal(18, 2)
+  saldoCierreDebe  Decimal        @db.Decimal(18, 2)
+  saldoCierreHaber Decimal        @db.Decimal(18, 2)
+  estado           EstadoBSyS     @default(PROVISORIO)
+  createdAt        DateTime       @default(now())
 
   @@index([empresaId, tipo, periodoAnio, periodoMes, fechaCarga])
 }
@@ -269,15 +292,15 @@ model Rubro {
   // arrastrar mal a todo el rubro. Null solo en un Rubro que nunca se usó.
   partidaPatrimonialId Int?
   partidaPatrimonial   PartidaPatrimonial? @relation(fields: [partidaPatrimonialId], references: [codPartida])
-  // Default de NOF a nivel Rubro (atajo "CTO/ONP/ARS" desde el ESP) — una
-  // cuenta puntual clasificada en Configuración → Categoría OyA sigue
-  // ganando por sobre este default (ver computeInformeReport).
+  // Default de NOF del Rubro (CTO/ONP/ARS): lo usa cada Unidad de Negocio que
+  // no eligió el suyo (ver RubroUnidadNOF, que es lo que cambia el selector del ESP).
   bucketNOF            BucketNOF?
   // Orden de exposición dentro del ESP (Activo/Pasivo/Patrimonio Neto se
   // ordenan por este valor, de menor a mayor; null queda al final, en el
   // orden en que se insertó el Rubro). No afecta a ninguna otra hoja.
   orden                Int?
   planes               PlanDeCuentas[]
+  nofPorUnidad         RubroUnidadNOF[]
 }
 
 // Exclusivo de los Rubros de Partida Resultado (Ingresos/Egresos): decide
@@ -302,16 +325,6 @@ model Subrubro3 {
   codSubrubro3 Int             @id @default(autoincrement())
   nomSubrubro3 String          @unique @db.VarChar(60)
   planes       PlanDeCuentas[]
-}
-
-// Clasifica cada cuenta del Plan de Cuentas (no el Rubro) para armar la hoja
-// de Necesidades Operativas de Fondos: dos cuentas de un mismo Rubro pueden
-// caer en categorías distintas si hiciera falta.
-model CategoriaOyA {
-  codOyA    Int             @id @default(autoincrement())
-  nomOyA    String          @unique @db.VarChar(60)
-  bucketNOF BucketNOF?
-  planes    PlanDeCuentas[]
 }
 
 // Una Unidad de Negocio puede necesitar su propia serie de índice/dólar (ej.
@@ -348,44 +361,62 @@ model SeriesEIndices {
 // pesos nominales. Se completa a mano para períodos anteriores a la puesta en
 // marcha del sistema, y automáticamente al aprobar un Informe (ver
 // informe-actions.ts) — nunca se pisa un período que ya tiene datos.
+// De dónde viene una fila de ResultadosHistoricos: MANUAL = carga inicial
+// (a mano o por Excel, de períodos anteriores al sistema, editable por un
+// Admin); INFORME = la generó la aprobación de un Informe del sistema — esas
+// filas son parte de la historia de informes posteriores y no se pueden
+// editar ni eliminar, solo las reescribe una nueva aprobación (nueva versión
+// del informe de ese período).
+enum OrigenResultadoHistorico {
+  MANUAL
+  INFORME
+}
+
 model ResultadosHistoricos {
-  id                      String        @id @default(cuid())
-  unidadNegocio           UnidadNegocio @relation(fields: [unidadNegocioId], references: [codUnidad])
+  id                      String                   @id @default(cuid())
+  unidadNegocio           UnidadNegocio            @relation(fields: [unidadNegocioId], references: [codUnidad])
   unidadNegocioId         Int
   periodoMes              Int
   periodoAnio             Int
-  ventas                  Decimal       @db.Decimal(18, 2)
-  costosDirectos          Decimal       @db.Decimal(18, 2)
-  gastosOperativos        Decimal       @db.Decimal(18, 2)
-  expensas                Decimal       @db.Decimal(18, 2)
-  otrasGananciasYPerdidas Decimal       @db.Decimal(18, 2)
-  createdAt               DateTime      @default(now())
+  ventas                  Decimal                  @db.Decimal(18, 2)
+  costosDirectos          Decimal                  @db.Decimal(18, 2)
+  gastosOperativos        Decimal                  @db.Decimal(18, 2)
+  expensas                Decimal                  @db.Decimal(18, 2)
+  otrasGananciasYPerdidas Decimal                  @db.Decimal(18, 2)
+  origen                  OrigenResultadoHistorico @default(MANUAL)
+  // Solo para origen INFORME: versión del informe cuyos valores están acá, y
+  // el historial breve de versiones desde el original hasta la última.
+  versionInforme          Int?
+  observaciones           String?
+  createdAt               DateTime                 @default(now())
 
   @@unique([unidadNegocioId, periodoMes, periodoAnio])
 }
 
 model PlanDeCuentas {
-  id             String        @id @default(cuid())
-  empresa        Empresa       @relation(fields: [empresaId], references: [codEmp])
-  empresaId      Int
-  cuenta         String        @db.VarChar(90)
+  id              String         @id @default(cuid())
+  empresa         Empresa        @relation(fields: [empresaId], references: [codEmp])
+  empresaId       Int
+  cuenta          String         @db.VarChar(90)
   // Opcional — decide si la cuenta entra al ESP (y con qué Partida) y en
   // qué posición. Una cuenta de Resultado (Ingresos/Egresos) no lleva
   // Rubro: el ESP se arma exclusivamente con las cuentas que sí lo tienen.
-  rubro          Rubro?        @relation(fields: [rubroId], references: [codRubro])
-  rubroId        Int?
+  rubro           Rubro?         @relation(fields: [rubroId], references: [codRubro])
+  rubroId         Int?
   // Opcional — decide si la cuenta entra al ER (cuadro Nominal) y a qué
   // campo aporta. Independiente de Rubro: una cuenta puede tener uno,
   // el otro, ambos o ninguno todavía (ver los avisos "HAY CUENTAS SIN
   // VALORES EN RUBRO/SUBRUBRO" en computeInformeReport/computeResultadoCuadro).
-  subrubro       Subrubro?     @relation(fields: [subrubroId], references: [codSubrubro])
-  subrubroId     Int?
-  subrubro2      Subrubro2?    @relation(fields: [subrubro2Id], references: [codSubrubro2])
-  subrubro2Id    Int?
-  subrubro3      Subrubro3?    @relation(fields: [subrubro3Id], references: [codSubrubro3])
-  subrubro3Id    Int?
-  categoriaOyA   CategoriaOyA? @relation(fields: [categoriaOyAId], references: [codOyA])
-  categoriaOyAId Int?
+  subrubro        Subrubro?      @relation(fields: [subrubroId], references: [codSubrubro])
+  subrubroId      Int?
+  subrubro2       Subrubro2?     @relation(fields: [subrubro2Id], references: [codSubrubro2])
+  subrubro2Id     Int?
+  subrubro3       Subrubro3?     @relation(fields: [subrubro3Id], references: [codSubrubro3])
+  subrubro3Id     Int?
+  // "Cuit compartido": a qué Unidad de Negocio pertenece la cuenta. Solo se
+  // usa en Empresas con comparteBsys (ahí es obligatorio); null en el resto.
+  unidadNegocio   UnidadNegocio? @relation(fields: [unidadNegocioId], references: [codUnidad])
+  unidadNegocioId Int?
 
   reclasificacionLineas ReclasificacionLinea[]
 
@@ -457,4 +488,20 @@ model InformeAdjunto {
   contenido       Bytes
   createdByUserId String?
   createdAt       DateTime @default(now())
+}
+
+// CTO/ONP/ARS de un Rubro para UNA Unidad de Negocio — lo que se elige con el
+// selector del ESP. Es criterio del operador de cada unidad, así que cambiarlo
+// en una no toca a las demás. La existencia de la fila es la elección (aunque
+// bucketNOF sea null = "sin clasificar" a propósito); sin fila, la Unidad usa
+// el default del Rubro (Rubro.bucketNOF).
+model RubroUnidadNOF {
+  unidadNegocio   UnidadNegocio @relation(fields: [unidadNegocioId], references: [codUnidad], onDelete: Cascade)
+  unidadNegocioId Int
+  rubro           Rubro         @relation(fields: [codRubro], references: [codRubro], onDelete: Cascade)
+  codRubro        Int
+  bucketNOF       BucketNOF?
+
+  @@id([unidadNegocioId, codRubro])
+  @@index([codRubro])
 }

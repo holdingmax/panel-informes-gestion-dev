@@ -11,15 +11,18 @@ export default async function EmpresasPage() {
   const [empresas, monedas] = await Promise.all([listEmpresas(), listMonedas()]);
   const session = await auth();
   const isAdmin = session?.user.role === "ADMIN";
-  // Una Empresa sin vincular todavía (unidadNegocioId null) solo la puede
-  // tocar un ADMIN — no hay unidad a la cual delegarle el permiso (ver
-  // requireAccesoConfiguracionEmpresa en empresa-actions.ts).
+  // Una Empresa sin vincular todavía a ninguna unidad solo la puede tocar un
+  // ADMIN — no hay unidad a la cual delegarle el permiso; con unidades, alcanza
+  // el permiso de configuración en alguna de ellas (ver
+  // requireAccesoConfiguracionEmpresa en empresa-authz.ts).
   const puedeEditarEmpresa = await Promise.all(
-    empresas.map((e) =>
-      e.unidadNegocioId === null
-        ? Promise.resolve(isAdmin)
-        : permisosDeUnidad(e.unidadNegocioId).then((p) => p.puedeConfiguracion)
-    )
+    empresas.map(async (e) => {
+      if (e.unidades.length === 0) return isAdmin;
+      const permisos = await Promise.all(
+        e.unidades.map((u) => permisosDeUnidad(u.unidadNegocio.codUnidad))
+      );
+      return permisos.some((p) => p.puedeConfiguracion);
+    })
   );
 
   return (
@@ -28,7 +31,7 @@ export default async function EmpresasPage() {
 
       <p className="text-sm text-zinc-600">
         La entidad contable real: tiene su propio Plan de Cuentas y su propio BSyS (Mes y
-        Acumulado). Se vincula a una Unidad de Negocio desde Configuración → Unidades de Negocio.
+        Acumulado). Se vincula a una Unidad de Negocio desde Configuración → Unidades de Negocio. Con &quot;Comparte BSyS&quot; en Sí puede estar en varias unidades, cada una con sus propias cuentas.
       </p>
 
       {isAdmin && (
@@ -74,6 +77,13 @@ export default async function EmpresasPage() {
               <span>Actualiza</span>
             </label>
             <label className="flex flex-col gap-1">
+              <span className="text-lg">Comparte BSyS</span>
+              <select name="comparteBsys" defaultValue="no" className="rounded border px-3 py-2 text-lg">
+                <option value="no">No</option>
+                <option value="si">Sí</option>
+              </select>
+            </label>
+            <label className="flex flex-col gap-1">
               <span className="text-lg">Moneda actualiza</span>
               <select name="monedaActualizaId" className="rounded border px-3 py-2 text-lg">
                 <option value="">— sin definir —</option>
@@ -101,6 +111,7 @@ export default async function EmpresasPage() {
               <th className="py-1 pr-4">Código</th>
               <th className="py-1 pr-4">Nombre</th>
               <th className="py-1 pr-4">Unidad de Negocio</th>
+              <th className="py-1 pr-4">Comparte BSyS</th>
               <th className="py-1 pr-4">Moneda primaria</th>
               <th className="py-1 pr-4">Presenta en miles</th>
               <th className="py-1 pr-4">Moneda secundaria</th>
@@ -114,7 +125,8 @@ export default async function EmpresasPage() {
                 key={empresa.codEmp}
                 codEmp={empresa.codEmp}
                 nombreEmp={empresa.nombreEmp}
-                unidadNegocioNombre={empresa.unidadNegocio?.nombreUnidad ?? null}
+                unidadesNombres={empresa.unidades.map((u) => u.unidadNegocio.nombreUnidad)}
+                comparteBsys={empresa.comparteBsys}
                 monedas={monedas}
                 monedaPrimaria={empresa.monedaPrimaria}
                 presentaEnMiles={empresa.presentaEnMiles}

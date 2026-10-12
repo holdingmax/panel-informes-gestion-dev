@@ -55,6 +55,8 @@ export type PlanCuentaResultadoInput = {
   subrubroId: number | null;
   nomSubrubro: string | null;
   campoResultado: CampoResultado | null;
+  // Empresa compartida: a qué Unidad pertenece la cuenta (ver PlanDeCuentas).
+  unidadNegocioId?: number | null;
 };
 
 export type DetalleSubrubroCuenta = {
@@ -81,7 +83,10 @@ export type DetalleSubrubroCuenta = {
 export function computeResultadoNominalDeEmpresaPure(
   empresaNombre: string,
   balances: BalanceMesInput[],
-  planDeCuentas: PlanCuentaResultadoInput[]
+  planDeCuentas: PlanCuentaResultadoInput[],
+  // Informe de esta Unidad sobre una Empresa que comparte BSyS: las cuentas
+  // de otra Unidad no aportan al ER (su saldo va al ESP como Intercompany).
+  unidadActualId?: number | null
 ): {
   valores: ResultadoNominal;
   cuentas: DetalleSubrubroCuenta[];
@@ -108,6 +113,9 @@ export function computeResultadoNominalDeEmpresaPure(
       advertencias.push(
         `La cuenta "${b.cuenta}" (${empresaNombre}) no está clasificada en el Plan de Cuentas actual.`
       );
+      continue;
+    }
+    if (unidadActualId != null && plan.unidadNegocioId != null && plan.unidadNegocioId !== unidadActualId) {
       continue;
     }
 
@@ -161,6 +169,7 @@ export function computeResultadoNominalDeEmpresaPure(
 
 async function computeResultadoNominalMesDeEmpresa(
   informeId: string,
+  unidadNegocioId: number,
   empresaId: number,
   empresaNombre: string,
   periodoMes: number,
@@ -176,7 +185,7 @@ async function computeResultadoNominalMesDeEmpresa(
   // hay más de una carga del mismo mes) — el filtro real es el período,
   // no "la carga más reciente entre todas".
   const ultimoMes = await prisma.balanceSumasYSaldos.findFirst({
-    where: { empresaId, tipo: "MES", periodoMes, periodoAnio },
+    where: { empresaId, unidadNegocioId, tipo: "MES", periodoMes, periodoAnio },
     orderBy: { fechaCarga: "desc" },
     select: { fechaCarga: true },
   });
@@ -193,7 +202,7 @@ async function computeResultadoNominalMesDeEmpresa(
   }
 
   const balances = await prisma.balanceSumasYSaldos.findMany({
-    where: { empresaId, tipo: "MES", periodoMes, periodoAnio, fechaCarga: ultimoMes.fechaCarga },
+    where: { empresaId, unidadNegocioId, tipo: "MES", periodoMes, periodoAnio, fechaCarga: ultimoMes.fechaCarga },
   });
 
   const planDeCuentas = await prisma.planDeCuentas.findMany({
@@ -224,7 +233,9 @@ async function computeResultadoNominalMesDeEmpresa(
       subrubroId: p.subrubroId,
       nomSubrubro: p.subrubro?.nomSubrubro ?? null,
       campoResultado: p.subrubro?.campoResultado ?? null,
-    }))
+      unidadNegocioId: p.unidadNegocioId,
+    })),
+    unidadNegocioId
   );
 
   // computeResultadoNominalDeEmpresaPure no conoce el id real de
@@ -259,7 +270,9 @@ export async function computeResultadoNominalMes(
   fechaCarga: Date | null;
   advertencias: string[];
 }> {
-  const empresas = await prisma.empresa.findMany({ where: { unidadNegocioId } });
+  const empresas = await prisma.empresa.findMany({
+    where: { unidades: { some: { unidadNegocioId } } },
+  });
   if (empresas.length === 0) {
     return {
       valores: null,
@@ -272,7 +285,7 @@ export async function computeResultadoNominalMes(
 
   const porEmpresa = await Promise.all(
     empresas.map((e) =>
-      computeResultadoNominalMesDeEmpresa(informeId, e.codEmp, e.nombreEmp, periodoMes, periodoAnio)
+      computeResultadoNominalMesDeEmpresa(informeId, unidadNegocioId, e.codEmp, e.nombreEmp, periodoMes, periodoAnio)
     )
   );
 

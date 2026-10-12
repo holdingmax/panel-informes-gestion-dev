@@ -110,14 +110,7 @@ export default async function PanelReclasificacionPage({
                   cuentasPorEmpresa={cuentasPorEmpresa}
                 />
               </CollapsibleAdd>
-              {empresasOpc.map((e) => (
-                <AbrirRecuperar
-                  key={e.codEmp}
-                  unidadNegocioId={unidadNegocioId}
-                  empresaId={e.codEmp}
-                  informeDestinoId={informe.id}
-                />
-              ))}
+              <AbrirRecuperar unidadNegocioId={unidadNegocioId} informeDestinoId={informe.id} />
             </div>
           )}
 

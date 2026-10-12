@@ -7,6 +7,7 @@ type ReclasificacionItem = {
   id: string;
   numero: number;
   periodoLabel: string;
+  empresaNombre: string;
   detalle: string;
   saldoAfectado: "FINAL" | "INICIAL";
   lineas: { planDeCuenta: { cuenta: string }; debe: string; haber: string }[];
@@ -25,7 +26,7 @@ export function RecuperarList({
   const [pending, startTransition] = useTransition();
 
   if (items.length === 0) {
-    return <p className="text-sm text-zinc-600">Esta empresa no tiene reclasificaciones en otros períodos.</p>;
+    return <p className="text-sm text-zinc-600">Esta unidad no tiene reclasificaciones en otros períodos.</p>;
   }
 
   function copiar() {
@@ -62,7 +63,7 @@ export function RecuperarList({
                 onChange={() => setSeleccionada(item.id)}
               />
               <span className="font-medium">
-                #{item.numero} — {item.periodoLabel}
+                #{item.numero} — {item.periodoLabel} — {item.empresaNombre}
               </span>
             </div>
             <p className="pl-6 text-zinc-700">

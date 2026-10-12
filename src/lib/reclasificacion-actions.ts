@@ -3,7 +3,7 @@
 import { revalidatePath } from "next/cache";
 import { prisma } from "@/lib/prisma";
 import type { DeleteCheckResult } from "@/components/ConfirmDeleteButton";
-import { requireUser, requireAdmin, requireAccesoUnidad } from "@/lib/authz";
+import { requireUser, requireAccesoUnidad } from "@/lib/authz";
 
 const MAX_ADJUNTOS = 3;
 const MAX_ADJUNTO_BYTES = 10 * 1024 * 1024; // 10MB — ver plan: tope acordado para Reclasificación/Informe.
@@ -40,17 +40,13 @@ export async function listReclasificacionesDeInforme(informeId: string) {
   });
 }
 
-// Para la ventana "Recuperar Reclasificación" — todas las de esta Empresa,
-// en cualquier informe/período, para poder copiar una a el informe actual.
-export async function listReclasificacionesDeEmpresa(empresaId: number) {
-  const empresa = await prisma.empresa.findUniqueOrThrow({
-    where: { codEmp: empresaId },
-    select: { unidadNegocioId: true },
-  });
-  if (empresa.unidadNegocioId === null) await requireAdmin();
-  else await requireAccesoUnidad(empresa.unidadNegocioId);
+// Para la ventana "Recuperar Reclasificación" — todas las de las Empresas de
+// esta Unidad, en cualquier informe/período, para poder copiar una a el
+// informe actual.
+export async function listReclasificacionesDeUnidad(unidadNegocioId: number) {
+  await requireAccesoUnidad(unidadNegocioId);
   return prisma.reclasificacion.findMany({
-    where: { empresaId },
+    where: { empresa: { unidades: { some: { unidadNegocioId } } } },
     include: {
       ...INCLUDE_COMPLETO,
       informe: { select: { periodoMes: true, periodoAnio: true, version: true } },
@@ -239,7 +235,7 @@ export async function deleteReclasificacionAdjunto(adjuntoId: string) {
 // Duplica una reclasificación completa (líneas + adjuntos) en el informe
 // que se está trabajando — ver botón "Recuperar Reclasificación" →
 // "Copiar". Las cuentas de las líneas se mantienen igual (misma Empresa
-// siempre, ver listReclasificacionesDeEmpresa).
+// siempre, ver listReclasificacionesDeUnidad).
 export async function copiarReclasificacion(reclasificacionId: string, informeDestinoId: string) {
   const session = await requireUser();
   const check = await checkEditableReclasificacion(informeDestinoId);
@@ -250,8 +246,18 @@ export async function copiarReclasificacion(reclasificacionId: string, informeDe
     include: {
       lineas: true,
       adjuntos: true,
+      empresa: { select: { unidades: { select: { unidadNegocioId: true } } } },
     },
   });
+  // Solo se recupera una reclasificación de una Empresa de la misma Unidad
+  // que el informe destino.
+  const destino = await prisma.informe.findUniqueOrThrow({
+    where: { id: informeDestinoId },
+    select: { unidadNegocioId: true },
+  });
+  if (!origen.empresa.unidades.some((u) => u.unidadNegocioId === destino.unidadNegocioId)) {
+    throw new Error("Esa reclasificación es de una empresa de otra unidad de negocio.");
+  }
 
   await prisma.reclasificacion.create({
     data: {

@@ -65,21 +65,40 @@ export async function createResultadoHistorico(formData: FormData) {
   revalidatePath(`/empresa/${unidadNegocioId}/resultados-historicos`);
 }
 
+const MOTIVO_FILA_DE_INFORME =
+  "Este período lo generó la aprobación de un informe y no se puede editar ni eliminar: forma parte de la historia de los informes posteriores. Solo lo actualiza una nueva versión aprobada del informe.";
+
+// Las filas de origen INFORME son inmodificables para el usuario; solo las
+// cargas iniciales (MANUAL) se editan o borran.
+async function requireFilaManual(id: string) {
+  const fila = await prisma.resultadosHistoricos.findUniqueOrThrow({
+    where: { id },
+    select: { origen: true },
+  });
+  if (fila.origen === "INFORME") throw new Error(MOTIVO_FILA_DE_INFORME);
+}
+
 export async function updateResultadoHistorico(id: string, formData: FormData) {
   await requireAdmin();
+  await requireFilaManual(id);
   const campos = parseCampos(formData);
   const fila = await prisma.resultadosHistoricos.update({ where: { id }, data: campos });
   revalidatePath(`/empresa/${fila.unidadNegocioId}/resultados-historicos`);
 }
 
-export async function checkDeleteResultadoHistorico(): Promise<DeleteCheckResult> {
+export async function checkDeleteResultadoHistorico(id: string): Promise<DeleteCheckResult> {
   await requireUser();
-  // Nada más referencia esta fila por id — siempre se puede borrar.
+  const fila = await prisma.resultadosHistoricos.findUniqueOrThrow({
+    where: { id },
+    select: { origen: true },
+  });
+  if (fila.origen === "INFORME") return { blocked: true, reason: MOTIVO_FILA_DE_INFORME };
   return { blocked: false };
 }
 
 export async function deleteResultadoHistorico(id: string) {
   await requireAdmin();
+  await requireFilaManual(id);
   const fila = await prisma.resultadosHistoricos.delete({ where: { id } });
   revalidatePath(`/empresa/${fila.unidadNegocioId}/resultados-historicos`);
 }

@@ -33,15 +33,25 @@ export default async function PlanDeCuentasUnidadPage({
   // Pasado el chequeo de arriba, quien llegue acá siempre tiene el permiso.
   const puedeConfiguracion = true;
 
-  const [empresas, rubros, subrubros, subrubros2, subrubros3, categorias] =
-    await Promise.all([
-      listEmpresasDeUnidad(codUnidad),
-      listRubrosConClasificacion(),
-      listCatalog("subrubro"),
-      listCatalog("subrubro2"),
-      listCatalog("subrubro3"),
-      listCatalog("categoriaOyA"),
-    ]);
+  const [empresasDb, rubros, subrubros, subrubros2, subrubros3] = await Promise.all([
+    listEmpresasDeUnidad(codUnidad),
+    listRubrosConClasificacion(),
+    listCatalog("subrubro"),
+    listCatalog("subrubro2"),
+    listCatalog("subrubro3"),
+  ]);
+
+  // "Cuit compartido": en una Empresa que comparte BSyS cada cuenta se asigna a
+  // una de las Unidades que la comparten.
+  const empresas = empresasDb.map((e) => ({
+    codEmp: e.codEmp,
+    nombreEmp: e.nombreEmp,
+    comparteBsys: e.comparteBsys,
+    unidades: e.unidades.map((u) => ({
+      id: u.unidadNegocio.codUnidad,
+      nombre: u.unidadNegocio.nombreUnidad,
+    })),
+  }));
 
   const empresaIds = empresas.map((e) => e.codEmp);
   const planes = empresaIds.length > 0 ? await listPlanDeCuentasPorEmpresas(empresaIds) : [];
@@ -55,13 +65,13 @@ export default async function PlanDeCuentasUnidadPage({
     subrubroId: p.subrubroId,
     subrubro2Id: p.subrubro2Id,
     subrubro3Id: p.subrubro3Id,
-    categoriaOyAId: p.categoriaOyAId,
+    unidadNegocioId: p.unidadNegocioId,
     nombrePartida: p.rubro?.partidaPatrimonial?.nomPartida ?? null,
     nombreRubro: p.rubro?.nomRubro ?? null,
     nombreSubrubro: p.subrubro?.nomSubrubro ?? null,
     nombreSubrubro2: p.subrubro2?.nomSubrubro2 ?? null,
     nombreSubrubro3: p.subrubro3?.nomSubrubro3 ?? null,
-    nombreCategoriaOyA: p.categoriaOyA?.nomOyA ?? null,
+    nombreUnidadCuenta: p.unidadNegocio?.nombreUnidad ?? null,
   }));
 
   // Rubro (ESP) y Subrubro (ER) son independientes: una cuenta de Resultado
@@ -78,10 +88,6 @@ export default async function PlanDeCuentasUnidadPage({
   const subrubros3Opc = (subrubros3 as { codSubrubro3: number; nomSubrubro3: string }[]).map(
     (s) => ({ id: s.codSubrubro3, nombre: s.nomSubrubro3 })
   );
-  const categoriasOpc = (categorias as { codOyA: number; nomOyA: string }[]).map((c) => ({
-    id: c.codOyA,
-    nombre: c.nomOyA,
-  }));
 
   return (
     <main className="flex w-full flex-col gap-8 p-8">
@@ -102,7 +108,7 @@ export default async function PlanDeCuentasUnidadPage({
               subrubros={subrubrosOpc}
               subrubros2={subrubros2Opc}
               subrubros3={subrubros3Opc}
-              categorias={categoriasOpc}
+              unidadActualId={codUnidad}
             />
           </CollapsibleAdd>
           )}
@@ -114,7 +120,6 @@ export default async function PlanDeCuentasUnidadPage({
             subrubros={subrubrosOpc}
             subrubros2={subrubros2Opc}
             subrubros3={subrubros3Opc}
-            categorias={categoriasOpc}
             puedeConfiguracion={puedeConfiguracion}
           />
         </>

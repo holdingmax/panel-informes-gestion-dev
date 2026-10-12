@@ -3,7 +3,7 @@
 import { useTransition } from "react";
 import { useRouter } from "next/navigation";
 import { openInWindow } from "@/lib/openWindow";
-import { updateRubroBucketNOF } from "@/lib/rubro-actions";
+import { updateRubroBucketNOFDeUnidad } from "@/lib/rubro-actions";
 
 const BUCKET_LABEL: Record<string, string> = {
   OPERATIVO: "CTO",
@@ -16,14 +16,15 @@ export function RubroRowActions({
   informeId,
   codRubro,
   bucketNOF,
-  isAdmin,
+  puedeEditarNOF,
   soloLectura = false,
 }: {
   codEmp: string;
   informeId: string;
   codRubro: number;
   bucketNOF: "OPERATIVO" | "NO_OPERATIVO" | "FINANCIAMIENTO" | null;
-  isAdmin: boolean;
+  // Permiso de confeccionar informes en esta unidad, con el informe todavía abierto.
+  puedeEditarNOF: boolean;
   soloLectura?: boolean;
 }) {
   const [pending, startTransition] = useTransition();
@@ -44,14 +45,15 @@ export function RubroRowActions({
       >
         👁
       </button>
-      {isAdmin && !soloLectura ? (
+      {puedeEditarNOF && !soloLectura ? (
         <select
           defaultValue={bucketNOF ?? ""}
           disabled={pending}
-          title="Necesidades Operativas de Fondos (default del rubro)"
+          title="Necesidades Operativas de Fondos: solo cambia en esta unidad de negocio"
           onChange={(e) =>
             startTransition(async () => {
-              await updateRubroBucketNOF(codRubro, e.target.value);
+              // codEmp es el código de la unidad de negocio (la ruta /empresa/[codEmp]).
+              await updateRubroBucketNOFDeUnidad(Number(codEmp), codRubro, e.target.value);
               router.refresh();
             })
           }

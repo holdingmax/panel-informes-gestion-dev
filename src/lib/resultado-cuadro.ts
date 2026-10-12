@@ -152,7 +152,7 @@ export async function computeResultadoCuadro(informeId: string): Promise<Resulta
   // Todas las Empresas de una misma Unidad de Negocio comparten hoy la misma
   // configuración de moneda; se toma la primera que la tenga.
   const empresas = await prisma.empresa.findMany({
-    where: { unidadNegocioId },
+    where: { unidades: { some: { unidadNegocioId } } },
     include: { monedaPrimaria: true, monedaSecundaria: true },
   });
   const empresaConMonedaPrimaria = empresas.find((e) => e.monedaPrimaria);

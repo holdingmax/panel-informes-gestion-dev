@@ -14,10 +14,13 @@ export function EmpresasVinculadasForm({
   empresas: EmpresaOpcion[];
   vinculadasIds: number[];
 }) {
-  const [, formAction, pending] = useActionState<null, FormData>(async (_prev, formData) => {
-    await actualizarEmpresasVinculadas(formData);
-    return null;
-  }, null);
+  const [state, formAction, pending] = useActionState<{ error?: string } | null, FormData>(
+    async (_prev, formData) => {
+      const result = await actualizarEmpresasVinculadas(formData);
+      return result ?? null;
+    },
+    null
+  );
 
   return (
     <form action={formAction} className="flex items-center gap-2">
@@ -41,6 +44,7 @@ export function EmpresasVinculadasForm({
       >
         Guardar
       </button>
+      {state?.error && <p className="max-w-xs text-sm text-red-700">{state.error}</p>}
     </form>
   );
 }

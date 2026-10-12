@@ -7,6 +7,8 @@ import { computeResultadoNominalMes } from "@/lib/resultado-nominal";
 import { buildEmpresaBalanceInputs, type InformeSnapshot } from "@/lib/balance-oya-report";
 import type { DeleteCheckResult } from "@/components/ConfirmDeleteButton";
 import { requireUser, requireAccesoUnidad } from "@/lib/authz";
+import { formatPeriodoAbrev } from "@/lib/balance-oya-report";
+import { verificarBsysCompartido, mensajeBloqueoAprobacion } from "@/lib/bsys-compartido";
 
 export async function listInformes(unidadNegocioId: number) {
   await requireAccesoUnidad(unidadNegocioId);
@@ -61,7 +63,10 @@ const SIGUIENTE_ESTADO = {
   APROBADO: null,
 } as const;
 
-export async function avanzarEstadoInforme(informeId: string) {
+// Devuelve { error } cuando algo del negocio impide avanzar (hoy: la empresa
+// compartida no está al día entre unidades) — un throw llegaría al navegador
+// sin su texto en producción.
+export async function avanzarEstadoInforme(informeId: string): Promise<{ error: string } | undefined> {
   const informe = await prisma.informe.findUniqueOrThrow({ where: { id: informeId } });
   const estadoActual = informe.estado;
   const siguiente = SIGUIENTE_ESTADO[estadoActual];
@@ -75,6 +80,14 @@ export async function avanzarEstadoInforme(informeId: string) {
     await requireAccesoUnidad(informe.unidadNegocioId, "revisar");
   } else if (siguiente === "APROBADO") {
     await requireAccesoUnidad(informe.unidadNegocioId, "aprobar");
+
+    // Empresas que esta unidad comparte con otras: las otras unidades tienen
+    // que tener su informe de este período y un BSyS idéntico al de esta, en
+    // ambos sentidos (se corre al aprobar en cualquiera de las unidades).
+    const bloqueo = mensajeBloqueoAprobacion(
+      await verificarBsysCompartido(informe.unidadNegocioId, informe.periodoMes, informe.periodoAnio)
+    );
+    if (bloqueo) return { error: bloqueo };
   }
 
   // Se calcula ANTES de la transacción (son lecturas puras) para no dejar
@@ -127,12 +140,17 @@ export async function avanzarEstadoInforme(informeId: string) {
       throw new Error("El informe cambió de estado. Recargá la página.");
     }
 
-    // Al aprobar por primera vez, la tabla Resultados Históricos de la
-    // unidad de negocio se completa con el período de este informe. Nunca
-    // se pisa un período que ya tiene datos (ni de una aprobación anterior
-    // ni de una carga histórica manual) — create-only, no update.
+    // Al aprobar, la tabla Resultados Históricos de la unidad de negocio se
+    // completa con el período de este informe:
+    //  - Si no hay fila de ese período, se crea (origen INFORME).
+    //  - Si ya hay una de origen INFORME (una versión anterior de este mismo
+    //    período), se sobrescribe con los valores de esta versión, que es la
+    //    última, y se agrega al historial de `observaciones`.
+    //  - Si hay una de origen MANUAL (carga inicial, anterior al sistema), no
+    //    se toca nunca.
     if (siguiente === "APROBADO" && valores) {
-      await tx.resultadosHistoricos.upsert({
+      const periodoLabel = formatPeriodoAbrev(informe.periodoMes, informe.periodoAnio);
+      const existente = await tx.resultadosHistoricos.findUnique({
         where: {
           unidadNegocioId_periodoMes_periodoAnio: {
             unidadNegocioId: informe.unidadNegocioId,
@@ -140,18 +158,37 @@ export async function avanzarEstadoInforme(informeId: string) {
             periodoAnio: informe.periodoAnio,
           },
         },
-        update: {},
-        create: {
-          unidadNegocioId: informe.unidadNegocioId,
-          periodoMes: informe.periodoMes,
-          periodoAnio: informe.periodoAnio,
-          ventas: valores.ventas,
-          costosDirectos: valores.costosDirectos,
-          gastosOperativos: valores.gastosOperativos,
-          expensas: valores.expensas,
-          otrasGananciasYPerdidas: valores.otrasGananciasYPerdidas,
-        },
       });
+      const montos = {
+        ventas: valores.ventas,
+        costosDirectos: valores.costosDirectos,
+        gastosOperativos: valores.gastosOperativos,
+        expensas: valores.expensas,
+        otrasGananciasYPerdidas: valores.otrasGananciasYPerdidas,
+      };
+      if (!existente) {
+        await tx.resultadosHistoricos.create({
+          data: {
+            unidadNegocioId: informe.unidadNegocioId,
+            periodoMes: informe.periodoMes,
+            periodoAnio: informe.periodoAnio,
+            ...montos,
+            origen: "INFORME",
+            versionInforme: informe.version,
+            observaciones: `aprobado versión ${informe.version} – informe ${periodoLabel}`,
+          },
+        });
+      } else if (existente.origen === "INFORME" && informe.version >= (existente.versionInforme ?? 0)) {
+        const nota = `actualizado versión ${informe.version} – informe ${periodoLabel}`;
+        await tx.resultadosHistoricos.update({
+          where: { id: existente.id },
+          data: {
+            ...montos,
+            versionInforme: informe.version,
+            observaciones: existente.observaciones ? `${existente.observaciones}; ${nota}` : nota,
+          },
+        });
+      }
     }
   });
 

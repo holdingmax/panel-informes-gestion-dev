@@ -7,6 +7,7 @@ import { normalizeCuenta } from "@/lib/cuenta-normalize";
 import { verificarSeriesCompletaHasta } from "@/lib/series-e-indices-actions";
 import { aplicarRefundicion } from "@/lib/refundicion";
 import { requireAccesoUnidad } from "@/lib/authz";
+import { motivoRechazoCargaCompartida } from "@/lib/bsys-compartido";
 
 function primerDiaDelMes(mes: number, anio: number): Date {
   return new Date(Date.UTC(anio, mes - 1, 1));
@@ -107,7 +108,7 @@ export async function importBsysCombinado(formData: FormData): Promise<ImportBsy
   }
 
   const empresas = await prisma.empresa.findMany({
-    where: { codEmp: { in: empresaIds }, unidadNegocioId },
+    where: { codEmp: { in: empresaIds }, unidades: { some: { unidadNegocioId } } },
   });
   if (empresas.length !== empresaIds.length) {
     return { error: "Alguna de las empresas indicadas ya no está vinculada a esta unidad de negocio. Recargá la página." };
@@ -227,6 +228,26 @@ export async function importBsysCombinado(formData: FormData): Promise<ImportBsy
       };
     }
 
+    // Empresa compartida con otras unidades: el BSyS tiene que ser idéntico al
+    // que ya cargó cada una; si no, se rechaza la carga y se dice por qué.
+    if (empresa.comparteBsys) {
+      for (const [tipo, filas] of [
+        ["MES", rowsMes],
+        ["ACUMULADO", rowsAcumulado],
+      ] as const) {
+        const motivo = await motivoRechazoCargaCompartida(
+          empresa.codEmp,
+          empresa.nombreEmp,
+          unidadNegocioId,
+          tipo,
+          filas,
+          periodoMes,
+          periodoAnio
+        );
+        if (motivo) return { error: motivo, empresaNombre: empresa.nombreEmp };
+      }
+    }
+
     parsedPorEmpresa.push({
       empresaId: empresa.codEmp,
       empresaNombre: empresa.nombreEmp,
@@ -245,6 +266,7 @@ export async function importBsysCombinado(formData: FormData): Promise<ImportBsy
   const toData = (rows: BsysRawRow[], tipo: "MES" | "ACUMULADO", empresaId: number) =>
     rows.map((r) => ({
       empresaId,
+      unidadNegocioId,
       tipo,
       periodoMes,
       periodoAnio,
@@ -265,11 +287,13 @@ export async function importBsysCombinado(formData: FormData): Promise<ImportBsy
       // período", no "la más reciente entre todas", así que dejar filas
       // viejas del mismo período no aporta nada y solo arriesga que un bug
       // futuro las vuelva a sumar.
+      // Solo la carga de ESTA unidad: una Empresa que comparte BSyS tiene una
+      // carga por cada unidad, que se comparan entre sí (bsys-compartido.ts).
       await tx.balanceSumasYSaldos.deleteMany({
-        where: { empresaId: p.empresaId, tipo: "MES", periodoMes, periodoAnio },
+        where: { empresaId: p.empresaId, unidadNegocioId, tipo: "MES", periodoMes, periodoAnio },
       });
       await tx.balanceSumasYSaldos.deleteMany({
-        where: { empresaId: p.empresaId, tipo: "ACUMULADO", periodoMes, periodoAnio },
+        where: { empresaId: p.empresaId, unidadNegocioId, tipo: "ACUMULADO", periodoMes, periodoAnio },
       });
       await tx.balanceSumasYSaldos.createMany({ data: toData(p.rowsMes, "MES", p.empresaId) });
       await tx.balanceSumasYSaldos.createMany({

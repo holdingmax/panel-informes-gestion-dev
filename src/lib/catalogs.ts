@@ -33,12 +33,6 @@ export const CATALOGS = {
     planDeCuentasField: "subrubro3Id",
     model: prisma.subrubro3,
   },
-  categoriaOyA: {
-    codeField: "codOyA",
-    nameField: "nomOyA",
-    planDeCuentasField: "categoriaOyAId",
-    model: prisma.categoriaOyA,
-  },
 } as const;
 
 export type CatalogKey = keyof typeof CATALOGS;
@@ -63,10 +57,5 @@ export const CATALOG_ROUTES: Record<
     key: "subrubro3",
     title: "Subrubro 3",
     fieldLabel: "Nombre de subrubro 3",
-  },
-  "categoria-oya": {
-    key: "categoriaOyA",
-    title: "Categoría OyA",
-    fieldLabel: "Nombre de categoría OyA",
   },
 };

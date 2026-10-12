@@ -1,6 +1,7 @@
 import { describe, expect, it } from "vitest";
 import {
   buildInformeReport,
+  bucketNOFDeUnidad,
   type CuentaSaldoInput,
   type EmpresaBalanceInput,
   type PlanCuentaInput,
@@ -26,15 +27,18 @@ function plan(overrides: Partial<PlanCuentaInput> & Pick<PlanCuentaInput, "cuent
     tieneTipo: true,
     exigeSaldoCero: false,
     exposicionCambiante: false,
-    categoriaOyAId: null,
-    categoriaOyABucketNOF: null,
+    unidadNegocioId: null,
     subrubroId: null,
     ...overrides,
   };
 }
 
-function empresa(balances: CuentaSaldoInput[], planDeCuentas: PlanCuentaInput[]): EmpresaBalanceInput {
-  return { nombreEmp: "Empresa Test", tieneAcumulado: true, balances, planDeCuentas };
+function empresa(
+  balances: CuentaSaldoInput[],
+  planDeCuentas: PlanCuentaInput[],
+  extra: Partial<EmpresaBalanceInput> = {}
+): EmpresaBalanceInput {
+  return { nombreEmp: "Empresa Test", tieneAcumulado: true, balances, planDeCuentas, ...extra };
 }
 
 describe("buildInformeReport — ESP", () => {
@@ -124,7 +128,7 @@ describe("buildInformeReport — Estado de Origen y Aplicación de Fondos", () =
     expect(report.origenAplicacion.aplicaciones).toHaveLength(0);
   });
 
-  it("Cuenta con Categoría OyA propia: prevalece sobre el bucketNOF del Rubro", () => {
+  it("El bucket de NOF sale siempre del selector CTO/ONP/ARS del Rubro", () => {
     const empresas = [
       empresa(
         [saldo("CAJA", 100, 0, 150, 0)],
@@ -134,9 +138,7 @@ describe("buildInformeReport — Estado de Origen y Aplicación de Fondos", () =
             rubroId: 1,
             nomRubro: "Disponibilidades",
             tipoRol: "ACTIVO",
-            rubroBucketNOF: "OPERATIVO",
-            categoriaOyAId: 9,
-            categoriaOyABucketNOF: "FINANCIAMIENTO",
+            rubroBucketNOF: "FINANCIAMIENTO",
           }),
         ]
       ),
@@ -146,6 +148,105 @@ describe("buildInformeReport — Estado de Origen y Aplicación de Fondos", () =
 
     expect(report.nof.financiamiento).toHaveLength(1);
     expect(report.nof.operativo).toHaveLength(0);
+  });
+});
+
+describe("buildInformeReport — Empresa que comparte BSyS entre unidades", () => {
+  // Unidad 1 ("Crear Construcciones") confecciona su informe; la Empresa la
+  // comparte con la Unidad 2 ("Fredy Publicidad"). Las dos partes del BSyS
+  // suman cero: lo que sobra de un lado es el Intercompany del otro.
+  const compartida = {
+    comparteBsys: true,
+    unidadActualId: 1,
+    unidadesNombres: { "1": "Crear Construcciones", "2": "Fredy Publicidad" },
+  };
+
+  function empresaCompartida(saldoOtraUnidad: number) {
+    return empresa(
+      [
+        saldo("CAJA", 0, 0, 100, 0),
+        saldo("PRESTAMO FREDY", 0, 0, 0, 40),
+        saldo("VENTAS FREDY", 0, 0, 0, 60),
+      ].map((b) => (b.cuenta === "VENTAS FREDY" ? { ...b, saldoCierreHaber: saldoOtraUnidad } : b)),
+      [
+        plan({
+          cuenta: "CAJA",
+          rubroId: 1,
+          nomRubro: "Disponibilidades",
+          tipoRol: "ACTIVO",
+          rubroBucketNOF: "OPERATIVO",
+          unidadNegocioId: 1,
+        }),
+        // Cuentas de la otra Unidad: su Rubro/Subrubro se ignoran.
+        plan({
+          cuenta: "PRESTAMO FREDY",
+          rubroId: 2,
+          nomRubro: "Deudas",
+          tipoRol: "PASIVO",
+          unidadNegocioId: 2,
+        }),
+        plan({
+          cuenta: "VENTAS FREDY",
+          rubroId: null,
+          nomRubro: null,
+          tipoRol: null,
+          subrubroId: 1,
+          unidadNegocioId: 2,
+        }),
+      ],
+      compartida
+    );
+  }
+
+  it("las cuentas de la otra Unidad se suman en una línea con el nombre de esa Unidad", () => {
+    const report = buildInformeReport(PERIODO, [empresaCompartida(60)]);
+
+    // Saldo final de las cuentas de la otra Unidad: 0 - 40 - 60 = -100 (acreedor).
+    const todas = [...report.balance.activo, ...report.balance.pasivo, ...report.balance.patrimonioNeto];
+    const lineas = todas.filter((l) => l.nombre === "Fredy Publicidad");
+    expect(lineas).toHaveLength(1);
+    expect(lineas[0].codRubro).toBeLessThanOrEqual(-1000);
+    // Exposición cambiante: saldo acreedor → Pasivo, expuesto en positivo.
+    expect(report.balance.pasivo.map((l) => l.nombre)).toContain("Fredy Publicidad");
+    expect(lineas[0].saldoFinal).toBe(100);
+    // El rubro "Deudas" de esa cuenta no aparece: se ignora.
+    expect(todas.map((l) => l.nombre)).not.toContain("Deudas");
+    // Cierra la ecuación contable.
+    expect(report.balance.control).toBe(0);
+  });
+
+  it("según el signo del saldo agregado de la otra Unidad, la línea va a Pasivo o a Activo", () => {
+    const conSaldoOtraUnidad = (debe: number, haber: number) =>
+      buildInformeReport(PERIODO, [
+        empresa(
+          [saldo("CUENTA FREDY", 0, 0, debe, haber)],
+          [plan({ cuenta: "CUENTA FREDY", rubroId: 2, nomRubro: "X", tipoRol: "ACTIVO", unidadNegocioId: 2 })],
+          compartida
+        ),
+      ]);
+
+    expect(conSaldoOtraUnidad(0, 100).balance.pasivo.map((l) => l.nombre)).toContain("Fredy Publicidad");
+    expect(conSaldoOtraUnidad(100, 0).balance.activo.map((l) => l.nombre)).toContain("Fredy Publicidad");
+  });
+
+  it("las cuentas de la otra Unidad no aportan al Resultado del período", () => {
+    const report = buildInformeReport(PERIODO, [empresaCompartida(60)]);
+    expect(Math.abs(report.resultadoDelPeriodo)).toBe(0);
+  });
+
+  it("entran a la hoja NOF como No Operativas", () => {
+    const report = buildInformeReport(PERIODO, [empresaCompartida(60)]);
+    expect(report.nof.noOperativo.map((l) => l.nombre)).toEqual(["Fredy Publicidad"]);
+  });
+
+  it("una Empresa que no comparte BSyS no cambia: no hay líneas de Intercompany", () => {
+    const report = buildInformeReport(PERIODO, [
+      empresa(
+        [saldo("CAJA", 0, 0, 100, 0)],
+        [plan({ cuenta: "CAJA", rubroId: 1, nomRubro: "Disponibilidades", tipoRol: "ACTIVO", unidadNegocioId: 2 })]
+      ),
+    ]);
+    expect(report.balance.activo.map((l) => l.nombre)).toEqual(["Disponibilidades"]);
   });
 });
 
@@ -369,5 +470,23 @@ describe("buildInformeReport — control de partida doble", () => {
       report.balance.totalPasivo + report.balance.totalPatrimonioNeto,
       8
     );
+  });
+});
+
+describe("bucketNOFDeUnidad — CTO/ONP/ARS por unidad", () => {
+  it("sin elección de la unidad, usa el default del Rubro", () => {
+    expect(bucketNOFDeUnidad("OPERATIVO", new Map(), 1)).toBe("OPERATIVO");
+  });
+
+  it("la elección de la unidad gana sobre el default del Rubro", () => {
+    expect(bucketNOFDeUnidad("OPERATIVO", new Map([[1, "NO_OPERATIVO"]]), 1)).toBe("NO_OPERATIVO");
+  });
+
+  it("elegir 'sin clasificar' en la unidad también gana (null a propósito)", () => {
+    expect(bucketNOFDeUnidad("OPERATIVO", new Map([[1, null]]), 1)).toBeNull();
+  });
+
+  it("la elección de otro Rubro no afecta a éste", () => {
+    expect(bucketNOFDeUnidad("FINANCIAMIENTO", new Map([[2, "OPERATIVO"]]), 1)).toBe("FINANCIAMIENTO");
   });
 });

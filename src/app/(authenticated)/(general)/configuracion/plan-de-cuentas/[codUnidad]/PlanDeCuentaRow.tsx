@@ -18,18 +18,20 @@ export function PlanDeCuentaRow({
   subrubroId,
   subrubro2Id,
   subrubro3Id,
-  categoriaOyAId,
+  unidadNegocioId,
   nombrePartida,
   nombreRubro,
   nombreSubrubro,
   nombreSubrubro2,
   nombreSubrubro3,
-  nombreCategoriaOyA,
+  nombreUnidadCuenta,
   rubros,
   subrubros,
   subrubros2,
   subrubros3,
-  categorias,
+  comparteBsys,
+  unidadesDeEmpresa,
+  mostrarCuitCompartido,
   puedeConfiguracion,
 }: {
   id: string;
@@ -39,18 +41,21 @@ export function PlanDeCuentaRow({
   subrubroId: number | null;
   subrubro2Id: number | null;
   subrubro3Id: number | null;
-  categoriaOyAId: number | null;
+  unidadNegocioId: number | null;
   nombrePartida: string | null;
   nombreRubro: string | null;
   nombreSubrubro: string | null;
   nombreSubrubro2: string | null;
   nombreSubrubro3: string | null;
-  nombreCategoriaOyA: string | null;
+  nombreUnidadCuenta: string | null;
   rubros: Opcion[];
   subrubros: Opcion[];
   subrubros2: Opcion[];
   subrubros3: Opcion[];
-  categorias: Opcion[];
+  // Empresa que comparte BSyS: la cuenta pertenece a una de estas Unidades.
+  comparteBsys: boolean;
+  unidadesDeEmpresa: Opcion[];
+  mostrarCuitCompartido: boolean;
   puedeConfiguracion: boolean;
 }) {
   const [editing, setEditing] = useState(false);
@@ -151,22 +156,25 @@ export function PlanDeCuentaRow({
                 ))}
               </select>
             </label>
-            <label className="flex flex-col gap-1 text-xs">
-              <span>Categoría OyA</span>
-              <select
-                name="categoriaOyAId"
-                defaultValue={categoriaOyAId ?? ""}
-                disabled={pending}
-                className="rounded border px-2 py-1 text-sm"
-              >
-                <option value="">Sin clasificar</option>
-                {categorias.map((c) => (
-                  <option key={c.id} value={c.id}>
-                    {c.nombre}
-                  </option>
-                ))}
-              </select>
-            </label>
+            {comparteBsys && (
+              <label className="flex flex-col gap-1 text-xs">
+                <span>Cuit compartido</span>
+                <select
+                  name="unidadNegocioId"
+                  required
+                  defaultValue={unidadNegocioId ?? ""}
+                  disabled={pending}
+                  className="rounded border px-2 py-1 text-sm"
+                >
+                  <option value="">Seleccionar...</option>
+                  {unidadesDeEmpresa.map((u) => (
+                    <option key={u.id} value={u.id}>
+                      {u.nombre}
+                    </option>
+                  ))}
+                </select>
+              </label>
+            )}
             <div className="flex gap-2">
               <button
                 type="submit"
@@ -203,7 +211,7 @@ export function PlanDeCuentaRow({
       <td className="py-1.5 pr-4">{nombreSubrubro ?? "—"}</td>
       <td className="py-1.5 pr-4">{nombreSubrubro2 ?? "—"}</td>
       <td className="py-1.5 pr-4">{nombreSubrubro3 ?? "—"}</td>
-      <td className="py-1.5 pr-4">{nombreCategoriaOyA ?? "—"}</td>
+      {mostrarCuitCompartido && <td className="py-1.5 pr-4">{nombreUnidadCuenta ?? "—"}</td>}
       <td className="py-1.5 pr-4">
         {puedeConfiguracion && (
           <div className="flex gap-2">

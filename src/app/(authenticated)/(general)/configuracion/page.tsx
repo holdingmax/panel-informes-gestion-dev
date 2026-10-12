@@ -20,7 +20,6 @@ const GRUPOS = [
       { href: "/configuracion/subrubro", label: "Subrubro" },
       { href: "/configuracion/subrubro-2", label: "Subrubro 2" },
       { href: "/configuracion/subrubro-3", label: "Subrubro 3" },
-      { href: "/configuracion/categoria-oya", label: "Categoría OyA" },
     ],
   },
 ];

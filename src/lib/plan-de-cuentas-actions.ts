@@ -4,24 +4,8 @@ import { revalidatePath } from "next/cache";
 import { prisma } from "@/lib/prisma";
 import { Prisma } from "@/generated/prisma/client";
 import type { DeleteCheckResult } from "@/components/ConfirmDeleteButton";
-import { requireUser, requireAdmin, requireAccesoUnidad } from "@/lib/authz";
-
-// El Plan de Cuentas es por Empresa, pero el permiso se concede por Unidad
-// de Negocio (ver UserUnidadPermiso) — se resuelve la unidad dueña de la
-// empresa y se chequea ahí. Una Empresa todavía no vinculada a ninguna
-// Unidad (recién creada) solo la puede tocar un ADMIN — no hay unidad a la
-// cual delegarle el permiso.
-async function requireAccesoConfiguracionEmpresa(empresaId: number) {
-  const empresa = await prisma.empresa.findUniqueOrThrow({
-    where: { codEmp: empresaId },
-    select: { unidadNegocioId: true },
-  });
-  if (empresa.unidadNegocioId === null) {
-    await requireAdmin();
-    return;
-  }
-  await requireAccesoUnidad(empresa.unidadNegocioId, "configuracion");
-}
+import { requireUser } from "@/lib/authz";
+import { requireAccesoConfiguracionEmpresa, requireAccesoEmpresa } from "@/lib/empresa-authz";
 
 const INCLUDE = {
   empresa: true,
@@ -29,21 +13,14 @@ const INCLUDE = {
   subrubro: true,
   subrubro2: true,
   subrubro3: true,
-  categoriaOyA: true,
+  unidadNegocio: true,
 } as const;
 
 export async function listPlanDeCuentasPorEmpresas(empresaIds: number[]) {
   await requireUser();
-  const empresas = await prisma.empresa.findMany({
-    where: { codEmp: { in: empresaIds } },
-    select: { unidadNegocioId: true },
-  });
-  const unidadIds = new Set(empresas.map((e) => e.unidadNegocioId));
-  for (const unidadId of unidadIds) {
-    // Empresa sin Unidad: no hay a quién delegarle el permiso (ver arriba).
-    if (unidadId === null) await requireAdmin();
-    else await requireAccesoUnidad(unidadId);
-  }
+  // Una Empresa sin Unidad todavía no tiene a quién delegarle el permiso: solo
+  // un ADMIN (ver requireAccesoEmpresa).
+  for (const empresaId of new Set(empresaIds)) await requireAccesoEmpresa(empresaId);
   return prisma.planDeCuentas.findMany({
     where: { empresaId: { in: empresaIds } },
     include: INCLUDE,
@@ -72,8 +49,27 @@ function readCampos(formData: FormData) {
     subrubroId: optionalId("subrubroId"),
     subrubro2Id: optionalId("subrubro2Id"),
     subrubro3Id: optionalId("subrubro3Id"),
-    categoriaOyAId: optionalId("categoriaOyAId"),
   };
+}
+
+// "Cuit compartido": en una Empresa que comparte BSyS cada cuenta pertenece a
+// una de sus Unidades (obligatorio); en el resto no se usa y queda en null.
+async function leerUnidadDeCuenta(empresaId: number, formData: FormData): Promise<number | null> {
+  const empresa = await prisma.empresa.findUniqueOrThrow({
+    where: { codEmp: empresaId },
+    select: { comparteBsys: true, unidades: { select: { unidadNegocioId: true } } },
+  });
+  if (!empresa.comparteBsys) return null;
+
+  const raw = String(formData.get("unidadNegocioId") ?? "").trim();
+  const unidadNegocioId = Number(raw);
+  if (!raw || !Number.isInteger(unidadNegocioId)) {
+    throw new Error("Elegí el Cuit compartido (la unidad de negocio a la que pertenece la cuenta).");
+  }
+  if (!empresa.unidades.some((u) => u.unidadNegocioId === unidadNegocioId)) {
+    throw new Error("Esa unidad de negocio no comparte esta empresa.");
+  }
+  return unidadNegocioId;
 }
 
 const ERROR_CUENTA_DUPLICADA = "Ya existe una cuenta con ese nombre en esta empresa.";
@@ -88,9 +84,10 @@ export async function createPlanDeCuentas(formData: FormData): Promise<{ error: 
   await requireAccesoConfiguracionEmpresa(empresaId);
 
   const campos = readCampos(formData);
+  const unidadNegocioId = await leerUnidadDeCuenta(empresaId, formData);
 
   try {
-    await prisma.planDeCuentas.create({ data: { empresaId, ...campos } });
+    await prisma.planDeCuentas.create({ data: { empresaId, ...campos, unidadNegocioId } });
   } catch (e) {
     if (esCuentaDuplicada(e)) return { error: ERROR_CUENTA_DUPLICADA };
     throw e;
@@ -107,9 +104,10 @@ export async function updatePlanDeCuentas(
   await requireAccesoConfiguracionEmpresa(existente.empresaId);
 
   const campos = readCampos(formData);
+  const unidadNegocioId = await leerUnidadDeCuenta(existente.empresaId, formData);
 
   try {
-    await prisma.planDeCuentas.update({ where: { id }, data: campos });
+    await prisma.planDeCuentas.update({ where: { id }, data: { ...campos, unidadNegocioId } });
   } catch (e) {
     if (esCuentaDuplicada(e)) return { error: ERROR_CUENTA_DUPLICADA };
     throw e;

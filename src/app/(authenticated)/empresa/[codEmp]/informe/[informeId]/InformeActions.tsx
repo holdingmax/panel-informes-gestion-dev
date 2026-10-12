@@ -1,6 +1,6 @@
 "use client";
 
-import { useTransition } from "react";
+import { useState, useTransition } from "react";
 import { avanzarEstadoInforme } from "@/lib/informe-actions";
 
 const SIGUIENTE_LABEL: Record<string, string> = {
@@ -22,6 +22,7 @@ export function InformeActions({
   soloLectura?: boolean;
 }) {
   const [pending, startTransition] = useTransition();
+  const [error, setError] = useState<string | null>(null);
   const label = SIGUIENTE_LABEL[estado];
 
   // PROCESO -> EN_REVISION exige el permiso "revisar" en esta unidad;
@@ -34,11 +35,21 @@ export function InformeActions({
   const puedeDescargarPdf = estado === "APROBADO";
 
   return (
-    <div className="flex items-center gap-4">
+    <div className="flex flex-wrap items-center gap-4">
+      {error && (
+        <p role="alert" className="w-full max-w-3xl rounded border border-red-200 bg-red-50 p-3 text-sm text-red-800">
+          {error}
+        </p>
+      )}
       {label && puedeAvanzar && (
         <button
           disabled={pending}
-          onClick={() => startTransition(() => avanzarEstadoInforme(informeId))}
+          onClick={() =>
+            startTransition(async () => {
+              const result = await avanzarEstadoInforme(informeId);
+              setError(result?.error ?? null);
+            })
+          }
           className="rounded-md bg-accent px-4 py-2 text-sm text-white transition-colors hover:bg-accent-hover focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-accent focus-visible:ring-offset-2 disabled:cursor-not-allowed disabled:opacity-50"
         >
           {pending ? "..." : label}

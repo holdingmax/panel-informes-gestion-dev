@@ -4,7 +4,7 @@ import { revalidatePath } from "next/cache";
 import { prisma } from "@/lib/prisma";
 import type { BucketNOF } from "@/generated/prisma/enums";
 import type { DeleteCheckResult } from "@/components/ConfirmDeleteButton";
-import { requireUser, requireAdmin } from "@/lib/authz";
+import { requireUser, requireAdmin, requireAccesoUnidad } from "@/lib/authz";
 
 export async function listRubrosConClasificacion() {
   await requireUser();
@@ -28,16 +28,24 @@ export async function updateRubroPartida(codRubro: number, value: string) {
   revalidatePath("/configuracion/rubro");
 }
 
-// Default de NOF a nivel Rubro — atajo "CTO/ONP/ARS" cargado directo desde
-// el ESP. Convive con la clasificación fina por cuenta (Configuración →
-// Categoría OyA), que sigue ganando si está seteada (ver computeInformeReport).
-// Es una edición de un catálogo de Configuración (Rubro), así que exige
-// ADMIN igual que el resto de este archivo aunque se invoque desde el ESP.
-export async function updateRubroBucketNOF(codRubro: number, value: string) {
-  await requireAdmin();
+// CTO/ONP/ARS de un Rubro para UNA Unidad de Negocio — el selector del ESP.
+// Es criterio del operador de cada unidad y varias unidades confeccionan a la
+// vez, así que se guarda por unidad (RubroUnidadNOF) y no toca a las demás;
+// alcanza con el permiso de confeccionar informes de esa unidad. Sin elección
+// la unidad usa el default del Rubro (Rubro.bucketNOF).
+export async function updateRubroBucketNOFDeUnidad(
+  unidadNegocioId: number,
+  codRubro: number,
+  value: string
+) {
+  await requireAccesoUnidad(unidadNegocioId, "confeccionar");
   const bucketNOF: BucketNOF | null =
     value === "OPERATIVO" || value === "NO_OPERATIVO" || value === "FINANCIAMIENTO" ? value : null;
-  await prisma.rubro.update({ where: { codRubro }, data: { bucketNOF } });
+  await prisma.rubroUnidadNOF.upsert({
+    where: { unidadNegocioId_codRubro: { unidadNegocioId, codRubro } },
+    update: { bucketNOF },
+    create: { unidadNegocioId, codRubro, bucketNOF },
+  });
 }
 
 // Orden de exposición dentro del ESP (Activo/Pasivo/Patrimonio Neto se

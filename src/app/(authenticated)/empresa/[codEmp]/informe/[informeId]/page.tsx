@@ -1,4 +1,3 @@
-import { auth } from "@/auth";
 import { computeInformeReport, type RubroLine } from "@/lib/balance-oya-report";
 import { permisosDeUnidad } from "@/lib/authz";
 import { InformeActions } from "./InformeActions";
@@ -37,13 +36,13 @@ function BalanceRows({
   rows,
   codEmp,
   informeId,
-  isAdmin,
+  puedeEditarNOF,
   soloLectura,
 }: {
   rows: RubroLine[];
   codEmp: string;
   informeId: string;
-  isAdmin: boolean;
+  puedeEditarNOF: boolean;
   soloLectura: boolean;
 }) {
   return (
@@ -53,13 +52,13 @@ function BalanceRows({
           <td className="py-1 pl-3">
             <span className="inline-flex items-center gap-2">
               {r.nombre}
-              {r.codRubro !== -1 && (
+              {r.codRubro > 0 && (
                 <RubroRowActions
                   codEmp={codEmp}
                   informeId={informeId}
                   codRubro={r.codRubro}
                   bucketNOF={r.bucketNOF}
-                  isAdmin={isAdmin}
+                  puedeEditarNOF={puedeEditarNOF}
                   soloLectura={soloLectura}
                 />
               )}
@@ -159,9 +158,9 @@ export default async function InformeDetallePage({
   const { soloLectura: soloLecturaParam } = await searchParams;
   const soloLectura = soloLecturaParam === "1";
   const report = await computeInformeReport(informeId);
-  const session = await auth();
-  const isAdmin = session?.user.role === "ADMIN";
   const permisos = await permisosDeUnidad(report.unidadNegocioId);
+  // Un informe aprobado lee de su snapshot: cambiar el selector no tendría efecto.
+  const puedeEditarNOF = permisos.puedeConfeccionar && report.estado !== "APROBADO";
   const {
     balance,
     origenAplicacion,
@@ -225,21 +224,21 @@ export default async function InformeDetallePage({
             </tr>
           </thead>
           <tbody>
-            <BalanceRows rows={balance.activo} codEmp={codEmp} informeId={informeId} isAdmin={isAdmin} soloLectura={soloLectura} />
+            <BalanceRows rows={balance.activo} codEmp={codEmp} informeId={informeId} puedeEditarNOF={puedeEditarNOF} soloLectura={soloLectura} />
             <TotalRow
               label="Total Activo"
               final={balance.totalActivo}
               inicio={balance.totalActivoAnterior}
             />
             <Spacer />
-            <BalanceRows rows={balance.pasivo} codEmp={codEmp} informeId={informeId} isAdmin={isAdmin} soloLectura={soloLectura} />
+            <BalanceRows rows={balance.pasivo} codEmp={codEmp} informeId={informeId} puedeEditarNOF={puedeEditarNOF} soloLectura={soloLectura} />
             <TotalRow
               label="Total Pasivo"
               final={balance.totalPasivo}
               inicio={balance.totalPasivoAnterior}
             />
             <Spacer />
-            <BalanceRows rows={balance.patrimonioNeto} codEmp={codEmp} informeId={informeId} isAdmin={isAdmin} soloLectura={soloLectura} />
+            <BalanceRows rows={balance.patrimonioNeto} codEmp={codEmp} informeId={informeId} puedeEditarNOF={puedeEditarNOF} soloLectura={soloLectura} />
             <TotalRow
               label="Total Patrimonio Neto"
               final={balance.totalPatrimonioNeto}

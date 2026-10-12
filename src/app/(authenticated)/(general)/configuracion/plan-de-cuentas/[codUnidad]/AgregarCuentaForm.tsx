@@ -11,16 +11,20 @@ export function AgregarCuentaForm({
   subrubros,
   subrubros2,
   subrubros3,
-  categorias,
+  unidadActualId,
 }: {
-  empresas: { codEmp: number; nombreEmp: string }[];
+  empresas: { codEmp: number; nombreEmp: string; comparteBsys: boolean; unidades: Opcion[] }[];
   rubros: Opcion[];
   subrubros: Opcion[];
   subrubros2: Opcion[];
   subrubros3: Opcion[];
-  categorias: Opcion[];
+  // Unidad cuyo Plan de Cuentas se está mirando: es la que se propone como
+  // Cuit compartido al agregar una cuenta de una Empresa compartida.
+  unidadActualId: number;
 }) {
   const [error, setError] = useState<string | null>(null);
+  const [empresaId, setEmpresaId] = useState("");
+  const empresa = empresas.find((e) => String(e.codEmp) === empresaId);
 
   async function agregar(formData: FormData) {
     const result = await createPlanDeCuentas(formData);
@@ -31,7 +35,13 @@ export function AgregarCuentaForm({
     <form action={agregar} className="flex flex-col gap-3">
       <label className="flex flex-col gap-1">
         <span className="text-lg">Empresa</span>
-        <select name="empresaId" required className="rounded border px-3 py-2 text-lg">
+        <select
+          name="empresaId"
+          required
+          value={empresaId}
+          onChange={(e) => setEmpresaId(e.target.value)}
+          className="rounded border px-3 py-2 text-lg"
+        >
           <option value="">Seleccionar...</option>
           {empresas.map((empresa) => (
             <option key={empresa.codEmp} value={empresa.codEmp}>
@@ -94,17 +104,25 @@ export function AgregarCuentaForm({
         </select>
       </label>
 
-      <label className="flex flex-col gap-1">
-        <span className="text-lg">Categoría OyA (opcional)</span>
-        <select name="categoriaOyAId" className="rounded border px-3 py-2 text-lg">
-          <option value="">Sin clasificar</option>
-          {categorias.map((c) => (
-            <option key={c.id} value={c.id}>
-              {c.nombre}
-            </option>
-          ))}
-        </select>
-      </label>
+      {empresa?.comparteBsys && (
+        <label className="flex flex-col gap-1">
+          <span className="text-lg">Cuit compartido (unidad a la que pertenece la cuenta)</span>
+          <select
+            key={empresa.codEmp}
+            name="unidadNegocioId"
+            required
+            defaultValue={empresa.unidades.some((u) => u.id === unidadActualId) ? unidadActualId : ""}
+            className="rounded border px-3 py-2 text-lg"
+          >
+            <option value="">Seleccionar...</option>
+            {empresa.unidades.map((u) => (
+              <option key={u.id} value={u.id}>
+                {u.nombre}
+              </option>
+            ))}
+          </select>
+        </label>
+      )}
 
       {error && <p className="text-sm text-red-700">{error}</p>}
 

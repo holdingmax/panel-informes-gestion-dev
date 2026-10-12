@@ -2,6 +2,7 @@
 
 import { revalidatePath } from "next/cache";
 import { prisma } from "@/lib/prisma";
+import type { Prisma } from "@/generated/prisma/client";
 import type { DeleteCheckResult } from "@/components/ConfirmDeleteButton";
 import { requireUser, requireAdmin, requireAccesoUnidad, unidadesAccesibles } from "@/lib/authz";
 
@@ -25,11 +26,18 @@ export async function listUnidadesNegocio() {
 export async function listUnidadesNegocioConEmpresas() {
   await requireUser();
   const accesibles = await unidadesAccesibles("cualquiera");
-  return prisma.unidadNegocio.findMany({
+  const unidades = await prisma.unidadNegocio.findMany({
     where: accesibles === "todas" ? undefined : { codUnidad: { in: accesibles } },
     orderBy: { codUnidad: "asc" },
-    include: { empresas: { orderBy: { nombreEmp: "asc" } } },
+    include: { empresas: { select: { empresa: true } } },
   });
+  // Mismo formato de siempre: la lista de Empresas de cada Unidad, por nombre.
+  return unidades.map((u) => ({
+    ...u,
+    empresas: u.empresas
+      .map((vinculo) => vinculo.empresa)
+      .sort((a, b) => a.nombreEmp.localeCompare(b.nombreEmp)),
+  }));
 }
 
 export async function getUnidadNegocio(codUnidad: number) {
@@ -105,14 +113,18 @@ export async function updateUnidadNegocioLogo(formData: FormData) {
 
 export async function checkDeleteUnidadNegocio(codUnidad: number): Promise<DeleteCheckResult> {
   await requireUser();
-  const [empresas, informes, historicos] = await Promise.all([
-    prisma.empresa.count({ where: { unidadNegocioId: codUnidad } }),
+  const [empresas, informes, historicos, cuentas, cargas] = await Promise.all([
+    prisma.empresaUnidad.count({ where: { unidadNegocioId: codUnidad } }),
     prisma.informe.count({ where: { unidadNegocioId: codUnidad } }),
     prisma.resultadosHistoricos.count({ where: { unidadNegocioId: codUnidad } }),
+    prisma.planDeCuentas.count({ where: { unidadNegocioId: codUnidad } }),
+    prisma.balanceSumasYSaldos.count({ where: { unidadNegocioId: codUnidad } }),
   ]);
 
   const motivos: string[] = [];
   if (empresas > 0) motivos.push(`${empresas} empresa(s) vinculada(s)`);
+  if (cuentas > 0) motivos.push(`${cuentas} cuenta(s) del Plan de Cuentas asignadas a esta unidad`);
+  if (cargas > 0) motivos.push(`${cargas} fila(s) de BSyS cargadas por esta unidad`);
   if (informes > 0) motivos.push(`${informes} informe(s)`);
   if (historicos > 0) motivos.push(`${historicos} período(s) de Resultados Históricos`);
 
@@ -132,23 +144,66 @@ export async function deleteUnidadNegocio(codUnidad: number) {
 
 // Reemplaza por completo el conjunto de Empresas vinculadas a esta Unidad de
 // Negocio (lo que llega del <select multiple> del formulario). Una Empresa
-// solo puede estar vinculada a una Unidad de Negocio a la vez, así que
-// elegirla acá se la saca de donde estuviera antes.
-export async function actualizarEmpresasVinculadas(formData: FormData) {
+// que NO comparte BSyS solo puede estar en una Unidad a la vez, así que
+// elegirla acá se la saca de donde estuviera antes (llevándose consigo los
+// BSyS ya cargados). Una que sí comparte BSyS se suma a esta Unidad sin
+// salir de las otras; para desvincularla de esta Unidad, ninguna de sus
+// cuentas puede seguir asignada a ella.
+export async function actualizarEmpresasVinculadas(
+  formData: FormData
+): Promise<{ error: string } | undefined> {
   const codUnidad = Number(formData.get("codUnidad"));
   await requireAccesoUnidad(codUnidad, "configuracion");
   const empresaIds = formData.getAll("empresaIds").map(Number).filter(Number.isFinite);
 
-  await prisma.$transaction([
-    prisma.empresa.updateMany({
-      where: { unidadNegocioId: codUnidad, codEmp: { notIn: empresaIds } },
-      data: { unidadNegocioId: null },
+  const [vinculadas, elegidas] = await Promise.all([
+    prisma.empresaUnidad.findMany({
+      where: { unidadNegocioId: codUnidad },
+      select: { empresaId: true, empresa: { select: { nombreEmp: true, comparteBsys: true } } },
     }),
-    prisma.empresa.updateMany({
+    prisma.empresa.findMany({
       where: { codEmp: { in: empresaIds } },
-      data: { unidadNegocioId: codUnidad },
+      select: { codEmp: true, comparteBsys: true, unidades: { select: { unidadNegocioId: true } } },
     }),
   ]);
+
+  const aSacar = vinculadas.filter((v) => !empresaIds.includes(v.empresaId));
+  for (const v of aSacar) {
+    if (!v.empresa.comparteBsys) continue;
+    const cuentas = await prisma.planDeCuentas.count({
+      where: { empresaId: v.empresaId, unidadNegocioId: codUnidad },
+    });
+    if (cuentas > 0) {
+      return {
+        error: `No se puede desvincular "${v.empresa.nombreEmp}": tiene ${cuentas} cuenta(s) asignadas a esta unidad. Reasignalas primero en Configuración → Plan de Cuentas.`,
+      };
+    }
+  }
+
+  const yaVinculadas = new Set(vinculadas.map((v) => v.empresaId));
+  const operaciones: Prisma.PrismaPromise<unknown>[] = [
+    prisma.empresaUnidad.deleteMany({
+      where: { unidadNegocioId: codUnidad, empresaId: { notIn: empresaIds } },
+    }),
+  ];
+  for (const e of elegidas) {
+    if (yaVinculadas.has(e.codEmp)) continue;
+    const otras = e.unidades.map((u) => u.unidadNegocioId).filter((id) => id !== codUnidad);
+    if (!e.comparteBsys && otras.length > 0) {
+      // Se muda de Unidad: se va de la anterior y sus BSyS se mudan con ella.
+      operaciones.push(
+        prisma.empresaUnidad.deleteMany({ where: { empresaId: e.codEmp, unidadNegocioId: { in: otras } } }),
+        prisma.balanceSumasYSaldos.updateMany({
+          where: { empresaId: e.codEmp, unidadNegocioId: { in: otras } },
+          data: { unidadNegocioId: codUnidad },
+        })
+      );
+    }
+    operaciones.push(
+      prisma.empresaUnidad.create({ data: { empresaId: e.codEmp, unidadNegocioId: codUnidad } })
+    );
+  }
+  await prisma.$transaction(operaciones);
 
   revalidatePath("/configuracion/unidades-negocio");
   revalidatePath("/configuracion/empresas");
