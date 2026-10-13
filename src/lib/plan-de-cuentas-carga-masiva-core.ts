@@ -9,6 +9,7 @@ export type CampoCarga =
   | "Subrubro"
   | "Subrubro 2"
   | "Subrubro 3"
+  | "Cuit compartido"
   | "Partida y Rubro";
 
 export type FilaCarga = {
@@ -21,13 +22,17 @@ export type FilaCarga = {
   subrubro: string;
   subrubro2: string;
   subrubro3: string;
+  // Unidad a la que pertenece la cuenta: solo cuenta en Empresas que comparten BSyS.
+  cuitCompartido: string;
 };
 
 type Ref = { id: number; nombre: string };
 
 export type CatalogosCarga = {
-  // Solo las Empresas de la Unidad cuyo Plan de Cuentas se está cargando.
-  empresas: Ref[];
+  // Solo las Empresas de la Unidad cuyo Plan de Cuentas se está cargando. En
+  // las que comparten BSyS, `unidades` son las Unidades que la comparten: los
+  // únicos valores válidos del "Cuit compartido" de sus cuentas.
+  empresas: (Ref & { comparteBsys: boolean; unidades: Ref[] })[];
   partidas: Ref[];
   rubros: (Ref & { partidaId: number | null })[];
   subrubros: Ref[];
@@ -58,6 +63,8 @@ export type FilaAceptada = {
   subrubroId: number | null;
   subrubro2Id: number | null;
   subrubro3Id: number | null;
+  // Unidad de la cuenta (Cuit compartido); null si la Empresa no comparte BSyS.
+  unidadNegocioId: number | null;
 };
 
 export type ResultadoAnalisis = {
@@ -144,7 +151,7 @@ export function analizarFilas(
 
   for (const f of filas) {
     const cuenta = f.cuenta.trim();
-    const sinDatos = [f.empresa, f.cuenta, f.partida, f.rubro, f.subrubro, f.subrubro2, f.subrubro3].every(
+    const sinDatos = [f.empresa, f.cuenta, f.partida, f.rubro, f.subrubro, f.subrubro2, f.subrubro3, f.cuitCompartido].every(
       (v) => v.trim() === ""
     );
     if (sinDatos) continue;
@@ -166,7 +173,7 @@ export function analizarFilas(
     }
 
     // ---- Empresa ----
-    let empresa: Ref | undefined;
+    let empresa: CatalogosCarga["empresas"][number] | undefined;
     if (f.empresa.trim() === "") {
       if (catalogos.empresas.length === 1) empresa = catalogos.empresas[0];
       else {
@@ -286,6 +293,35 @@ export function analizarFilas(
       }
     }
 
+    // ---- Cuit compartido (solo Empresas que comparten BSyS) ----
+    // Cada cuenta de una Empresa compartida pertenece a una de sus Unidades: es
+    // obligatorio y tiene que ser una de las que comparten la Empresa.
+    let unidadNegocioId: number | null = null;
+    if (empresa.comparteBsys) {
+      const valor = f.cuitCompartido.trim();
+      const encontrada = valor ? buscar(empresa.unidades, valor) : undefined;
+      if (encontrada) {
+        unidadNegocioId = encontrada.id;
+      } else {
+        const unidades = empresa.unidades.map((u) => `"${u.nombre}"`).join(", ");
+        const mensaje = valor
+          ? `El cuit compartido "${valor}" no es una de las unidades que comparten la empresa "${empresa.nombre}" (${unidades}).`
+          : `Falta el cuit compartido: la empresa "${empresa.nombre}" comparte BSyS y cada cuenta tiene que pertenecer a una de sus unidades (${unidades}).`;
+        if (!inicial) {
+          rechazar(mensaje);
+          continue;
+        }
+        const clave = `Cuit compartido|${empresa.id}|${valor ? normalizarTexto(valor) : "(vacío)"}`;
+        const res = opciones.resoluciones[clave];
+        const elegida = res?.accion === "usar" ? buscar(empresa.unidades, res.valor) : undefined;
+        if (elegida) unidadNegocioId = elegida.id;
+        else {
+          conflicto(clave, "Cuit compartido", valor || "(vacío)", mensaje, f.fila, empresa.unidades, null);
+          pendiente = true;
+        }
+      }
+    }
+
     if (pendiente) continue;
     aCargar.push({
       fila: f.fila,
@@ -295,6 +331,7 @@ export function analizarFilas(
       subrubroId: subrubro?.id ?? null,
       subrubro2Id: subrubro2?.id ?? null,
       subrubro3Id: subrubro3?.id ?? null,
+      unidadNegocioId,
     });
   }
 

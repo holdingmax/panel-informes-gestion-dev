@@ -7,7 +7,7 @@ import { normalizeCuenta } from "@/lib/cuenta-normalize";
 import { verificarSeriesCompletaHasta } from "@/lib/series-e-indices-actions";
 import { aplicarRefundicion } from "@/lib/refundicion";
 import { requireAccesoUnidad } from "@/lib/authz";
-import { motivoRechazoCargaCompartida } from "@/lib/bsys-compartido";
+import { motivoRechazoCargaCompartida, verificarPlanCompartido } from "@/lib/bsys-compartido";
 
 function primerDiaDelMes(mes: number, anio: number): Date {
   return new Date(Date.UTC(anio, mes - 1, 1));
@@ -113,6 +113,14 @@ export async function importBsysCombinado(formData: FormData): Promise<ImportBsy
   if (empresas.length !== empresaIds.length) {
     return { error: "Alguna de las empresas indicadas ya no está vinculada a esta unidad de negocio. Recargá la página." };
   }
+
+  // Empresas compartidas: el Plan de Cuentas tiene que tener todas sus cuentas
+  // asignadas a una unidad que la comparta; si no, no se sigue.
+  const problemaPlan = await verificarPlanCompartido(
+    unidadNegocioId,
+    empresas.map((e) => e.codEmp)
+  );
+  if (problemaPlan) return { error: problemaPlan };
 
   // Series e Índices solo hace falta si alguna Empresa de esta unidad ajusta
   // por inflación o tiene moneda secundaria configurada (ver Configuración →

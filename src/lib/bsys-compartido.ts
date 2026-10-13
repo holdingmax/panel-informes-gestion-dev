@@ -223,3 +223,52 @@ export function mensajeBloqueoAprobacion(r: ResultadoBsysCompartido): string | n
   if (partes.length === 0) return null;
   return `No se puede aprobar: la empresa compartida no está al día entre unidades. ${partes.join(" ")}`;
 }
+
+// Una Empresa que comparte BSyS tiene un único Plan de Cuentas visible desde
+// todas sus Unidades, y cada cuenta tiene que pertenecer a una de ellas ("Cuit
+// compartido"). Si alguna cuenta no tiene unidad, o tiene una que ya no
+// comparte la Empresa, el informe de cualquiera de las Unidades quedaría mal
+// armado (esa cuenta se trataría como propia): se frena el proceso y se avisa.
+// Devuelve el mensaje, o null si todo está en orden. `soloEmpresaIds` limita la
+// revisión a esas Empresas.
+export async function verificarPlanCompartido(
+  unidadNegocioId: number,
+  soloEmpresaIds?: number[]
+): Promise<string | null> {
+  const vinculos = await prisma.empresaUnidad.findMany({
+    where: {
+      unidadNegocioId,
+      empresa: { comparteBsys: true },
+      ...(soloEmpresaIds ? { empresaId: { in: soloEmpresaIds } } : {}),
+    },
+    select: {
+      empresa: {
+        select: { codEmp: true, nombreEmp: true, unidades: { select: { unidadNegocioId: true } } },
+      },
+    },
+  });
+
+  const problemas: string[] = [];
+  for (const { empresa } of vinculos) {
+    const vigentes = empresa.unidades.map((u) => u.unidadNegocioId);
+    const cuentas = await prisma.planDeCuentas.findMany({
+      where: {
+        empresaId: empresa.codEmp,
+        OR: [{ unidadNegocioId: null }, { unidadNegocioId: { notIn: vigentes } }],
+      },
+      select: { cuenta: true },
+      orderBy: { cuenta: "asc" },
+    });
+    if (cuentas.length > 0) {
+      const ejemplo = cuentas
+        .slice(0, MAX_CUENTAS_EN_MENSAJE)
+        .map((c) => c.cuenta)
+        .join("; ");
+      problemas.push(
+        `"${empresa.nombreEmp}": ${cuentas.length} cuenta(s) sin una unidad válida en "Cuit compartido" (por ejemplo ${ejemplo}${cuentas.length > MAX_CUENTAS_EN_MENSAJE ? " y otras" : ""})`
+      );
+    }
+  }
+  if (problemas.length === 0) return null;
+  return `El Plan de Cuentas de una empresa compartida está incompleto: ${problemas.join(". ")}. Asignales su unidad en Configuración → Plan de Cuentas (Editar) y volvé a intentar.`;
+}

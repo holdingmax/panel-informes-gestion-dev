@@ -192,7 +192,9 @@ export function CargaMasivaPlanDeCuentas({ codUnidad }: { codUnidad: number }) {
         <p className="text-sm text-zinc-600">
           Sube un Excel con las columnas <strong>Empresa, Cuenta, Partida, Rubro, Subrubro, Subrubro 2,
           Subrubro 3</strong> (todas pueden estar vacías menos Cuenta, que tiene que empezar con la secuencia
-          de números del sistema contable). Solo se cargan las cuentas que todavía no existen. Descargá
+          de números del sistema contable). Si la empresa comparte BSyS, agregá también la columna
+          <strong> Cuit compartido</strong>: es obligatoria y tiene que ser una de las unidades que la
+          comparten. Solo se cargan las cuentas que todavía no existen. Descargá
           tablas-actuales para armar el archivo: trae los valores vigentes de cada tabla.
         </p>
 

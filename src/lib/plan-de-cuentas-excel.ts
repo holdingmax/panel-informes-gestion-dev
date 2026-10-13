@@ -232,6 +232,7 @@ export async function leerFilasCarga(
   const cSub1 = col("Subrubro");
   const cSub2 = col("Subrubro 2");
   const cSub3 = col("Subrubro 3");
+  const cCuit = col("Cuit compartido");
 
   const filas: FilaCarga[] = [];
   for (let r = 2; r <= ws.rowCount; r++) {
@@ -246,6 +247,7 @@ export async function leerFilasCarga(
       subrubro: leer(cSub1),
       subrubro2: leer(cSub2),
       subrubro3: leer(cSub3),
+      cuitCompartido: leer(cCuit),
     });
   }
   return { filas };

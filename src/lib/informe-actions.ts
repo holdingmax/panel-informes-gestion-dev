@@ -8,7 +8,11 @@ import { buildEmpresaBalanceInputs, type InformeSnapshot } from "@/lib/balance-o
 import type { DeleteCheckResult } from "@/components/ConfirmDeleteButton";
 import { requireUser, requireAccesoUnidad } from "@/lib/authz";
 import { formatPeriodoAbrev } from "@/lib/balance-oya-report";
-import { verificarBsysCompartido, mensajeBloqueoAprobacion } from "@/lib/bsys-compartido";
+import {
+  verificarBsysCompartido,
+  verificarPlanCompartido,
+  mensajeBloqueoAprobacion,
+} from "@/lib/bsys-compartido";
 
 export async function listInformes(unidadNegocioId: number) {
   await requireAccesoUnidad(unidadNegocioId);
@@ -84,6 +88,8 @@ export async function avanzarEstadoInforme(informeId: string): Promise<{ error: 
     // Empresas que esta unidad comparte con otras: las otras unidades tienen
     // que tener su informe de este período y un BSyS idéntico al de esta, en
     // ambos sentidos (se corre al aprobar en cualquiera de las unidades).
+    const problemaPlan = await verificarPlanCompartido(informe.unidadNegocioId);
+    if (problemaPlan) return { error: problemaPlan };
     const bloqueo = mensajeBloqueoAprobacion(
       await verificarBsysCompartido(informe.unidadNegocioId, informe.periodoMes, informe.periodoAnio)
     );

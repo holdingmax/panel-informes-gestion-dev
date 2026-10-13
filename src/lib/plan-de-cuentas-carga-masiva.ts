@@ -72,7 +72,12 @@ export async function cargaMasivaPlanDeCuentas(formData: FormData): Promise<Resp
   const [empresasDb, partidas, rubros, subrubros, subrubros2, subrubros3] = await Promise.all([
     prisma.empresa.findMany({
       where: { unidades: { some: { unidadNegocioId: codUnidad } } },
-      select: { codEmp: true, nombreEmp: true, comparteBsys: true },
+      select: {
+        codEmp: true,
+        nombreEmp: true,
+        comparteBsys: true,
+        unidades: { select: { unidadNegocio: { select: { codUnidad: true, nombreUnidad: true } } } },
+      },
     }),
     prisma.partidaPatrimonial.findMany({ select: { codPartida: true, nomPartida: true } }),
     prisma.rubro.findMany({ select: { codRubro: true, nomRubro: true, partidaPatrimonialId: true } }),
@@ -106,7 +111,12 @@ export async function cargaMasivaPlanDeCuentas(formData: FormData): Promise<Resp
   const analisis = analizarFilas(
     lectura.filas,
     {
-      empresas: empresasDb.map((e) => ({ id: e.codEmp, nombre: e.nombreEmp })),
+      empresas: empresasDb.map((e) => ({
+        id: e.codEmp,
+        nombre: e.nombreEmp,
+        comparteBsys: e.comparteBsys,
+        unidades: e.unidades.map((u) => ({ id: u.unidadNegocio.codUnidad, nombre: u.unidadNegocio.nombreUnidad })),
+      })),
       partidas: partidas.map((p) => ({ id: p.codPartida, nombre: p.nomPartida })),
       rubros: rubros.map((r) => ({ id: r.codRubro, nombre: r.nomRubro, partidaId: r.partidaPatrimonialId })),
       subrubros: subrubros.map((s) => ({ id: s.codSubrubro, nombre: s.nomSubrubro })),
@@ -120,9 +130,8 @@ export async function cargaMasivaPlanDeCuentas(formData: FormData): Promise<Resp
     return { tipo: "conflictos", conflictos: analisis.conflictos };
   }
 
-  // En una Empresa que comparte BSyS cada cuenta pertenece a una Unidad: las
-  // cargadas desde acá quedan en la Unidad cuyo Plan de Cuentas se está viendo.
-  const comparte = new Map(empresasDb.map((e) => [e.codEmp, e.comparteBsys]));
+  // En una Empresa que comparte BSyS cada cuenta trae su Unidad en "Cuit
+  // compartido" (obligatorio, ya validado); en el resto queda en null.
   if (analisis.aCargar.length > 0) {
     await prisma.planDeCuentas.createMany({
       data: analisis.aCargar.map((c) => ({
@@ -132,7 +141,7 @@ export async function cargaMasivaPlanDeCuentas(formData: FormData): Promise<Resp
         subrubroId: c.subrubroId,
         subrubro2Id: c.subrubro2Id,
         subrubro3Id: c.subrubro3Id,
-        unidadNegocioId: comparte.get(c.empresaId) ? codUnidad : null,
+        unidadNegocioId: c.unidadNegocioId,
       })),
       skipDuplicates: true,
     });
