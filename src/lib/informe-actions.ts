@@ -6,7 +6,7 @@ import { Prisma } from "@/generated/prisma/client";
 import { computeResultadoNominalMes } from "@/lib/resultado-nominal";
 import { buildEmpresaBalanceInputs, type InformeSnapshot } from "@/lib/balance-oya-report";
 import type { DeleteCheckResult } from "@/components/ConfirmDeleteButton";
-import { requireUser, requireAccesoUnidad } from "@/lib/authz";
+import { requireUser, requireAccesoUnidad, unidadesAccesibles } from "@/lib/authz";
 import { formatPeriodoAbrev } from "@/lib/balance-oya-report";
 import {
   verificarBsysCompartido,
@@ -30,9 +30,48 @@ export async function listInformesParaConsulta(unidadNegocioId: number) {
   return prisma.informe.findMany({
     where: { unidadNegocioId },
     include: {
-      adjuntos: { select: { id: true, nombreArchivo: true }, orderBy: { createdAt: "asc" } },
+      adjuntos: {
+        select: { id: true, nombreArchivo: true, mimeType: true },
+        orderBy: { createdAt: "asc" },
+      },
     },
     orderBy: { createdAt: "desc" },
+  });
+}
+
+// Condición de acceso de la ventana Consulta: las unidades a las que se tiene
+// acceso de consulta (todas para un ADMIN o con permiso "para todas").
+async function filtroUnidadesDeConsulta() {
+  const accesibles = await unidadesAccesibles("consulta");
+  return accesibles === "todas" ? {} : { unidadNegocioId: { in: accesibles } };
+}
+
+// Para la ventana "Informes del período": todos los informes (todas las
+// versiones) confeccionados en un mes/año, de todas las unidades a las que se
+// tiene acceso de consulta, ordenados por unidad.
+export async function listInformesDelPeriodo(periodoMes: number, periodoAnio: number) {
+  await requireUser();
+  return prisma.informe.findMany({
+    where: { periodoMes, periodoAnio, ...(await filtroUnidadesDeConsulta()) },
+    include: {
+      unidadNegocio: { select: { nombreUnidad: true } },
+      adjuntos: {
+        select: { id: true, nombreArchivo: true, mimeType: true },
+        orderBy: { createdAt: "asc" },
+      },
+    },
+    orderBy: [{ unidadNegocio: { nombreUnidad: "asc" } }, { version: "desc" }],
+  });
+}
+
+// El período más reciente que tiene informes (entre las unidades accesibles):
+// es el que abre por defecto la ventana "Informes del período".
+export async function ultimoPeriodoConInformes() {
+  await requireUser();
+  return prisma.informe.findFirst({
+    where: await filtroUnidadesDeConsulta(),
+    orderBy: [{ periodoAnio: "desc" }, { periodoMes: "desc" }],
+    select: { periodoMes: true, periodoAnio: true },
   });
 }
 

@@ -7,13 +7,17 @@ import {
   Svg,
   Line,
   Rect,
+  Polyline,
+  Circle,
+  G,
   Defs,
   LinearGradient,
   Stop,
 } from "@react-pdf/renderer";
 import type { InformeReport, RubroLine } from "@/lib/balance-oya-report";
 import { formatPeriodoAbrev } from "@/lib/balance-oya-report";
-import type { ResultadoCuadro, ResultadoBloque, ResultadoColumna } from "@/lib/resultado-cuadro";
+import type { ResultadoCuadro, ResultadoBloque, ResultadoColumna, MesEvolucion } from "@/lib/resultado-cuadro";
+import { calcularEscala } from "@/lib/chart-escala";
 
 // Tamaño de página: el modelo a copiar (ver HandyWay Junio 2026.pdf) es un
 // deck de diapositivas horizontales, no un documento A4 vertical — todo el
@@ -111,6 +115,12 @@ const styles = StyleSheet.create({
   // a simple vista.
   erTendenciaSube: { color: COLOR_TENDENCIA_SUBE, fontSize: 13 },
   erTendenciaBaja: { color: COLOR_TENDENCIA_BAJA, fontSize: 13 },
+
+  // Cuadros de evolución de 12 meses (ventana "Cuadros"): 13 columnas, así
+  // que el texto va más chico que en el resto de las hojas.
+  evoLabel: { flex: 2.4, fontSize: 8 },
+  evoCol: { flex: 1, textAlign: "right", fontSize: 7.5 },
+  evoTitulo: { fontSize: 10, fontWeight: 700, marginTop: 6, marginBottom: 4 },
 });
 
 function fmt(n: number) {
@@ -383,6 +393,117 @@ function CuadroResultadoPdf({
   );
 }
 
+const FILAS_EVOLUCION: FilaEr[] = FILAS_ER;
+
+// Un cuadro de evolución mensual (12 columnas) — mismas filas que el cuadro
+// del ER, mes a mes. Igual que CuadroEvolucion en la ventana "Cuadros".
+function CuadroEvolucionPdf({
+  titulo,
+  meses,
+  fmtValor,
+}: {
+  titulo: string;
+  meses: MesEvolucion[];
+  fmtValor: (n: number) => string;
+}) {
+  return (
+    <>
+      <Text style={styles.evoTitulo}>{titulo}</Text>
+      <View style={styles.erHeaderRow}>
+        <Text style={styles.evoLabel}>Rubro</Text>
+        {meses.map((m) => (
+          <Text key={`${m.anio}-${m.mes}`} style={[styles.evoCol, { fontWeight: 700 }]}>
+            {m.label}
+          </Text>
+        ))}
+      </View>
+      {FILAS_EVOLUCION.map((fila) => (
+        <View key={fila.label} style={styles.erRow}>
+          <Text style={[styles.evoLabel, fila.negrita ? styles.erRowNegrita : undefined]}>{fila.label}</Text>
+          {meses.map((m) => (
+            <Text key={`${m.anio}-${m.mes}`} style={[styles.evoCol, fila.negrita ? styles.erRowNegrita : undefined]}>
+              {m.valores ? (fila.pct ? fmtPct(fila.get(m.valores)) : fmtValor(fila.get(m.valores))) : "—"}
+            </Text>
+          ))}
+        </View>
+      ))}
+    </>
+  );
+}
+
+const COLOR_VENTAS = "#4472C4";
+const COLOR_RENTABILIDAD = "#ED7D31";
+
+// Mismo gráfico que VentasRentabilidadChart (pantalla): barras de Ventas y
+// línea de Rentabilidad Neta de los últimos 12 meses, con la misma escala.
+function GraficoVentasRentabilidadPdf({ meses }: { meses: MesEvolucion[] }) {
+  const W = 786;
+  const H = 400;
+  const M = { top: 28, right: 16, bottom: 34, left: 78 };
+  const datos = meses.map((m) => ({
+    label: m.label,
+    ventas: m.valores?.ventas ?? 0,
+    rentabilidadNeta: m.valores?.rentabilidadNeta ?? 0,
+  }));
+
+  const todos = datos.flatMap((d) => [d.ventas, d.rentabilidadNeta, 0]);
+  const { niceMin, niceMax, step } = calcularEscala(Math.min(...todos), Math.max(...todos));
+  const plotW = W - M.left - M.right;
+  const plotH = H - M.top - M.bottom;
+  const y = (v: number) => M.top + plotH - ((v - niceMin) / (niceMax - niceMin)) * plotH;
+  const slotW = plotW / datos.length;
+  const xCentro = (i: number) => M.left + (i + 0.5) * slotW;
+  const barW = slotW * 0.5;
+
+  const ticks: number[] = [];
+  for (let v = niceMin; v <= niceMax + step / 2; v += step) ticks.push(Math.round(v));
+  const puntos = datos.map((d, i) => `${xCentro(i)},${y(d.rentabilidadNeta)}`).join(" ");
+
+  return (
+    <Svg width={W} height={H} viewBox={`0 0 ${W} ${H}`}>
+      {ticks.map((t) => (
+        <G key={t}>
+          <Line x1={M.left} x2={W - M.right} y1={y(t)} y2={y(t)} stroke="#e5e7eb" strokeWidth={1} />
+          <Text x={M.left - 6} y={y(t) + 3} fill="#666666" textAnchor="end" style={{ fontSize: 8 }}>
+            {t.toLocaleString("es-AR")}
+          </Text>
+        </G>
+      ))}
+
+      {datos.map((d, i) => (
+        <Rect
+          key={`b-${d.label}`}
+          x={xCentro(i) - barW / 2}
+          y={Math.min(y(0), y(d.ventas))}
+          width={barW}
+          height={Math.abs(y(0) - y(d.ventas))}
+          fill={COLOR_VENTAS}
+        />
+      ))}
+
+      <Polyline points={puntos} fill="none" stroke={COLOR_RENTABILIDAD} strokeWidth={2.5} />
+      {datos.map((d, i) => (
+        <Circle key={`c-${d.label}`} cx={xCentro(i)} cy={y(d.rentabilidadNeta)} r={3} fill={COLOR_RENTABILIDAD} />
+      ))}
+
+      {datos.map((d, i) => (
+        <Text key={`l-${d.label}`} x={xCentro(i)} y={H - M.bottom + 16} fill="#444444" textAnchor="middle" style={{ fontSize: 8 }}>
+          {d.label}
+        </Text>
+      ))}
+
+      <Rect x={M.left} y={6} width={10} height={10} fill={COLOR_VENTAS} />
+      <Text x={M.left + 15} y={14} fill="#444444" style={{ fontSize: 9 }}>
+        Ventas
+      </Text>
+      <Line x1={M.left + 75} y1={11} x2={M.left + 93} y2={11} stroke={COLOR_RENTABILIDAD} strokeWidth={2.5} />
+      <Text x={M.left + 99} y={14} fill="#444444" style={{ fontSize: 9 }}>
+        Rentabilidad Neta
+      </Text>
+    </Svg>
+  );
+}
+
 export function InformePDF({ report, cuadro }: { report: InformeReport; cuadro: ResultadoCuadro }) {
   const tituloCorto = `${report.unidadNegocioNombre.toUpperCase()} – ${MESES[report.periodoMes - 1].toUpperCase()} ${report.periodoAnio}${report.version > 1 ? ` – VERSIÓN ${report.version}` : ""}`;
   const {
@@ -591,6 +712,39 @@ export function InformePDF({ report, cuadro }: { report: InformeReport; cuadro: 
           />
         </Page>
       )}
+
+      {/* Hoja 9: Cuadros — evolución de los últimos 12 meses (ventana "Cuadros") */}
+      <Page size={[PAGE_W, PAGE_H]} style={styles.page}>
+        <PageHeader
+          tituloCorto={tituloCorto}
+          seccion="CUADROS – EVOLUCION ULTIMOS 12 MESES"
+          condicion={cuadro.evolucion12Meses.principalCondicion}
+          auditado={report.auditado}
+        />
+        <CuadroEvolucionPdf
+          titulo={`${cuadro.evolucion12Meses.principalCondicion} en ${monedaPrimaria}${cuadro.presentaEnMiles ? " (en miles)" : ""}`}
+          meses={cuadro.evolucion12Meses.principalPorMes}
+          fmtValor={(n) => fmtParenEnMiles(n, cuadro.presentaEnMiles)}
+        />
+        {cuadro.evolucion12Meses.secundariaPorMes && (
+          <CuadroEvolucionPdf
+            titulo={cuadro.monedaSecundariaNombre ?? "Moneda secundaria"}
+            meses={cuadro.evolucion12Meses.secundariaPorMes}
+            fmtValor={fmtParen}
+          />
+        )}
+      </Page>
+
+      {/* Hoja 10: gráfico de Ventas y Rentabilidad Neta (último de todo) */}
+      <Page size={[PAGE_W, PAGE_H]} style={styles.page}>
+        <PageHeader
+          tituloCorto={tituloCorto}
+          seccion="EVOLUCION VENTAS Y RENTABILIDAD NETA – ULTIMOS 12 MESES"
+          condicion={cuadro.evolucion12Meses.principalCondicion}
+          auditado={report.auditado}
+        />
+        <GraficoVentasRentabilidadPdf meses={cuadro.evolucion12Meses.principalPorMes} />
+      </Page>
     </Document>
   );
 }

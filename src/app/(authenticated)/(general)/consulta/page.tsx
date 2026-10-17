@@ -1,6 +1,7 @@
 import { listUnidadesNegocio } from "@/lib/unidad-negocio-actions";
 import { unidadesAccesibles } from "@/lib/authz";
 import { UnidadNegocioGrid } from "../../../UnidadNegocioGrid";
+import { AbrirInformesDelPeriodo } from "./AbrirInformesDelPeriodo";
 
 export const dynamic = "force-dynamic";
 
@@ -16,10 +17,15 @@ export default async function ConsultaPage() {
 
   return (
     <main className="flex w-full flex-col gap-6 p-8">
-      <h1 className="text-2xl font-semibold">Consulta</h1>
-      <p className="text-lg text-zinc-600">
-        Elegí una unidad de negocio para ver el histórico completo de sus informes.
-      </p>
+      <div className="flex flex-wrap items-start justify-between gap-4">
+        <div className="flex flex-col gap-6">
+          <h1 className="text-2xl font-semibold">Consulta</h1>
+          <p className="text-lg text-zinc-600">
+            Elegí una unidad de negocio para ver el histórico completo de sus informes.
+          </p>
+        </div>
+        <AbrirInformesDelPeriodo />
+      </div>
 
       <UnidadNegocioGrid
         unidades={unidades}
