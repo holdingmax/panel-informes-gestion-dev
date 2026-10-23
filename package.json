@@ -16,6 +16,7 @@
     "db:migrar-render": "tsx prisma/migrar-render.ts",
     "db:subir-a-render": "tsx prisma/subir-a-render.ts",
     "db:sincronizar": "tsx prisma/sincronizar-desde-render.ts",
+    "db:respaldar-render": "tsx prisma/sincronizar-desde-render.ts --solo-respaldo",
     "db:restaurar": "tsx prisma/restaurar-datos.ts"
   },
   "dependencies": {
