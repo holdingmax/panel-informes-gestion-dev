@@ -121,6 +121,31 @@ const styles = StyleSheet.create({
   evoLabel: { flex: 2.4, fontSize: 8 },
   evoCol: { flex: 1, textAlign: "right", fontSize: 7.5 },
   evoTitulo: { fontSize: 10, fontWeight: 700, marginTop: 6, marginBottom: 4 },
+
+  // Marca de "NO APROBADO" (informe en Proceso o En revisión): una franja en
+  // el margen superior de cada hoja — no empuja el contenido — y una marca de
+  // agua diagonal muy tenue por detrás del contenido, para que se note a
+  // simple vista sin tapar la lectura.
+  marcaBarra: {
+    position: "absolute",
+    top: 8,
+    left: 28,
+    right: 28,
+    height: 14,
+    backgroundColor: "#c00000",
+    justifyContent: "center",
+  },
+  marcaBarraTexto: { color: "#ffffff", fontSize: 8.5, fontWeight: 700, textAlign: "center" },
+  marcaAgua: {
+    position: "absolute",
+    top: 215,
+    left: 95,
+    fontSize: 96,
+    fontWeight: 700,
+    color: "#c00000",
+    opacity: 0.07,
+    transform: "rotate(-24deg)",
+  },
 });
 
 function fmt(n: number) {
@@ -167,10 +192,38 @@ function FondoDiapositiva() {
 // Tapa ("HANDYWAY CARGO" / "INDICADOR MES DE JUNIO 2026") y diapositiva
 // separadora ("RESULTADOS ECONOMICOS", sin subtítulo) — mismo fondo,
 // distinto texto.
-function Diapositiva({ titulo, subtitulo }: { titulo: string; subtitulo?: string }) {
+function MarcaNoAprobado({ estado, conMarcaDeAgua = true }: { estado: string; conMarcaDeAgua?: boolean }) {
+  const etiqueta = estado === "EN_REVISION" ? "EN REVISION" : "EN PROCESO";
+  return (
+    <>
+      {conMarcaDeAgua && (
+        <Text fixed style={styles.marcaAgua}>
+          NO APROBADO
+        </Text>
+      )}
+      <View fixed style={styles.marcaBarra}>
+        <Text style={styles.marcaBarraTexto}>
+          {`INFORME NO APROBADO  |  ESTADO: ${etiqueta}  |  NO ES LA VERSION DEFINITIVA`}
+        </Text>
+      </View>
+    </>
+  );
+}
+
+function Diapositiva({
+  titulo,
+  subtitulo,
+  estadoNoAprobado,
+}: {
+  titulo: string;
+  subtitulo?: string;
+  // Si el informe no está aprobado, la tapa y la separadora llevan la franja.
+  estadoNoAprobado?: string;
+}) {
   return (
     <Page size={[PAGE_W, PAGE_H]} style={styles.coverPage}>
       <FondoDiapositiva />
+      {estadoNoAprobado && <MarcaNoAprobado estado={estadoNoAprobado} conMarcaDeAgua={false} />}
       <View style={styles.coverContent}>
         <Text style={styles.coverTitle}>{titulo}</Text>
         {subtitulo && <Text style={styles.coverSubtitle}>{subtitulo}</Text>}
@@ -518,6 +571,10 @@ export function InformePDF({ report, cuadro }: { report: InformeReport; cuadro: 
   const condicionNominal = `Nominal ${monedaPrimaria}`;
   const condicionMiles = cuadro.presentaEnMiles ? `Miles de ${monedaPrimaria}` : undefined;
 
+  // Informe en Proceso o En revisión: todas las hojas llevan la marca de "NO APROBADO".
+  const noAprobado = report.estado !== "APROBADO";
+  const marca = noAprobado ? <MarcaNoAprobado estado={report.estado} /> : null;
+
   const periodoLabel = formatPeriodoAbrev(report.periodoMes, report.periodoAnio);
   const periodoAnteriorLabel = formatPeriodoAbrev(report.periodoMes, report.periodoAnio - 1);
 
@@ -525,12 +582,14 @@ export function InformePDF({ report, cuadro }: { report: InformeReport; cuadro: 
     <Document>
       {/* Hoja 1: tapa */}
       <Diapositiva
+        estadoNoAprobado={noAprobado ? report.estado : undefined}
         titulo={report.unidadNegocioNombre.toUpperCase()}
         subtitulo={`INDICADOR MES DE ${MESES[report.periodoMes - 1].toUpperCase()} ${report.periodoAnio}`}
       />
 
       {/* Hoja 2: Estado de Situación Patrimonial */}
       <Page size={[PAGE_W, PAGE_H]} style={styles.page}>
+        {marca}
         <PageHeader
           tituloCorto={tituloCorto}
           seccion="ESTADO DE SITUACION PATRIMONIAL"
@@ -574,6 +633,7 @@ export function InformePDF({ report, cuadro }: { report: InformeReport; cuadro: 
 
       {/* Hoja 3: Estado de Resultados — Nominal (siempre) */}
       <Page size={[PAGE_W, PAGE_H]} style={styles.page}>
+        {marca}
         <PageHeader
           tituloCorto={tituloCorto}
           seccion="RESULTADOS ECONOMICOS COMPARADOS EN MONEDA NOMINAL"
@@ -591,6 +651,7 @@ export function InformePDF({ report, cuadro }: { report: InformeReport; cuadro: 
 
       {/* Hoja 4: Estado de Origen y Aplicación de Fondos */}
       <Page size={[PAGE_W, PAGE_H]} style={styles.page}>
+        {marca}
         <PageHeader
           tituloCorto={tituloCorto}
           seccion="ESTADO DE ORIGEN Y APLICACION DE FONDOS"
@@ -631,6 +692,7 @@ export function InformePDF({ report, cuadro }: { report: InformeReport; cuadro: 
 
       {/* Hoja 5: Necesidades Operativas de Fondos */}
       <Page size={[PAGE_W, PAGE_H]} style={styles.page}>
+        {marca}
         <PageHeader
           tituloCorto={tituloCorto}
           seccion="NECESIDADES OPERATIVAS DE FONDOS Y OTROS ORIGENES (APLICACIONES)"
@@ -674,11 +736,12 @@ export function InformePDF({ report, cuadro }: { report: InformeReport; cuadro: 
       </Page>
 
       {/* Hoja 6: diapositiva separadora "RESULTADOS ECONOMICOS" */}
-      <Diapositiva titulo="RESULTADOS ECONOMICOS" />
+      <Diapositiva titulo="RESULTADOS ECONOMICOS" estadoNoAprobado={noAprobado ? report.estado : undefined} />
 
       {/* Hoja 7: Estado de Resultados — Ajustado por Inflación (solo si la Empresa lo tiene parametrizado) */}
       {cuadro.tieneAjustePorInflacion && cuadro.ajustadoPorInflacion && (
         <Page size={[PAGE_W, PAGE_H]} style={styles.page}>
+        {marca}
           <PageHeader
             tituloCorto={tituloCorto}
             seccion="RESULTADOS ECONOMICOS COMPARADOS EN MONEDA AJUSTADA"
@@ -698,6 +761,7 @@ export function InformePDF({ report, cuadro }: { report: InformeReport; cuadro: 
       {/* Hoja 8: Estado de Resultados — Moneda secundaria (solo si la Empresa la tiene parametrizada) */}
       {cuadro.tieneMonedaSecundaria && cuadro.usd && (
         <Page size={[PAGE_W, PAGE_H]} style={styles.page}>
+        {marca}
           <PageHeader
             tituloCorto={tituloCorto}
             seccion={`RESULTADOS ECONOMICOS COMPARADOS EN ${(cuadro.monedaSecundariaNombre ?? "MONEDA SECUNDARIA").toUpperCase()}`}
@@ -715,6 +779,7 @@ export function InformePDF({ report, cuadro }: { report: InformeReport; cuadro: 
 
       {/* Hoja 9: Cuadros — evolución de los últimos 12 meses (ventana "Cuadros") */}
       <Page size={[PAGE_W, PAGE_H]} style={styles.page}>
+        {marca}
         <PageHeader
           tituloCorto={tituloCorto}
           seccion="CUADROS – EVOLUCION ULTIMOS 12 MESES"
@@ -737,6 +802,7 @@ export function InformePDF({ report, cuadro }: { report: InformeReport; cuadro: 
 
       {/* Hoja 10: gráfico de Ventas y Rentabilidad Neta (último de todo) */}
       <Page size={[PAGE_W, PAGE_H]} style={styles.page}>
+        {marca}
         <PageHeader
           tituloCorto={tituloCorto}
           seccion="EVOLUCION VENTAS Y RENTABILIDAD NETA – ULTIMOS 12 MESES"

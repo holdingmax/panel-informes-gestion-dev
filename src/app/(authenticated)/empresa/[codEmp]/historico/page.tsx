@@ -63,7 +63,7 @@ export default async function HistoricoPage({
                   <td className="py-2">{periodoLabel}</td>
                   <td className="py-2">{ESTADO_LABEL[informe.estado] ?? informe.estado}</td>
                   <td className="py-2">
-                    <HistoricoRowLinks codEmp={codEmp} informeId={informe.id} />
+                    <HistoricoRowLinks codEmp={codEmp} informeId={informe.id} aprobado={informe.estado === "APROBADO"} />
                   </td>
                   <td className="py-2">
                     <InformeAcciones

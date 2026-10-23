@@ -2,7 +2,15 @@
 
 import { openInWindow } from "@/lib/openWindow";
 
-export function HistoricoRowLinks({ codEmp, informeId }: { codEmp: string; informeId: string }) {
+export function HistoricoRowLinks({
+  codEmp,
+  informeId,
+  aprobado,
+}: {
+  codEmp: string;
+  informeId: string;
+  aprobado: boolean;
+}) {
   return (
     <div className="flex items-center gap-2">
       <button
@@ -28,6 +36,19 @@ export function HistoricoRowLinks({ codEmp, informeId }: { codEmp: string; infor
       >
         Cuadros
       </button>
+      {/* Mismo PDF que en Consulta. Si el informe no está aprobado se descarga
+          completo, pero marcado como NO APROBADO en todas las hojas. */}
+      <a
+        href={`/api/informes/${informeId}/pdf?descargar=1`}
+        title={
+          aprobado
+            ? "Descargar el informe en PDF"
+            : "Descargar el informe en PDF con los datos de hoy, marcado como NO APROBADO"
+        }
+        className="rounded-md bg-accent px-2.5 py-1 text-xs font-semibold text-white transition-colors hover:bg-accent-hover focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-accent focus-visible:ring-offset-2"
+      >
+        ⬇ Descargar informe{aprobado ? "" : " (no aprobado)"}
+      </a>
     </div>
   );
 }
