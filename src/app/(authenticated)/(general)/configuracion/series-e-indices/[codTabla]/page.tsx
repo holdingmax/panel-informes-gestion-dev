@@ -3,6 +3,7 @@ import { auth } from "@/auth";
 import {
   getSeriesEIndicesTabla,
   listSeriesEIndices,
+  listSeriesEIndicesTablas,
   listUnidadesConSeriesTabla,
 } from "@/lib/series-e-indices-actions";
 import { CollapsibleAdd } from "@/components/CollapsibleAdd";
@@ -25,10 +26,11 @@ export default async function SeriesEIndicesTablaPage({
   const { codTabla: codTablaRaw } = await params;
   const codTabla = Number(codTablaRaw);
 
-  const [tabla, series, unidades] = await Promise.all([
+  const [tabla, series, unidades, tablas] = await Promise.all([
     getSeriesEIndicesTabla(codTabla),
     listSeriesEIndices(codTabla),
     listUnidadesConSeriesTabla(),
+    listSeriesEIndicesTablas(),
   ]);
   if (!tabla) notFound();
 
@@ -57,14 +59,22 @@ export default async function SeriesEIndicesTablaPage({
             codTabla={codTabla}
             unidades={unidades}
             vinculadasIds={unidades.filter((u) => u.seriesTablaId === codTabla).map((u) => u.codUnidad)}
+            nombresDeTablas={Object.fromEntries(tablas.map((t) => [t.codTabla, t.tipoTabla]))}
           />
         ) : (
-          <p className="text-sm">
-            {unidades
-              .filter((u) => u.seriesTablaId === codTabla)
-              .map((u) => u.nombreUnidad)
-              .join(", ") || "—"}
-          </p>
+          <ul className="flex flex-wrap gap-2">
+            {unidades.filter((u) => u.seriesTablaId === codTabla).length === 0 ? (
+              <li className="text-sm text-zinc-600">Ninguna unidad usa esta tabla todavía.</li>
+            ) : (
+              unidades
+                .filter((u) => u.seriesTablaId === codTabla)
+                .map((u) => (
+                  <li key={u.codUnidad} className="rounded-full border border-slate-300 bg-slate-50 px-3 py-1 text-sm">
+                    {u.nombreUnidad}
+                  </li>
+                ))
+            )}
+          </ul>
         )}
       </section>
 

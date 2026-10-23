@@ -2,6 +2,7 @@
 
 import { useActionState, useRef, useState } from "react";
 import { createReclasificacion, updateReclasificacion } from "@/lib/reclasificacion-actions";
+import { CargarLineasExcel } from "./CargarLineasExcel";
 
 type CuentaOpcion = { id: string; cuenta: string };
 type Fila = { planDeCuentaId: string; debe: string; haber: string };
@@ -90,29 +91,45 @@ export function ReclasificacionForm({
 
   return (
     <form ref={formRef} action={formAction} onSubmit={alEnviar} className="flex flex-col gap-4">
-      {editar || empresas.length <= 1 ? (
-        <p className="text-sm">
-          <span className="font-medium">Empresa:</span> {nombreEmpresa}
-        </p>
-      ) : (
-        <label className="flex flex-col gap-1">
-          <span className="text-sm">Empresa</span>
-          <select
-            value={empresaId}
-            onChange={(e) => {
-              setEmpresaId(Number(e.target.value));
-              setFilas([filaVacia(), filaVacia()]);
-            }}
-            className="w-fit rounded border px-3 py-2 text-sm"
-          >
-            {empresas.map((e) => (
-              <option key={e.codEmp} value={e.codEmp}>
-                {e.nombreEmp}
-              </option>
-            ))}
-          </select>
-        </label>
-      )}
+      <div className="flex flex-wrap items-start justify-between gap-3">
+        {editar || empresas.length <= 1 ? (
+          <p className="text-sm">
+            <span className="font-medium">Empresa:</span> {nombreEmpresa}
+          </p>
+        ) : (
+          <label className="flex flex-col gap-1">
+            <span className="text-sm">Empresa</span>
+            <select
+              value={empresaId}
+              onChange={(e) => {
+                setEmpresaId(Number(e.target.value));
+                setFilas([filaVacia(), filaVacia()]);
+              }}
+              className="w-fit rounded border px-3 py-2 text-sm"
+            >
+              {empresas.map((e) => (
+                <option key={e.codEmp} value={e.codEmp}>
+                  {e.nombreEmp}
+                </option>
+              ))}
+            </select>
+          </label>
+        )}
+
+        <CargarLineasExcel
+          informeId={informeId}
+          empresaId={empresaId}
+          onGuardar={(lineas) =>
+            setFilas(
+              lineas.map((l) => ({
+                planDeCuentaId: l.planDeCuentaId,
+                debe: l.debe ? String(l.debe) : "",
+                haber: l.haber ? String(l.haber) : "",
+              }))
+            )
+          }
+        />
+      </div>
 
       <label className="flex flex-col gap-1">
         <span className="text-sm">Saldo de reclasifica</span>

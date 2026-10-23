@@ -31,18 +31,28 @@ export function UnidadNegocioRow({
   const [nombreValue, setNombreValue] = useState(nombreUnidad);
   const [pending, startTransition] = useTransition();
   const fileInputRef = useRef<HTMLInputElement>(null);
+  const [error, setError] = useState<string | null>(null);
 
   function guardar() {
+    // El archivo se toma antes de cualquier await: después de guardar el
+    // nombre la pantalla se vuelve a dibujar y el input ya no es confiable.
+    const file = fileInputRef.current?.files?.[0];
     startTransition(async () => {
-      await updateUnidadNegocioNombre(codUnidad, nombreValue);
-      const file = fileInputRef.current?.files?.[0];
-      if (file) {
-        const formData = new FormData();
-        formData.set("codUnidad", String(codUnidad));
-        formData.set("imagen", file);
-        await updateUnidadNegocioLogo(formData);
+      try {
+        setError(null);
+        if (nombreValue.trim() !== nombreUnidad) {
+          await updateUnidadNegocioNombre(codUnidad, nombreValue);
+        }
+        if (file) {
+          const formData = new FormData();
+          formData.set("codUnidad", String(codUnidad));
+          formData.set("imagen", file);
+          await updateUnidadNegocioLogo(formData);
+        }
+        setEditing(false);
+      } catch (e) {
+        setError(e instanceof Error ? e.message : "No se pudo guardar.");
       }
-      setEditing(false);
     });
   }
 
@@ -61,14 +71,18 @@ export function UnidadNegocioRow({
           "—"
         )}
         {editing && puedeConfiguracion && (
-          <input
-            ref={fileInputRef}
-            type="file"
-            accept="image/jpeg,image/png,image/gif,image/webp,image/svg+xml"
-            disabled={pending}
-            className="mt-1 w-40 text-xs"
-          />
+          <label className="mt-1 flex flex-col gap-1 text-xs text-zinc-600">
+            <span>{imagenMime ? "Cambiar logo (JPG, PNG, GIF, WebP o SVG, hasta 2MB)" : "Cargar logo (JPG, PNG, GIF, WebP o SVG, hasta 2MB)"}</span>
+            <input
+              ref={fileInputRef}
+              type="file"
+              accept="image/jpeg,image/png,image/gif,image/webp,image/svg+xml"
+              disabled={pending}
+              className="w-56 text-xs"
+            />
+          </label>
         )}
+        {error && <p className="mt-1 max-w-56 text-xs text-red-700">{error}</p>}
       </td>
       <td className="py-2 pr-4">
         {editing && puedeConfiguracion ? (
@@ -110,6 +124,7 @@ export function UnidadNegocioRow({
                   type="button"
                   onClick={() => {
                     setNombreValue(nombreUnidad);
+                    setError(null);
                     setEditing(false);
                   }}
                   disabled={pending}

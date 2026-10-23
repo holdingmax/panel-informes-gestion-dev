@@ -66,12 +66,26 @@ export async function deleteSeriesEIndicesTabla(codTabla: number) {
 
 // Reemplazo total del conjunto de Unidades de Negocio que usan esta tabla —
 // mismo patrón que actualizarEmpresasVinculadas en unidad-negocio-actions.ts.
-// Una unidad solo puede usar una tabla a la vez: si ya estaba vinculada a
-// otra, queda reasignada a esta.
-export async function vincularUnidadesATabla(formData: FormData) {
+// Una unidad usa UNA sola tabla: si ya está vinculada a otra no se la puede
+// agregar acá; hay que sacarla primero de la otra. Devuelve { error } (no
+// lanza) para que el mensaje llegue a la pantalla.
+export async function vincularUnidadesATabla(formData: FormData): Promise<{ error: string } | undefined> {
   await requireAdmin();
   const codTabla = Number(formData.get("codTabla"));
   const unidadIds = formData.getAll("unidadIds").map(Number).filter(Number.isFinite);
+
+  const enOtraTabla = await prisma.unidadNegocio.findMany({
+    where: { codUnidad: { in: unidadIds }, seriesTablaId: { not: null, notIn: [codTabla] } },
+    select: { nombreUnidad: true, seriesTabla: { select: { tipoTabla: true } } },
+  });
+  if (enOtraTabla.length > 0) {
+    const detalle = enOtraTabla
+      .map((u) => `"${u.nombreUnidad}" (usa "${u.seriesTabla?.tipoTabla ?? "otra tabla"}")`)
+      .join(", ");
+    return {
+      error: `Una unidad usa una sola tabla de Series e Índices: ${detalle}. Sacala primero de la otra tabla y después agregala acá.`,
+    };
+  }
 
   await prisma.$transaction([
     prisma.unidadNegocio.updateMany({
