@@ -66,11 +66,11 @@ export type ResultadoColumna = ResultadoNominal & {
 
 function derivar(v: ResultadoNominal): ResultadoColumna {
   const margenContribucion = v.ventas + v.costosDirectos;
-  // Orden verificado contra la hoja de referencia (Panel LV12 BL8:BR58):
-  // Otras Ganancias y Perdidas entra en el Resultado Operativo, no después
-  // de él — solo Expensas queda para el paso siguiente, a Rentabilidad Neta.
-  const resultadoOperativo = margenContribucion + v.gastosOperativos + v.otrasGananciasYPerdidas;
-  const rentabilidadNeta = resultadoOperativo + v.expensas;
+  // Orden estándar de todos los informes (es el mismo en que se muestran las
+  // filas): el Resultado Operativo no incluye Expensas ni Otras Ganancias y
+  // Perdidas; ambas se suman después, hasta la Rentabilidad Neta.
+  const resultadoOperativo = margenContribucion + v.gastosOperativos;
+  const rentabilidadNeta = resultadoOperativo + v.expensas + v.otrasGananciasYPerdidas;
   const div = (n: number, d: number) => (d !== 0 ? n / d : 0);
   return {
     ...v,
