@@ -15,7 +15,7 @@ import {
   Stop,
 } from "@react-pdf/renderer";
 import type { InformeReport, RubroLine } from "@/lib/balance-oya-report";
-import { formatPeriodoAbrev } from "@/lib/balance-oya-report";
+import { acumEjercicioLabel, formatPeriodoAbrev } from "@/lib/balance-oya-report";
 import type { ResultadoCuadro, ResultadoBloque, ResultadoColumna, MesEvolucion } from "@/lib/resultado-cuadro";
 import { calcularEscala } from "@/lib/chart-escala";
 
@@ -378,20 +378,22 @@ function CuadroResultadoPdf({
   bloque,
   periodoLabel,
   periodoAnteriorLabel,
+  periodoMes,
   periodoAnio,
   fmtValor,
 }: {
   bloque: ResultadoBloque;
   periodoLabel: string;
   periodoAnteriorLabel: string;
+  periodoMes: number;
   periodoAnio: number;
   fmtValor: (n: number) => string;
 }) {
   const columnas: { label: string; datos: ResultadoColumna }[] = [
     { label: periodoLabel, datos: bloque.actual },
     { label: periodoAnteriorLabel, datos: bloque.mismoMesAnioAnterior },
-    { label: `Acum ${String(periodoAnio - 1).slice(-2)}/${String(periodoAnio).slice(-2)}`, datos: bloque.acumuladoActual },
-    { label: `Acum ${String(periodoAnio - 2).slice(-2)}/${String(periodoAnio - 1).slice(-2)}`, datos: bloque.acumuladoAnterior },
+    { label: acumEjercicioLabel(periodoMes, periodoAnio), datos: bloque.acumuladoActual },
+    { label: acumEjercicioLabel(periodoMes, periodoAnio, 1), datos: bloque.acumuladoAnterior },
     { label: "Promedio", datos: bloque.promedio },
   ];
   const ultimaColumna = columnas.length - 1;
@@ -644,6 +646,7 @@ export function InformePDF({ report, cuadro }: { report: InformeReport; cuadro: 
           bloque={cuadro.nominal}
           periodoLabel={periodoLabel}
           periodoAnteriorLabel={periodoAnteriorLabel}
+          periodoMes={cuadro.periodoMes}
           periodoAnio={cuadro.periodoAnio}
           fmtValor={(n) => fmtParenEnMiles(n, cuadro.presentaEnMiles)}
         />
@@ -752,7 +755,8 @@ export function InformePDF({ report, cuadro }: { report: InformeReport; cuadro: 
             bloque={cuadro.ajustadoPorInflacion}
             periodoLabel={periodoLabel}
             periodoAnteriorLabel={periodoAnteriorLabel}
-            periodoAnio={cuadro.periodoAnio}
+            periodoMes={cuadro.periodoMes}
+          periodoAnio={cuadro.periodoAnio}
             fmtValor={(n) => fmtParenEnMiles(n, cuadro.presentaEnMiles)}
           />
         </Page>
@@ -771,7 +775,8 @@ export function InformePDF({ report, cuadro }: { report: InformeReport; cuadro: 
             bloque={cuadro.usd}
             periodoLabel={periodoLabel}
             periodoAnteriorLabel={periodoAnteriorLabel}
-            periodoAnio={cuadro.periodoAnio}
+            periodoMes={cuadro.periodoMes}
+          periodoAnio={cuadro.periodoAnio}
             fmtValor={fmtParen}
           />
         </Page>

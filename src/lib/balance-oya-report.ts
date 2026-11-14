@@ -32,6 +32,23 @@ export function formatPeriodoAbrev(mes: number, anio: number): string {
   return `${MESES_ABREV[mes - 1]}-${String(anio).slice(-2)}`;
 }
 
+// El ejercicio económico va de julio a junio. Su saldo inicial en el ESP es
+// siempre el cierre de junio anterior (Jun-26 para todos los informes de
+// Jul-26 a Jun-27) y el rótulo "Acum XX/YY" lleva los años del ejercicio.
+function anioInicioEjercicio(mes: number, anio: number): number {
+  return mes >= 7 ? anio : anio - 1;
+}
+
+export function periodoInicialEspLabel(mes: number, anio: number): string {
+  return formatPeriodoAbrev(6, anioInicioEjercicio(mes, anio));
+}
+
+// cantidadDeEjerciciosAtras: 0 = ejercicio del informe, 1 = el anterior.
+export function acumEjercicioLabel(mes: number, anio: number, cantidadDeEjerciciosAtras = 0): string {
+  const inicio = anioInicioEjercicio(mes, anio) - cantidadDeEjerciciosAtras;
+  return `Acum ${String(inicio).slice(-2)}/${String(inicio + 1).slice(-2)}`;
+}
+
 export type RubroLine = {
   codRubro: number;
   nombre: string;
@@ -787,7 +804,7 @@ export function buildInformeReport(
     periodoMes: periodo.periodoMes,
     periodoAnio: periodo.periodoAnio,
     periodoLabel: formatPeriodoAbrev(periodo.periodoMes, periodo.periodoAnio),
-    periodoAnteriorLabel: formatPeriodoAbrev(periodo.periodoMes, periodo.periodoAnio - 1),
+    periodoAnteriorLabel: periodoInicialEspLabel(periodo.periodoMes, periodo.periodoAnio),
     balance: {
       activo,
       pasivo,

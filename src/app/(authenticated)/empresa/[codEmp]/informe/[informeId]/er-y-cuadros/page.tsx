@@ -1,5 +1,5 @@
 import { computeResultadoCuadro, type ResultadoBloque, type ResultadoColumna } from "@/lib/resultado-cuadro";
-import { formatPeriodoAbrev } from "@/lib/balance-oya-report";
+import { acumEjercicioLabel, formatPeriodoAbrev } from "@/lib/balance-oya-report";
 import { getCuentasSinSubrubro, type ResultadoNominal } from "@/lib/resultado-nominal";
 import { OjoCampoResultado } from "./OjoCampoResultado";
 import { AvisoCuentasSinClasificar } from "../AvisoCuentasSinClasificar";
@@ -67,6 +67,7 @@ function CuadroResultado({
   bloque,
   periodoLabel,
   periodoAnteriorLabel,
+  periodoMes,
   periodoAnio,
   fmt,
   codEmp,
@@ -78,6 +79,7 @@ function CuadroResultado({
   bloque: ResultadoBloque;
   periodoLabel: string;
   periodoAnteriorLabel: string;
+  periodoMes: number;
   periodoAnio: number;
   fmt: (n: number) => string;
   codEmp: string;
@@ -88,8 +90,8 @@ function CuadroResultado({
   const columnas: { label: string; datos: ResultadoColumna }[] = [
     { label: periodoLabel, datos: bloque.actual },
     { label: periodoAnteriorLabel, datos: bloque.mismoMesAnioAnterior },
-    { label: `Acum ${String(periodoAnio - 1).slice(-2)}/${String(periodoAnio).slice(-2)}`, datos: bloque.acumuladoActual },
-    { label: `Acum ${String(periodoAnio - 2).slice(-2)}/${String(periodoAnio - 1).slice(-2)}`, datos: bloque.acumuladoAnterior },
+    { label: acumEjercicioLabel(periodoMes, periodoAnio), datos: bloque.acumuladoActual },
+    { label: acumEjercicioLabel(periodoMes, periodoAnio, 1), datos: bloque.acumuladoAnterior },
     { label: "Promedio", datos: bloque.promedio },
   ];
 
@@ -199,6 +201,7 @@ export default async function ErYCuadrosPage({
         bloque={report.nominal}
         periodoLabel={periodoLabel}
         periodoAnteriorLabel={periodoAnteriorLabel}
+        periodoMes={report.periodoMes}
         periodoAnio={report.periodoAnio}
         fmt={(n) => fmtParen(n, report.presentaEnMiles)}
         codEmp={codEmp}
@@ -214,7 +217,8 @@ export default async function ErYCuadrosPage({
             bloque={report.ajustadoPorInflacion}
             periodoLabel={periodoLabel}
             periodoAnteriorLabel={periodoAnteriorLabel}
-            periodoAnio={report.periodoAnio}
+            periodoMes={report.periodoMes}
+        periodoAnio={report.periodoAnio}
             fmt={(n) => fmtParen(n, report.presentaEnMiles)}
             codEmp={codEmp}
             informeId={informeId}
@@ -234,7 +238,8 @@ export default async function ErYCuadrosPage({
             bloque={report.usd}
             periodoLabel={periodoLabel}
             periodoAnteriorLabel={periodoAnteriorLabel}
-            periodoAnio={report.periodoAnio}
+            periodoMes={report.periodoMes}
+        periodoAnio={report.periodoAnio}
             fmt={fmtUsd}
             codEmp={codEmp}
             informeId={informeId}
